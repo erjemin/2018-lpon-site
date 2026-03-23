@@ -1,0 +1,39 @@
+# Игнорируемые файлы для Docker сборки
+# Позволяют уменьшить размер контекста сборки и не тащить мусор в контейнер
+
+# Git
+.git
+.gitignore
+
+# Python / Poetry
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+# poetry.lock - ВАЖНО: Мы НЕ игнорируем lock-файл! Он нужен для воспроизводимой сборки.
+
+# Django
+*.log
+local_settings.py
+.env         # Секреты не должны попадать в образ!
+.env.local
+db.sqlite3   # Не копируем локальную базу на этапе сборки, она должна быть в volume!
+db.sqlite3-journal
+database/    # Исключаем папку с базой из образа. В продакшене она монтируется как volume.
+
+# Static / Media
+# public/static/  # Исходники статики нужны collectstatic
+public/media      # Медиа файлы НЕ нужны в образе, они монтируются как volume
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Mac OS и Synology
+.DS_Store
