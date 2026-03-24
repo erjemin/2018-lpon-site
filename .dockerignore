@@ -37,3 +37,10 @@ public/media      # Медиа файлы НЕ нужны в образе, он�
 
 # Mac OS и Synology
 .DS_Store
+
+# Project specific
+logs/
+-design-and-misc/
+Dockerfile
+.dockerignore
+README.md

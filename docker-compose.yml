@@ -1,0 +1,23 @@
+# Этот файл предназначен для dev-окружения и тестирования. В продакшене используем docker-compose.prod.yml
+
+# В новых версиях Docker Compose можно не указывать версию (даже warning появляется, если указать)
+# version: '3.8'
+
+services:
+  lpon-site:
+    # Указываем Docker Compose, что образ нужно собрать из Dockerfile в текущей директории
+    build: .
+    # image: nginx:1.25-alpine
+    # Имя контейнера для удобства
+    container_name: lpon-site
+    # Политика перезапуска: всегда перезапускать контейнер, если он упал
+    restart: always
+    ports:
+      # Пробрасываем свободный порт 8020 на хосте на стандартный порт 80 внутри контейнера
+      - "8020:80"
+    networks:
+      - lpon-network
+
+networks:
+  lpon-network:
+    driver: bridge
