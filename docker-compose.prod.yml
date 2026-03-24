@@ -1,0 +1,76 @@
+# ==============================================================================
+# Docker Compose для PRODUCTION
+#
+# Этот файл предназначен для продакшен окружения. Его необходимо скопировать на продакшн-сервер под именем
+# `docker-compose.yml` в корневой каталог проекта.
+# Перед запуском убедитесь, что в корне проекта есть файл `.env` с необходимыми переменными окружения.
+# Запуск:
+# Вариант 1 (если переименовали в docker-compose.yml): docker compose up -d
+# Вариант 2 (если оставили имя): docker compose -f docker compose -f compose.prod.yml up -d
+# ==============================================================================
+
+# В новых версиях Docker Compose можно не указывать версию (даже warning появляется, если указать)
+# version: '3.8'
+
+services:
+  # ОСНОВНОЙ СЕРВИС
+  lpon-site-prod:
+    image: git.cube2.ru/erjemin/2018-lpon-site:latest
+    # Имя контейнера для удобства
+    container_name: lpon-site-prod
+    # Политика перезапуска: всегда перезапускать контейнер, если он упал
+    restart: always
+    # Метки для Watchtower (авто-обновление)
+    labels:
+      - "com.centurylinklabs.watchtower.scope=lpon-scope"
+    # Переменные окружения
+    env_file:
+      - .env
+    ports:
+      # Пробрасываем порт 8020 на хосте на стандартный порт 80 внутри контейнера
+      # Внешний Nginx будет проксировать запросы на хост:8020
+      - "127.0.0.1:8020:80"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "1"
+
+    networks:
+      - lpon-network
+
+  # WATCHTOWER ДЛЯ АВТОМАТИЧЕСКОГО ОБНОВЛЕНИЯ ОБРАЗОВ ИЗ РЕЕСТРА
+  watchtower:
+    image: containrrr/watchtower
+    container_name: lpon-watchtower
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    # Переменные окружения
+    env_file:
+      - .env
+    environment:
+      - DOCKER_API_VERSION=1.44
+      # Берем учетные данные из .env файла
+      - REPO_USER=${REPO_USER}
+      - REPO_PASS=${REPO_PASS}
+      # Ограничиваем область видимости только этим проектом
+      - WATCHTOWER_SCOPE=lpon-scope
+      # Если нужно указать реестр явно (обычно watchtower сам понимает из имени образа)
+      # - WATCHTOWER_REGISTRY_URL=git.cube2.ru
+    command: --interval 1800 --cleanup # Проверять каждые 30 минут
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1m"
+        max-file: "1"
+    networks:
+      - lpon-network
+
+
+volumes:
+  static_volume:
+
+networks:
+  lpon-network:
+    driver: bridge
