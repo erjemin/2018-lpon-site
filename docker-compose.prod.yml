@@ -26,6 +26,24 @@ services:
     # Переменные окружения
     env_file:
       - .env
+    # КОМАНДА ЗАПУСКА (Замена entrypoint.sh)
+    # Выполняем цепочку команд внутри контейнера при запуске:
+    #    с. Создаем папку nginx в примонтированном томе конфигов (если нет)
+    #    d. Копирование конфига Nginx с авто-заменой путей через sed (замену реального пути на хосте получаем
+    #       через переменную окружения HOST_PROJECT_PATH)
+    #    e. Инициализация боевого конфига (если нет)
+    command: >
+      sh -c "mkdir -p /nginx_configs_host/nginx &&
+             sed \"s|/home/user/app/lpon-site|${HOST_PROJECT_PATH:-/home/default_user/projects/lpon-site}|g\" /nginx_configs_host/nginx/lpon-app--external-nginx.conf > /nginx_configs_host/nginx/nginx_lpon.conf.example &&
+             if [ ! -f /nginx_configs_host/nginx/lpon-app--external-nginx.conf ]; then
+                 cp /nginx_configs_host/nginx/nginx_lpon.conf.example /nginx_configs_host/nginx/lpon-app--external-nginx.conf;
+                 echo 'INIT: Created new nginx config with correct paths';
+             fi"
+    # Тома (Volumes)
+    volumes:
+      # Конфиги (Монтируем папку ./config с хоста в /nginx_configs_host внутри контейнера)
+      # Это нужно, чтобы скрипт запуска мог положить туда .example конфиг и "боевой" конфиг (если его еще нет).
+      - ./config:/nginx_configs_host
     ports:
       # Пробрасываем порт 8020 на хосте на стандартный порт 80 внутри контейнера
       # Внешний Nginx будет проксировать запросы на хост:8020
