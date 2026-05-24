@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "lpon-site"
+version = "0.1.0"
+description = "LPON - platform for selling vinyl records (and related products)"
+authors = ["Sergei Erjemin <erjemin@gmail.com>"]
+readme = "README.md"
+packages = [
+    { include = "lpon_site" }
+]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+django = "^6.0"
+python-dotenv = "^1.0.0"
+
+[tool.poetry.group.dev.dependencies]
+django-extensions = "^3.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
