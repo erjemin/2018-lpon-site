@@ -11,22 +11,48 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+import environ
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Читаем переменные окружения
+env = environ.Env()
+environ.Env.read_env(os.path.join(BASE_DIR.parent, '.env'))
+
+def _normalize_admin_url(value: str) -> str:
+    """Приводит URL админки к виду `segment/` без ведущего слэша."""
+    normalized = value.strip().lstrip('/')
+    if not normalized:
+        return 'admin/'
+    if not normalized.endswith('/'):
+        normalized += '/'
+    return normalized
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-3xyml+!)erah-k23lf0=t=cf4$$e0nr*zls&l%pbz@kkv6qnwr'
+SECRET_KEY = env('DJANGO_SECRET_KEY', default='3xym$l+!)erah-k23lf0=t=c_4$e0nr*zls&l%pbz@k6v6qn89')
+ADMIN_URL = _normalize_admin_url(env('DJANGO_ADMIN_URL', default='admin/'))
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env.bool('DJANGO_DEBUG', default=False)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = env.list(
+    'DJANGO_ALLOWED_HOSTS',
+    default=['127.0.0.1', 'localhost', 'testserver', 'lpon.ru'],
+)
 
+CSRF_TRUSTED_ORIGINS = env.list('DJANGO_CSRF_TRUSTED_ORIGINS', default=['127.0.0.1', 'localhost', 'testserver'])
+
+#########################################
+# Настройки сообщений об ошибках когда все упало и т.п.
+ADMINS = tuple(
+    tuple(item.split(':', 1))
+    for item in env.list('DJANGO_ADMINS', default=['S.Erjemin:erjemin@gmail.com'])
+)
 
 # Application definition
 
@@ -71,11 +97,13 @@ WSGI_APPLICATION = 'lpon_site.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': BASE_DIR.parent.joinpath('database', env('DJANGO_SQLITE_NAME', default='lpon-db.sqlite3')),
+        'OPTIONS': {
+            'timeout': 25,
+        },
     }
 }
 
@@ -101,17 +129,21 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
-
-LANGUAGE_CODE = 'en-us'
-
-TIME_ZONE = 'UTC'
-
+LANGUAGE_CODE = 'ru-RU'         #
+# TIME_ZONE = 'Etc/GMT+3'       #
+TIME_ZONE = 'Europe/Moscow'     #
 USE_I18N = True
-
 USE_TZ = True
+FIRST_DAY_OF_WEEK = 1           # неделя начинается с понедельника
+DEFAULT_CHARSET = 'utf-8'
 
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
-
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+MEDIA_URL = '/media/'
+# Локальные каталоги проекта: медиа и статика лежат рядом в `public`.
+PUBLIC_DIR = BASE_DIR.parent.joinpath('public')     # Папка `public` находится в корне пректа
+MEDIA_ROOT = PUBLIC_DIR.joinpath('media')
+STATICFILES_DIRS = [PUBLIC_DIR.joinpath('static')]
+STATIC_ROOT = PUBLIC_DIR.joinpath('staticfiles')

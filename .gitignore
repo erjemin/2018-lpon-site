@@ -363,7 +363,8 @@ db.sqlite3-wal
 public/media/*
 !public/media/README.md
 staticfiles/
-public/static/static_collected/
+public/static_collected/
+.github/
 
 # Data Backup
-database/data.json
+database/
