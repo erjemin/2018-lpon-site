@@ -1,4 +1,5 @@
 from django.db import models
+import datetime
 
 # Create your models here.
 class TbArtist(models.Model):
@@ -49,9 +50,6 @@ class TbProduct(models.Model):
     k_artists = models.ManyToManyField(
         TbArtist,
         blank=True,
-        null=True,
-        default=None,
-        related_name='+',  # ← '+' отключает обратную связь
         verbose_name='Исполнители',
         help_text="Выберите исполнителей или группы для этого релиза (можно не указывать)",
     )
@@ -293,18 +291,161 @@ class TbOffer(models.Model):
     j_offer_metadata = models.JSONField(
         default=dict, null=True,
         verbose_name='Дополнительные данные',
-        help_text='Дополнительные данные о предложении в виде JSON-словаря',
+        help_text='Дополнительные данные о предложении в виде JSON-словаря.',
     )
-    t_created = models.DateTimeField(
+    t_offer_created = models.DateTimeField(
         auto_now_add=True,
         verbose_name="Дата Создания записи в БД",
     )
-    t_updated = models.DateTimeField(
+    t_offer_updated = models.DateTimeField(
         auto_now=True,
         verbose_name="Дата последнего обновления записи в БД",
     )
 
-#
+    class TbSource(models.Model):
+        #  Источник данных (абстрактный), "место", откуда данные могут приходить многократно.
+
+        class SoueceType(models.TextChoices):
+            EXCEL = 'excel', 'Excel-файл от продавца или издателя'
+            CSV = 'csv', 'CSV-файл от продавца или издателя'
+            URL = 'url', 'URL страницы с данными (например, HTML-страница с каталогом товаров)'
+            OTHER = '++', 'Другое'
+
+        k_seller = models.ForeignKey(
+            TbSeller,
+            null=True, default=None,
+            on_delete=models.SET_NULL,
+            verbose_name='Продавец',
+        )
+        s_source_name = models.CharField(
+            max_length=128, blank=True, default='',
+            verbose_name='Название источника',
+            help_text='Название источника данных (для удобства), например: <tt>Предзаказ на RSD-2025 от Полуэкта.</tt>',
+        )
+        l_source_type = models.CharField(
+            max_length=5, default=SoueceType.EXCEL, choices=SoueceType.choices,
+            verbose_name='Тип источника',
+            help_text='Тип источника данных, например: <tt>Excel-файл от продавца или издателя</tt>, <tt>URL страницы'
+                      ' с данными</tt> и т.д.',
+        )
+        t_source_data = models.DateField(
+            blank=True, default=datetime.date.today,
+            verbose_name='Дата данных',
+            help_text='Дата, к которой относятся данные в источнике. Например, если это исторический Excel-файл.',
+        )
+        file_source = models.FileField(
+            blank=True, default='', upload_to='sources/',
+            verbose_name='Файл-источник',
+            help_text='Файл-источник, например, Excel-файл от продавца или издателя. Если данные в источнике'
+                      ' представлены на странице в интернете, можно не указывать файл, а указать URL в поле ниже.',
+        )
+        s_source_url = models.TextField(
+            max_length=255, blank=True, default='',
+            verbose_name='URL источника',
+            help_text='URL страницы с данными, например, HTML-страница с каталогом товаров. Если данные в источнике'
+                      ' представлены в виде файла, можно не указывать URL, а загрузить файл в поле выше.',
+        )
+        s_source_file_hash = models.CharField(
+            max_length=128, blank=True, default='',
+            verbose_name='Хэш файла-источника',
+            help_text='Контрольная сумма, хэш файла-источника (например, MD5 или SHA256), для проверки целостности'
+                      ' и отслеживания изменений в файлах-источниках при повторных загрузках.',
+        )
+        j_source_metadata = models.JSONField(
+            default=dict, blank=True,
+            verbose_name='Дополнительные данные',
+            help_text='Дополнительные данные об источнике (внутреннем устройстве: вкладках и стоkбцах Excel-файла,'
+                      ' структуре HTML-страницы и т.п.) в виде JSON-словаря',
+        )
+        t_source_created = models.DateTimeField(
+            auto_now_add=True,
+            verbose_name="Дата Создания записи в БД",
+        )
+        t_source_updated = models.DateTimeField(
+            auto_now=True,
+            verbose_name="Дата последнего обновления записи в БД",
+        )
+
+        def __unicode__(self):
+            return f"source {self.id:0>4}: {self.s_source_name}"
+
+        def __str__(self):
+            return self.__unicode__()
+
+        class Meta:
+            verbose_name = 'Источник данных'
+            verbose_name_plural = 'Источники данных'
+            ordering = ('-t_source_data', '-t_source_created')
+
+
+class TbOfferHistory(models.Model):
+    # История изменений оффера. Снапшот цены.
+    #
+    # Создаётся:
+    # - только если что-то реально изменилось (обычно при новом импорте Excel)
+    k_offer = models.ForeignKey(
+        TbOffer,
+        on_delete=models.CASCADE,
+        related_name='history'
+    )
+    f_histopy_price = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True, default=0.00,
+        verbose_name='Цена (историческая)',
+        help_text='Цена оффера в момент изменения (например, при новом импорте данных). Это историческая'
+                  ' цена, которая может отличаться от текущей цены в оффере.'
+    )
+    i_histopy_quantity = models.IntegerField(
+        default=0,
+        verbose_name='Количество (историческое)',
+        help_text='Количество товара в оффере в момент изменения (например, при новом импорте данных).'
+                  ' Это историческое количество, которое может отличаться от текущего количества в оффере.'
+    )
+    b_histopy_available = models.BooleanField(
+        default=True,
+        verbose_name='В наличии (историческое)',
+        help_text='Наличие товара в оффере в момент изменения (например, при новом импорте данных из Excel).'
+                  ' <tt>False</tt> если оффер был в наличии, а при новом импорте стал недоступен.'
+                  ' Это историческое наличие, которое может отличаться от текущего наличия в оффере.'
+    )
+    # Откуда приехало
+    k_source = models.ForeignKey(
+        to='TbSource',
+        null=True, default=None,
+        on_delete=models.SET_NULL,
+        verbose_name='Источник данных',
+        help_text='Источник данных, из которого были импортированы изменения (например, конкретный Excel-файл'
+                  ' или URL страницы с данными). Указывать не обязательно, т.к. '
+    )
+    j_histopy_source_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name='Метаданные',
+        help_text='Метаданные, указывающие координаты данных внутри источника (например, внутри Excel-файла:'
+                  ' название вкладки, номер строки, номер столбца с ценой и количеством,'
+                  ' или URL + CSS-селектор для HTML-страницы и т.п.',
+    )
+    t_histopy_source_created = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Дата создания записи в БД",
+    )
+    t_histopy_source_updated = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Дата последнего обновления записи в БД",
+    )
+
+    def __unicode__(self):
+        return f"offer history {self.id:0>5} for offer {self.k_offer_id:0>4}"
+
+    def __str__(self):
+        return self.__unicode__()
+
+    class Meta:
+        verbose_name = 'История оффера'
+        verbose_name_plural = 'Истории офферов'
+        ordering = ('-t_histopy_source_created',)
+
+
+
 #         │ 1
 #         │
 #         │ N
@@ -335,46 +476,3 @@ class TbOffer(models.Model):
 # └────────────────────┘
 #
 #
-# ┌────────────────────┐
-# │    PriceHistory    │
-# ├────────────────────┤
-# │ id                 │
-# │ offer_id           │ FK
-# │ old_price          │
-# │ new_price          │
-# │ quantity_snapshot  │
-# │ source             │
-# │ changed_at         │
-# └────────────────────┘
-#
-#
-# ┌────────────────────┐
-# │       Source       │   ← Импорт / источник
-# ├────────────────────┤
-# │ id                 │
-# │ vendor_id          │ FK
-# │ type               │ ← excel/csv/api/html
-# │ source_url         │
-# │ file_name          │
-# │ file_hash          │
-# │ imported_at        │
-# │ parser_version     │
-# │ meta_json          │
-# └─────────┬──────────┘
-#           │ 1
-#           │
-#           │ N
-# ┌─────────▼──────────┐
-# │    SourceItem      │   ← Строка из Excel/CSV
-# ├────────────────────┤
-# │ id                 │
-# │ source_id          │ FK
-# │ row_index          │
-# │ raw_row_json       │
-# │ parsed_data_json   │
-# │ matching_status    │
-# │ confidence_score   │
-# │ matched_product_id │ FK nullable
-# │ created_offer_id   │ FK nullable
-# │ created_at         │
-# └────────────────────┘
