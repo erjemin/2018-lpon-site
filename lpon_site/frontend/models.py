@@ -381,16 +381,14 @@ class TbOffer(models.Model):
     )
 
     i_quantity = models.IntegerField(
+        # Устанавливая количество в ноль, можно указать, что предложение в настоящее время не доступно.
         blank=True,
         default=0,
+        db_index=True,
         verbose_name='Количество в наличии',
     )
 
-    b_is_available = models.BooleanField(
-        default=True,
-        verbose_name='В наличии?',
-    )
-    i_discount_to_daily_sale = models.IntegerField(
+    i_offer_discount_to_daily_sale = models.IntegerField(
         blank=True, default=0,
         verbose_name='Скидка',
         help_text='Процент скидки, для ежедневной распродажи',
@@ -532,16 +530,11 @@ class TbOfferHistory(models.Model):
     )
 
     i_history_quantity = models.IntegerField(
+        # Устанавливая количество в ноль, можно указать, что предложение более не доступно. Если оффер вернется,
+        # то через новую запись в TbOfferHistory можно будет отследить, что он был в наличии, пропал, а потом
+        # снова появился (со старой или новой ценой).
         default=0,
         verbose_name='Старое количество',
-    )
-
-    b_history_available = models.BooleanField(
-        # Подумать о необходимости этого поля. Устанавливая количество в ноль, можно указать, что предложение более
-        # не доступно. Если предложение вернется, то через новую запись в TbOfferHistory можно будет отследить,
-        # что оно было в наличии, пропало, а потом снова появилось (со старой или новой ценой).
-        default=True,
-        verbose_name='Был в наличии',
     )
 
     # Откуда приехало изменение
