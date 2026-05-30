@@ -42,7 +42,7 @@ class TbArtist(models.Model):
     )
 
     def __str__(self):
-        return f"product {self.id:0>4}: {self.s_artist}"
+        return f"artist {self.id:0>4}: {self.s_artist}"
 
     class Meta:
         verbose_name = 'Исполнитель'
@@ -132,7 +132,7 @@ class TbProduct(models.Model):
     )
 
     def __str__(self):
-        return f"[{self.id:0>4}] {self.s_title}"
+        return f"Product {self.id:0>4}: {self.s_title}"
 
     class Meta:
         verbose_name = 'Релиз (товар)'
@@ -187,7 +187,7 @@ class TbLabel(models.Model):
     )
 
     def __str__(self):
-        return self.s_label
+        return f"label: {self.id:0>5}: {self.s_label}"
 
     class Meta:
         verbose_name = 'Лейбл'
@@ -242,7 +242,7 @@ class TbSeller(models.Model):
     )
 
     def __str__(self):
-        return self.s_seller
+        return f"seller: {self.id:0>2}: {self.s_seller}"
 
     class Meta:
         verbose_name = 'Продавец'
@@ -380,7 +380,7 @@ class TbOffer(models.Model):
         verbose_name="Валюта",
     )
 
-    i_quantity = models.IntegerField(
+    i_offer_quantity = models.IntegerField(
         # Устанавливая количество в ноль, можно указать, что предложение в настоящее время не доступно.
         blank=True,
         default=0,
@@ -419,7 +419,8 @@ class TbOffer(models.Model):
     )
 
     def __str__(self):
-        return f"offer {self.id:0>4} for product {self.k_product_id} from seller {self.k_seller_id}"
+        return f"offer {self.id:0>4} for product {self.k_product_id} from seller {self.k_source.k_seller_id}"
+
 
 # ============================================================================
 # ИСТОЧНИКИ ДАННЫХ
@@ -495,7 +496,7 @@ class TbSource(models.Model):
     )
 
     def __str__(self):
-        return f"source {self.id:0>4}: {self.s_source_name}"
+        return f"source {self.id:0>3}: {self.s_source_name}"
 
     class Meta:
         verbose_name = 'Источник данных'
@@ -528,7 +529,6 @@ class TbOfferHistory(models.Model):
         default=0.00,
         verbose_name='Старая цена',
     )
-
     i_history_quantity = models.IntegerField(
         # Устанавливая количество в ноль, можно указать, что предложение более не доступно. Если оффер вернется,
         # то через новую запись в TbOfferHistory можно будет отследить, что он был в наличии, пропал, а потом
@@ -536,17 +536,16 @@ class TbOfferHistory(models.Model):
         default=0,
         verbose_name='Старое количество',
     )
-
-    # Откуда приехало изменение
-    k_source = models.ForeignKey(
-        TbSource,
-        null=True,
-        default=None,
-        on_delete=models.SET_NULL,
-        related_name='source_to_offer_history',  # ← source.source_to_offer_history.all()
-        verbose_name='Источник изменений',
-    )
-
+    # Откуда приехало изменение (какой источник данных) можно получить через k_offer.k_source, так что отдельного
+    # поля для источника в истории не нужно. Но если вдруг понадобится, то можно будет
+    # k_source = models.ForeignKey(
+    #     TbSource,
+    #     null=True,
+    #     default=None,
+    #     on_delete=models.SET_NULL,
+    #     related_name='source_to_offer_history',  # ← source.source_to_offer_history.all()
+    #     verbose_name='Источник изменений',
+    # )
     j_history_metadata = models.JSONField(
         default=dict,
         blank=True,
@@ -557,13 +556,14 @@ class TbOfferHistory(models.Model):
     )
     t_history_created = models.DateTimeField(
         auto_now_add=True,
+        db_index=True,
         verbose_name="Дата создания",
     )
     # Нам не нужен `t_history_updated` потому что это "снимок состояния" и его не нужно менять
     # после создания. И если вдруг понадобится, то правильнее будет добавить новую запись.
 
     def __str__(self):
-        return f"History #{self.id} for offer {self.k_offer_id}"
+        return f"history #{self.id} for offer {self.k_offer_id}"
 
     class Meta:
         verbose_name = 'История оффера'
