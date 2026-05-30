@@ -1,10 +1,142 @@
 from django.db import models
+from filer.fields.image import FilerImageField
+from filer.fields.file import FilerFileField
 import datetime
+
+# ============================================================================
+# ИЗОБРАЖЕНИЯ
+# ============================================================================
+class TbImage(models.Model):
+    # Типы изображений
+    class ImageType(models.TextChoices):
+        COVER = 'cover', 'Обложка (лицевая сторона)'
+        BACK = 'back', 'Задняя сторона'
+        OBI = 'obi', 'OBI полоска (японская)'
+        MATRIX = 'matrix', 'Матричный номер (на виниле)'
+        SPINE = 'spine', 'Корешок'
+        CONDITION = 'condition', 'Фото состояния товара'
+        BOOKLET = 'booklet', 'Буклет/Постер'
+        OTHER = 'other', 'Другое'
+
+    # Источник изображения
+    class ImageSource(models.TextChoices):
+        DISCOGS = 'discogs', 'Discogs (внешний)'
+        MANUAL_UPLOAD = 'manual', 'Ручная загрузка пользователем'
+        VENDOR = 'vendor', 'От продавца'
+        API = 'api', 'API (автоматически)'
+        OTHER = 'other', 'Другое'
+
+    # Тип изображения (реальное или абстрактное)
+    class ImageReality(models.TextChoices):
+        REAL_PHOTO = 'real', 'Реальная фотография товара'
+        ABSTRACT = 'abstract', 'Абстрактное (из внешнего источника)'
+
+    # Файл через django_filer
+    file = FilerImageField(
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='images',
+    )
+
+    # Связи (через GenericForeignKey?)
+    # или отдельные FK к Product/Offer/Artist?
+
+    # Основные поля
+    l_image_type = models.CharField(
+        max_length=10,
+        choices=ImageType.choices,
+        default=ImageType.OTHER,
+        verbose_name='Тип изображения',
+    )
+
+    l_source = models.CharField(
+        max_length=10,
+        choices=ImageSource.choices,
+        default=ImageSource.MANUAL_UPLOAD,
+        verbose_name='Источник',
+    )
+
+    # КЛЮЧЕВОЕ: реальная или абстрактная?
+    l_reality = models.CharField(
+        max_length=10,
+        choices=ImageReality.choices,
+        default=ImageReality.ABSTRACT,
+        verbose_name='Тип снимка',
+        help_text='Реальная фотография товара или картинка из внешнего источника?',
+    )
+
+    # URL источника (для внешних изображений)
+    s_source_url = models.URLField(
+        blank=True,
+        null=True,
+        verbose_name='URL источника',
+        help_text='Если изображение взято из внешнего источника (например, Discogs)',
+    )
+
+    # Порядок вывода
+    i_sort_order = models.IntegerField(
+        default=0,
+        db_index=True,
+        verbose_name='Порядок сортировки',
+    )
+
+    # Основная картинка?
+    b_is_primary = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name='Основное изображение',
+        help_text='Показывать как обложку в списке товаров',
+    )
+
+    # Доверие данным (для парсеров и API)
+    f_confidence_score = models.FloatField(
+        null=True,
+        blank=True,
+        default=None,
+        verbose_name='Уверенность (для автоматических данных)',
+        help_text='0.0 - 1.0, насколько уверены, что это правильное изображение',
+    )
+
+    # Описание
+    s_description = models.TextField(
+        blank=True,
+        default='',
+        verbose_name='Описание',
+        help_text='Например: "Состояние пластинки", "Царапина на обложке"',
+    )
+
+    # Авторские права
+    s_copyright = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        verbose_name='Авторские права / Лицензия',
+        help_text='Например: "© 2024 User" или "CC-BY"',
+    )
+
+    # Метаданные (размеры, EXIF и т.д.)
+    j_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name='Метаданные',
+        help_text='Разрешение, размер файла, EXIF и т.д.',
+    )
+
+    # Timestamps
+    t_created = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Дата добавления',
+    )
+    t_updated = models.DateTimeField(
+        auto_now=True,
+        verbose_name='Дата обновления',
+    )
+
 
 # ============================================================================
 # ИСПОЛНИТЕЛИ
 # ============================================================================
-
 class TbArtist(models.Model):
     """Исполнитель или музыкальная группа."""
 
@@ -462,8 +594,18 @@ class TbSource(models.Model):
         verbose_name='Дата данных',
         help_text='Дата, к которой относятся данные в источнике. Например, если это исторический Excel-файл.',
     )
-    file_source = models.FileField(
-        blank=True, default='', upload_to='sources/',
+    file_source = FilerFileField(
+        null=True,
+        blank=True,
+        related_name="source_file",
+        on_delete=models.SET_NULL,
+        # TODO:
+        # 1. Чтобы файлы автоматически привязывались к нужной виртуальной папке filer при загрузке через Django Admin.
+        #    Для этого использовать сигналы (signals) в Admin или переопределение метода save модели (аналог
+        #    `upload_to` в обычных FileField).
+        # 2. Внутри `FilerFileField` есть хеш SHA-1 (instance.doc.sha1) и размер файла в байтах (instance.doc.size).
+        #    Они доступны в момент загрузки (сразу после, еще до записи на диск и БД. Через его проверку
+        #    нужно предотвратить повторную запись файла-источника.
         verbose_name='Файл-источник',
         help_text='Файл-источник, например, Excel-файл от продавца или издателя. Если данные в источнике'
                   ' представлены на странице в интернете, можно не указывать файл, а указать URL в поле ниже.',
@@ -473,12 +615,6 @@ class TbSource(models.Model):
         verbose_name='URL источника',
         help_text='URL страницы с данными, например, HTML-страница с каталогом товаров. Если данные в источнике'
                   ' представлены в виде файла, можно не указывать URL, а загрузить файл в поле выше.',
-    )
-    s_source_file_hash = models.CharField(
-        max_length=128, blank=True, default='',
-        verbose_name='Хэш файла-источника',
-        help_text='Контрольная сумма, хэш файла-источника (например, MD5 или SHA256), для проверки целостности'
-                  ' и отслеживания изменений в файлах-источниках при повторных загрузках.',
     )
     j_source_metadata = models.JSONField(
         default=dict, blank=True,
