@@ -22,12 +22,13 @@ class TbImage(models.Model):
         REAL_PHOTO = 'real', 'Реальная фотография товара'
         ABSTRACT = 'abstract', 'Абстрактное (из внешнего источника)'
 
-    file = FilerImageField(
+    image = FilerImageField(
         # Файл через django_filer
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        related_name='images',
+        verbose_name='Файл изображения',
+        help_text='Файл изображения, загруженный через django_filer.',
     )
 
     l_source = models.CharField(
@@ -35,6 +36,8 @@ class TbImage(models.Model):
         choices=ImageSource.choices,
         default=ImageSource.MANUAL_UPLOAD,
         verbose_name='Источник',
+        help_text='Как был получен этот снимок: загружен вручную, получен парсером из внешнего источника (например,'
+                  ' Discogs), предоставлен продавцом и т.д.',
     )
 
     l_reality = models.CharField(
@@ -88,6 +91,11 @@ class TbImage(models.Model):
         verbose_name='Дата обновления',
     )
 
+    class Meta:
+        verbose_name = 'Изображение'
+        verbose_name_plural = 'Изображения'
+        ordering = ('i_sort_order', 't_created')
+
 
 # ============================================================================
 # ИСПОЛНИТЕЛИ
@@ -108,10 +116,10 @@ class TbArtist(models.Model):
         verbose_name='Исполнитель (типографированно в HTML)',
         help_text='С сохранением типографирования и спецсимволов.',
     )
-    s_artist_image = models.OneToOneField(
+    k_artist_to_image = models.OneToOneField(
         TbImage,
         on_delete=models.SET_NULL,
-        related_name='artist_image',
+        related_name='image_to_artist',
         blank=True,
         null=True,
         verbose_name='Изображение для исполнителя',
@@ -147,18 +155,19 @@ class TbArtist(models.Model):
         ordering = ('s_artist',)
 
 
-class TbCatalogItem(models.Model):
+class TbItem(models.Model):
     """
-    Абстрактный релиз (альбом, сингл, компиляция).
+    Товар в каталоге: релиз (альбом, сингл, компиляция), носитель (кассета для записи),
+    аксессуар (щётка для виниловых пластинок) и т.д.
     Может быть представлен в виде одного или нескольких предложений от разных продавцов.
     """
 
     # Исполнители (ManyToMany для поддержки коллабораций)
     # Например: "David Bowie & Queen", "Elton John & Tim Rice"
-    k_artists = models.ManyToManyField(
+    k_item_to_artist = models.ManyToManyField(
         TbArtist,
         blank=True,
-        related_name='artist_to_products',  # artist.products.all() — найти все релизы артиста
+        related_name='artist_to_item',  # artist.products.all() — найти все релизы артиста
         verbose_name='Исполнители',
         help_text="Один или несколько для коллабораций",
     )
@@ -179,15 +188,15 @@ class TbCatalogItem(models.Model):
         help_text='С HTML-тегами для типографирования',
     )
 
-    s_item_image = models.OneToOneField(
+    s_item_to_image = models.OneToOneField(
         TbImage,
         on_delete=models.SET_NULL,
-        related_name='product_image',
+        related_name='image_to_item',
         blank=True,
         null=True,
         verbose_name='Изображение',
-        help_text='Изображение альбома/продукта, например, обложка альбома. Если указано, будет отображаться'
-                  ' рядом с названием релиза.',
+        help_text='Изображение товара из каталога, например, обложка альбома. Если указано, будет отображаться'
+                  ' рядом с названием товара.',
     )
     s_item_slug = models.SlugField(
         blank=True,
@@ -242,12 +251,12 @@ class TbCatalogItem(models.Model):
     )
 
     def __str__(self):
-        return f"Product {self.id:0>4}: {self.s_title}"
+        return f"Item {self.id:0>4}: {self.s_item_title}"
 
     class Meta:
-        verbose_name = 'Релиз (товар)'
-        verbose_name_plural = 'Релизы (товары)'
-        ordering = ('s_title',)
+        verbose_name = 'Товар в каталоге (релиз, носитель, аксессуар)'
+        verbose_name_plural = 'Товары в каталоге'
+        ordering = ('s_item_title',)
 
 
 # ============================================================================
@@ -332,7 +341,9 @@ class TbSeller(models.Model):
     )
 
     l_seller_type = models.CharField(
-        max_length=9, default=SellerType.SELLER, choices=SellerType.choices,
+        max_length=9,
+        default=SellerType.SELLER,
+        choices=SellerType.choices,
         verbose_name='Тип продавца',
     )
 
@@ -391,27 +402,14 @@ class TbOffer(models.Model):
         P = 'p', 'Poor (плохое)'
         OTHER = '++', 'Other'
 
-    class Currency(models.TextChoices):
-        RUB = 'rub', 'RUB: российский рубль'
-        TRY = 'try', 'TRY: турецкая лира'
-        AMD = 'amd', 'AMD: армянский драм'
-        USD = 'usd', 'USD: американский доллар'
-        EUR = 'eur', 'EUR: евро'
-        JPY = 'jpy', 'JPY: японская иена'
-        GBP = 'gbp', 'GBP: британский фунт'
-        CNY = 'cny', 'CNY: китайский юань'
-        BYN = 'byn', 'BYN: белорусский рубль'
-        TON = 'ton', 'TON: криптовалюта TON'
-        OTHER = '++', 'Other'
-
     # Связи
     k_offer_to_item = models.ForeignKey(
-        TbCatalogItem,
+        TbItem,
         blank=True,
         null=True,
         default=None,
         on_delete=models.SET_NULL,
-        related_name='product_to_offer',  # ← product.product_offers.all()
+        related_name='item_to_offer',  # ← product.product_offers.all()
         verbose_name='Релиз (товар)',
     )
 
@@ -432,17 +430,17 @@ class TbOffer(models.Model):
         on_delete=models.CASCADE,  # ← если удалён источник, удалены офферы
         related_name='source_to_offer',
         verbose_name='Источник данных',
-        help_text='Обязательно - каждый оффер должен иметь источник. Через источник, так же получаем данные'
-                  ' продавца `offer.k_source.k_seller`.',
+        help_text='Обязательно - каждый оффер должен иметь источник. Через источник получаем данные '
+                  'продавца: offer.k_offer_to_source.k_source_to_seller',
     )
 
     # Изображения товара (одна картинка может быть у многих офферов, а офер иметь много картинок)
     # M2M связь для удобства в админке (filter_horizontal)
     # Порядок картинок определяется полем i_sort_order в TbImage
-    k_offer_images = models.ManyToManyField(
+    k_offer_to_image = models.ManyToManyField(
         TbImage,
         blank=True,
-        related_name='offers',
+        related_name='image_to_offer',
         verbose_name='Изображения',
         help_text='Картинки этого товара. Порядок определяется полем i_sort_order в ка��тинке.',
     )
@@ -492,13 +490,7 @@ class TbOffer(models.Model):
         blank=True,
         default=0.00,
         verbose_name='Цена',
-    )
-
-    l_offer_currency = models.CharField(
-        max_length=3,
-        choices=Currency.choices,
-        default=Currency.RUB,
-        verbose_name="Валюта",
+        help_text='Цена в валюте источника. Валюта определяется в TbSource: offer.k_offer_to_source.l_currency',
     )
 
     i_offer_quantity = models.IntegerField(
@@ -540,7 +532,14 @@ class TbOffer(models.Model):
     )
 
     def __str__(self):
-        return f"offer {self.id:0>4} for product {self.k_product_id} from seller {self.k_source.k_seller_id}"
+        seller = self.k_offer_to_source.k_source_to_seller.s_seller if (self.k_offer_to_source
+                                                              and self.k_offer_to_source.k_source_to_seller) else "?"
+        return f"offer {self.id:0>4} for item {self.k_offer_to_item_id} from seller {seller}"
+
+    class Meta:
+        verbose_name = 'Оффер (предложение)'
+        verbose_name_plural = 'Офферы (предложения)'
+        ordering = ('-t_offer_updated', '-t_offer_created')
 
 
 # ============================================================================
@@ -558,12 +557,34 @@ class TbSource(models.Model):
         URL = 'url', 'URL страницы с данными (например, HTML-страница с каталогом товаров)'
         OTHER = '++', 'Другое'
 
-    k_seller = models.ForeignKey(
+    class Currency(models.TextChoices):
+        RUB = 'rub', 'RUB: российский рубль'
+        USD = 'usd', 'USD: американский доллар'
+        EUR = 'eur', 'EUR: евро'
+        TRY = 'try', 'TRY: турецкая лира'
+        AMD = 'amd', 'AMD: армянский драм'
+        JPY = 'jpy', 'JPY: японская иена'
+        GBP = 'gbp', 'GBP: британский фунт'
+        CNY = 'cny', 'CNY: китайский юань'
+        BYN = 'byn', 'BYN: белорусский рубль'
+        TON = 'ton', 'TON: криптовалюта TON'
+        OTHER = '++', 'Other'
+
+    k_source_to_seller = models.ForeignKey(
         TbSeller,
         null=True,
         default=None,
         on_delete=models.SET_NULL,
+        related_name='seller_to_source',
         verbose_name='Продавец',
+    )
+
+    l_currency = models.CharField(
+        max_length=3,
+        choices=Currency.choices,
+        default=Currency.RUB,
+        verbose_name='Валюта источника',
+        help_text='В какой валюте указаны цены в этом источнике. Все офферы из этого источника будут в этой валюте.',
     )
     s_source_name = models.CharField(
         max_length=128,
@@ -573,7 +594,9 @@ class TbSource(models.Model):
         help_text='Название источника данных (для удобства), например: <tt>Предзаказ на RSD-2025 от Полуэкта.</tt>',
     )
     l_source_type = models.CharField(
-        max_length=5, default=SourceType.EXCEL, choices=SourceType.choices,
+        max_length=5,
+        default=SourceType.EXCEL,
+        choices=SourceType.choices,
         verbose_name='Тип источника',
         help_text='Тип источника данных, например: <tt>Excel-файл от продавца или издателя</tt>, <tt>URL страницы'
                   ' с данными</tt> и т.д.',
@@ -583,10 +606,9 @@ class TbSource(models.Model):
         verbose_name='Дата данных',
         help_text='Дата, к которой относятся данные в источнике. Например, если это исторический Excel-файл.',
     )
-    file_source = FilerFileField(
+    source_file = FilerFileField(
         null=True,
         blank=True,
-        related_name="source_file",
         on_delete=models.SET_NULL,
         # TODO:
         # 1. Чтобы файлы автоматически привязывались к нужной виртуальной папке filer при загрузке через Django Admin.
@@ -640,10 +662,10 @@ class TbOfferHistory(models.Model):
     Создаётся при каждом импорте, если что-то изменилось.
     """
 
-    k_offer = models.ForeignKey(
+    k_history_to_offer = models.ForeignKey(
         TbOffer,
         on_delete=models.CASCADE,
-        related_name='history_to_offer',  # ← offer.history_to_offer.all()
+        related_name='offer_to_history',  # ← offer.history_to_offer.all()
         verbose_name='Оффер',
     )
     f_history_price = models.DecimalField(
@@ -661,16 +683,6 @@ class TbOfferHistory(models.Model):
         default=0,
         verbose_name='Старое количество',
     )
-    # Откуда приехало изменение (какой источник данных) можно получить через k_offer.k_source, так что отдельного
-    # поля для источника в истории не нужно. Но если вдруг понадобится, то можно будет
-    # k_source = models.ForeignKey(
-    #     TbSource,
-    #     null=True,
-    #     default=None,
-    #     on_delete=models.SET_NULL,
-    #     related_name='source_to_offer_history',  # ← source.source_to_offer_history.all()
-    #     verbose_name='Источник изменений',
-    # )
     j_history_metadata = models.JSONField(
         default=dict,
         blank=True,
@@ -688,7 +700,7 @@ class TbOfferHistory(models.Model):
     # после создания. И если вдруг понадобится, то правильнее будет добавить новую запись.
 
     def __str__(self):
-        return f"history #{self.id} for offer {self.k_offer_id}"
+        return f"history #{self.id} for offer {self.k_history_to_offer_id}"
 
     class Meta:
         verbose_name = 'История оффера'
@@ -696,23 +708,6 @@ class TbOfferHistory(models.Model):
         ordering = ('-t_history_created',)
 
 
-
-#         │ 1
-#         │
-#         │ N
-# ┌───────▼────────────┐
-# │    ProductImage    │
-# ├────────────────────┤
-# │ id                 │
-# │ product_id         │ FK
-# │ image_type         │ ← cover/back/obi/matrix/etc
-# │ source             │ ← discogs/manual/vendor
-# │ url                │
-# │ local_path         │
-# │ is_primary         │
-# │ sort_order         │
-# │ metadata_json      │
-# └────────────────────┘
 #
 #
 # ┌────────────────────┐
