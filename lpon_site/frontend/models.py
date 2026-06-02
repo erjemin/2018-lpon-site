@@ -31,7 +31,7 @@ class TbImage(models.Model):
         help_text='Файл изображения, загруженный через django_filer.',
     )
 
-    l_source = models.CharField(
+    l_img_source = models.CharField(
         max_length=10,
         choices=ImageSource.choices,
         default=ImageSource.MANUAL_UPLOAD,
@@ -40,7 +40,7 @@ class TbImage(models.Model):
                   ' Discogs), предоставлен продавцом и т.д.',
     )
 
-    l_reality = models.CharField(
+    l_img_reality = models.CharField(
         max_length=10,
         choices=ImageReality.choices,
         default=ImageReality.ABSTRACT,
@@ -48,7 +48,7 @@ class TbImage(models.Model):
         help_text='Реальная фотография товара или картинка из внешнего источника?',
     )
 
-    s_source_url = models.URLField(
+    s_img_src_url = models.URLField(
         blank=True,
         null=True,
         verbose_name='URL источника',
@@ -56,7 +56,7 @@ class TbImage(models.Model):
     )
 
     # Порядок вывода
-    i_sort_order = models.IntegerField(
+    i_img_sort = models.IntegerField(
         default=0,
         db_index=True,
         verbose_name='Cортировка',
@@ -65,7 +65,7 @@ class TbImage(models.Model):
     )
 
     # Доверие данным (для парсеров и API)
-    f_confidence_score = models.FloatField(
+    f_img_confidence_score = models.FloatField(
         null=True,
         blank=True,
         default=None,
@@ -73,7 +73,7 @@ class TbImage(models.Model):
         help_text='0.0 - 1.0, насколько уверены, что это правильное изображение',
     )
     # Авторские права
-    s_copyright = models.CharField(
+    s_img_copyright = models.CharField(
         max_length=255,
         blank=True,
         default='',
@@ -82,11 +82,11 @@ class TbImage(models.Model):
     )
 
     # Timestamps
-    t_created = models.DateTimeField(
+    t_img_created = models.DateTimeField(
         auto_now_add=True,
         verbose_name='Дата добавления',
     )
-    t_updated = models.DateTimeField(
+    t_img_updated = models.DateTimeField(
         auto_now=True,
         verbose_name='Дата обновления',
     )
@@ -94,7 +94,7 @@ class TbImage(models.Model):
     class Meta:
         verbose_name = 'Изображение'
         verbose_name_plural = 'Изображения'
-        ordering = ('i_sort_order', 't_created')
+        ordering = ('i_img_sort', 't_img_created')
 
 
 # ============================================================================
@@ -114,7 +114,8 @@ class TbArtist(models.Model):
         null=True,
         default='',
         verbose_name='Исполнитель (типографированно в HTML)',
-        help_text='С сохранением типографирования и спецсимволов.',
+        help_text='С сохранением типографирования и спецсимволов (всякие "метки" и иконки, типа "Иноагент",'
+                  ' тоже можно заверстать сюда.',
     )
     k_artist_to_image = models.OneToOneField(
         TbImage,
@@ -125,6 +126,13 @@ class TbArtist(models.Model):
         verbose_name='Изображение для исполнителя',
         help_text='Изображение исполнителя, например, логотип группы или фотография. Если указано, будет'
                   ' отображаться рядом с именем исполнителя.',
+    )
+    s_artist_article_html = models.TextField(
+        blank=True,
+        null=True,
+        default='',
+        verbose_name='Статья',
+        help_text='Статья об исполнителе (типографированно в HTML)',
     )
     s_slug = models.SlugField(
         max_length=64,
@@ -137,11 +145,11 @@ class TbArtist(models.Model):
         verbose_name='Варианты написания в источниках',
         help_text='Список вариантов: ["The Beatles", "Beatles", "Beatles, The"]',
     )
-    t_created = models.DateTimeField(
+    t_artist_created = models.DateTimeField(
         auto_now_add=True,
         verbose_name="Дата создания",
     )
-    t_updated = models.DateTimeField(
+    t_artist_updated = models.DateTimeField(
         auto_now=True,
         verbose_name="Дата обновления",
     )
@@ -171,7 +179,6 @@ class TbItem(models.Model):
         verbose_name='Исполнители',
         help_text="Один или несколько для коллабораций",
     )
-
     s_item_title = models.CharField(
         max_length=255, blank=False, null=False, default='',
         # db_index=True,
@@ -179,7 +186,6 @@ class TbItem(models.Model):
         help_text='Название товара (релиза), как указано на обложке. Например: <tt>Abbey Road</tt>'
                   ' или <tt>TDK, CDing I, 90</tt>.',
     )
-
     s_item_title_html = models.TextField(
         blank=True,
         null=True,
@@ -187,7 +193,6 @@ class TbItem(models.Model):
         verbose_name='Название (типографированно)',
         help_text='С HTML-тегами для типографирования',
     )
-
     s_item_to_image = models.OneToOneField(
         TbImage,
         on_delete=models.SET_NULL,
@@ -198,6 +203,15 @@ class TbItem(models.Model):
         help_text='Изображение товара из каталога, например, обложка альбома. Если указано, будет отображаться'
                   ' рядом с названием товара.',
     )
+    s_item_article_html = models.TextField(
+        blank=True,
+        null=True,
+        default='',
+        verbose_name='Статья',
+        help_text='Статья о релизе, например, описание из Википедии или Discogs (а также список композиций,'
+                  ' исполнители и т.п.). Для товара это может быть техническое описание и характеристики.'
+                  ' Текст сверстан в HTML с сохранением типографирования и спецсимволов.',
+    )
     s_item_slug = models.SlugField(
         blank=True,
         null=True,
@@ -205,7 +219,6 @@ class TbItem(models.Model):
         verbose_name='Слаг',
         help_text='Слаг для товара, формируемый на основе названия товара (релиза)',
     )
-
     # Год выпуска (важно для коллекционеров)
     s_item_date = models.CharField(
         max_length=10,
@@ -218,14 +231,12 @@ class TbItem(models.Model):
                   ' релиза, чем t_release_date, так как может содержать неполную дату и/или текстовую информацию.'
                   ' Срабатывает только если t_release_date не указано.'
     )
-
     t_item_date = models.DateField(
         blank=True,
         null=True,
         verbose_name='Дата релиза',
         help_text='Полная дата если известна, например: 1969-09-26. Если точно известен.',
     )
-
     i_discogs_master_id = models.IntegerField(
         blank=True,
         null=True,
@@ -233,14 +244,12 @@ class TbItem(models.Model):
         verbose_name='ID на мастер-релиз Discogs',
         help_text='Уникальный идентификатор мастер-релиза на Discogs, если он там есть. Например: <tt>306323</tt>',
     )
-
-    # Метаданные релиза (страна, жанр, количество треков и т.д.)
     j_item_metadata = models.JSONField(
         default=dict, blank=True, null=True,
         verbose_name='Дополнительные данные',
-        help_text='Дополнительные данные о релизе в виде JSON-словаря. Сюда же включены варианты написания релиза в источниках',
+        help_text='Дополнительные данные и метаданные релиза (страна, жанр, количество треков и т.д.) или товавра'
+                  ' в виде JSON-словаря. Сюда же включены варианты написания релиза в источниках',
     )
-
     t_item_created = models.DateTimeField(
         auto_now_add=True,
         verbose_name="Дата создания",
@@ -262,7 +271,6 @@ class TbItem(models.Model):
 # ============================================================================
 # ЛЕЙБЛЫ (производители релизов)
 # ============================================================================
-
 class TbLabel(models.Model):
     """
     Лейбл или издатель релиза.
@@ -270,7 +278,6 @@ class TbLabel(models.Model):
              для кассет под запись это: TDK, AXIA, Maxell, JVC ...
              для hi-fi это: Sony, Pioneer, Technics, Marantz ...
     """
-
     s_label = models.CharField(
         max_length=128,
         blank=False,
@@ -279,7 +286,13 @@ class TbLabel(models.Model):
         verbose_name='Название лейбла',
         help_text='Например: "Sony Records" или "Мелодия"',
     )
-
+    s_label_article_html = models.TextField(
+        blank=True,
+        null=True,
+        default='',
+        verbose_name='Статья',
+        help_text='Статья о лейбле (типографированно в HTML)',
+    )
     s_label_slug = models.SlugField(
         max_length=64,
         blank=False,
@@ -287,20 +300,18 @@ class TbLabel(models.Model):
         default='',
         verbose_name='Слаг',
     )
-
     j_label_metadata = models.JSONField(
         default=dict,
         blank=True,
         null=True,
-        verbose_name='Дополнительные данные',
+        verbose_name='Метаданные',
         help_text='JSON: страна лейбла, официальный сайт и т.д.',
     )
-
-    t_created = models.DateTimeField(
+    t_label_created = models.DateTimeField(
         auto_now_add=True,
         verbose_name="Дата создания",
     )
-    t_updated = models.DateTimeField(
+    t_tabel_updated = models.DateTimeField(
         auto_now=True,
         verbose_name="Дата обновления",
     )
@@ -320,44 +331,45 @@ class TbLabel(models.Model):
 
 class TbSeller(models.Model):
     """Продавец или магазин, который продаёт товары."""
-
     class SellerType(models.TextChoices):
         SELLER = 'seller', 'Продавец'
         LABEL = 'label', 'Лейбл (издатель)'
         DIY = 'diy', 'Самиздат группы'
         CROWD = 'crowdfunding', 'Краудфандинг'
         OTHER = '++', 'Другое'
-
     s_seller = models.CharField(
         max_length=32, blank=False, null=False, default='',
         verbose_name='Название продавца',
         help_text='Название продавца или магазина, например: <tt>Клюква Рекодс</tt>',
     )
-
+    s_seller_article_html = models.TextField(
+        blank=True,
+        null=True,
+        default='',
+        verbose_name='Статья',
+        help_text='Статья о продавце (типографированно в HTML)',
+    )
     s_seller_slug = models.SlugField(
         max_length=32, blank=False, null=False, default='',
         verbose_name='Слаг',
         help_text='Слаг для продавца, формируемый на основе названия продавца',
     )
-
     l_seller_type = models.CharField(
         max_length=9,
         default=SellerType.SELLER,
         choices=SellerType.choices,
         verbose_name='Тип продавца',
     )
-
     j_seller_metadata = models.JSONField(
         default=dict, blank=True, null=True,
         verbose_name='Дополнительные данные',
         help_text='Дополнительные данные о продавце в виде JSON-словаря. Телефон, email, адрес, ссылка на сайт и т.д.',
     )
-    
-    t_created = models.DateTimeField(
+    t_seller_created = models.DateTimeField(
         auto_now_add=True,
         verbose_name="Дата создания",
     )
-    t_updated = models.DateTimeField(
+    t_seller_updated = models.DateTimeField(
         auto_now=True,
         verbose_name="Дата обновления",
     )
@@ -373,7 +385,6 @@ class TbSeller(models.Model):
 # ============================================================================
 # ПРЕДЛОЖЕНИЯ / ОФФЕРЫ
 # ============================================================================
-
 class TbOffer(models.Model):
     """
     Конкретное предложение от продавца.
@@ -436,13 +447,13 @@ class TbOffer(models.Model):
 
     # Изображения товара (одна картинка может быть у многих офферов, а офер иметь много картинок)
     # M2M связь для удобства в админке (filter_horizontal)
-    # Порядок картинок определяется полем i_sort_order в TbImage
+    # Порядок картинок определяется полем i_img_sort в TbImage
     k_offer_to_image = models.ManyToManyField(
         TbImage,
         blank=True,
         related_name='image_to_offer',
         verbose_name='Изображения',
-        help_text='Картинки этого товара. Порядок определяется полем i_sort_order в ка��тинке.',
+        help_text='Картинки этого товара. Порядок определяется полем i_img_sort в ка��тинке.',
     )
 
     # Характеристики
@@ -459,6 +470,14 @@ class TbOffer(models.Model):
         default=Format.LP,
         verbose_name='Формат',
         help_text='Основной формат носителя (пластинка, CD, кассета и т.п.)'
+    )
+
+    d_offer_date_release = models.DateField(
+        blank=True,
+        null=True,
+        default=None,
+        verbose_name='Дата релиза',
+        help_text='Дата релиза, если она известна (например, дата выпуска переиздания)',
     )
 
     i_offer_discogs_id = models.IntegerField(
@@ -502,20 +521,20 @@ class TbOffer(models.Model):
     )
 
     i_offer_discount_to_daily_sale = models.IntegerField(
-        blank=True, default=0,
+        blank=True,
+        default=0,
+        db_index=True,
         verbose_name='Скидка',
-        help_text='Процент скидки, для ежедневной распродажи',
+        help_text='Процент возможной скидки, если участвует в "ежедневной распродаже" или акции. Если указано'
+                  ' <tt>0</tt> то данное предложение не может участвовать в распродажах, спецпредложениях и акциях',
     )
-
-    # Комментарии
-    s_offer_comment = models.TextField(
+    s_offer_comment_html = models.TextField(
         blank=True,
         default='',
         verbose_name='Доп.инфо',
-        help_text='Дополнительная информация или комментарий к предложению от продавца, например:'
-                  ' <tt>"Пластинка запаяна в целлофан, угол обложки замят."</tt>.',
+        help_text='Дополнительная информация или комментарий к предложению от продавца с сохранением'
+                  ' типографирования и спецсимволов.',
     )
-
     j_offer_metadata = models.JSONField(
         # Метаданные оффера (сырые данные из источника, координаты в Excel и т.д.)
         default=dict, null=True,
@@ -549,7 +568,7 @@ class TbSource(models.Model):
     """
         Источник данных, из которого был импортирован оффер.
         Например, это может быть Excel-файл от продавца или издателя, CSV-файл, URL страницы с данными
-         (например, HTML-страница с каталогом товаров) и т.д.
+        (например, HTML-страница с каталогом товаров) и т.д.
     """
     class SourceType(models.TextChoices):
         EXCEL = 'excel', 'Excel-файл от продавца или издателя'
@@ -579,7 +598,7 @@ class TbSource(models.Model):
         verbose_name='Продавец',
     )
 
-    l_currency = models.CharField(
+    l_source_currency = models.CharField(
         max_length=3,
         choices=Currency.choices,
         default=Currency.RUB,
@@ -655,13 +674,11 @@ class TbSource(models.Model):
 # ============================================================================
 # ИСТОРИЯ ИЗМЕНЕНИЙ ОФФЕРОВ
 # ============================================================================
-
 class TbOfferHistory(models.Model):
     """
     История изменений оффера (снапшот цены, количества, наличия).
     Создаётся при каждом импорте, если что-то изменилось.
     """
-
     k_history_to_offer = models.ForeignKey(
         TbOffer,
         on_delete=models.CASCADE,
