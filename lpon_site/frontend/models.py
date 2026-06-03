@@ -94,10 +94,10 @@ class TbImage(models.Model):
     class Meta:
         verbose_name = 'Изображение'
         verbose_name_plural = 'Изображения'
-        ordering = ('i_img_sort', 't_img_created')
+        ordering = ('-t_img_created', 'i_img_sort',)
 
 # ============================================================================
-# СТАТЬИ (любая тексовая информация о релизе, исполнителе, продавце и т.д...
+# СТАТЬИ (любая текстовая информация о релизе, исполнителе, продавце и т.д...
 #         а так же новости, блог, тексты о спец-предложениях и т.д.)
 # ============================================================================
 class TbArticle(models.Model):
@@ -169,6 +169,7 @@ class TbArticle(models.Model):
         related_name='image_to_article',
         blank=True,
         null=True,
+        db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
         verbose_name='Изображение для статьи',
     )
     s_article_teaser_html = models.TextField(
@@ -233,7 +234,12 @@ class TbArticle(models.Model):
     class Meta:
         verbose_name = 'Статья'
         verbose_name_plural = 'Статьи'
-        ordering = ('-t_article_updated', '-t_article_created')
+        ordering = ('-t_article_updated', '-t_article_created', 's_article_title')
+        indexes = [
+            # Составной индекс: найти опубликованные статьи по типу, отсортированные по свежести (для витрины)
+            models.Index(fields=['l_article_type', 'b_article_published', '-t_article_created'],
+                        name='idx_articles_by_type_published'),
+        ]
 
 
 # ============================================================================
@@ -252,6 +258,7 @@ class TbArtist(models.Model):
         TbArticle,
         on_delete=models.SET_NULL,
         related_name='article_to_artist',
+        db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
         default=None,
         null=True,
         blank=True,     # <-- Интерфейсное удобство. Связь будет сделана автоматически, и статья создана автоматически.
@@ -284,6 +291,7 @@ class TbArtist(models.Model):
         verbose_name = 'Исполнитель'
         verbose_name_plural = 'Исполнители'
         ordering = ('s_artist',)
+        # index_together = ('t_artist_created', 't_artist_updated', 'k_artist_to_article')
 
 
 class TbItem(models.Model):
@@ -303,8 +311,9 @@ class TbItem(models.Model):
         # Исполнители (ManyToMany для поддержки коллабораций)
         # Например: "David Bowie & Queen", "Elton John & Tim Rice"
         TbArtist,
-        blank=True,
+        blank=True,     # Исполнителя может и не быть (например для сборников)
         related_name='artist_to_item',  # artist.products.all() — найти все релизы артиста
+        db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
         verbose_name='Исполнители',
         help_text="Один или несколько для коллабораций",
     )
@@ -312,6 +321,7 @@ class TbItem(models.Model):
         TbArticle,
         on_delete=models.SET_NULL,
         related_name='article_to_item',
+        db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
         default=None,
         null=True,
         blank=True,     # <-- Интерфейсное удобство. Связь будет сделана автоматически, и статья создана автоматически.
@@ -391,6 +401,7 @@ class TbLabel(models.Model):
         TbArticle,
         on_delete=models.SET_NULL,
         related_name='article_to_label',
+        db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
         default=None,
         null=True,
         blank=True,     # <-- Интерфейсное удобство. Связь будет сделана автоматически, и статья создана автоматически.
@@ -449,6 +460,7 @@ class TbSeller(models.Model):
         TbArticle,
         on_delete=models.SET_NULL,
         related_name='article_to_seller',
+        db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
         default=None,
         null=True,
         blank=True,     # <-- Интерфейсное удобство. Связь будет сделана автоматически, и статья создана автоматически.
@@ -524,17 +536,18 @@ class TbOffer(models.Model):
                   ' "Abbey Road (LP) AnTrop NM/NM (МЗГ)" или "TDK CDing I 60 (б/у) VG/VG (Janan, 198x синяя-градиент)"'
     )
     # Связи
-     k_offer_to_article = models.ForeignKey(
-         TbArticle,
-         on_delete=models.SET_NULL,
-         related_name='article_to_offer',
-         default=None,
-         null=True,
-         blank=True,     # <-- Интерфейсное удобство. Статья НЕ БУДЕТ СОЗДАНА автоматически.
-         verbose_name='Связанная статья',
-         help_text='Связанная статья об оффере (HTML-готовые заголовок, тизер и текст статьи).'
-                  ' Так же через статью может быть получена картинка, seo атрибуты, слаг (обязательно) и т.п.)<br />'
-                  '<b>МОЖНО НЕ УКАЗЫВАТЬ</b> т.к. URL оффера (для корзины) формируется через id или хеш.'
+    k_offer_to_article = models.ForeignKey(
+        TbArticle,
+        on_delete=models.SET_NULL,
+        related_name='article_to_offer',
+        db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
+        default=None,
+        null=True,
+        blank=True,     # <-- Интерфейсное удобство. Статья НЕ БУДЕТ СОЗДАНА автоматически.
+        verbose_name='Связанная статья',
+        help_text='Связанная статья об оффере (HTML-готовые заголовок, тизер и текст статьи).'
+                 ' Так же через статью может быть получена картинка, seo атрибуты, слаг (обязательно) и т.п.)<br />'
+                 '<b>МОЖНО НЕ УКАЗЫВАТЬ</b> т.к. URL оффера (для корзины) формируется через id или хеш.'
     )
     k_offer_to_item = models.ForeignKey(
         TbItem,
@@ -543,6 +556,7 @@ class TbOffer(models.Model):
         default=None,
         on_delete=models.SET_NULL,
         related_name='item_to_offer',  # ← product.item_to_offer.all()
+        db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
         verbose_name='Релиз (товар)',
     )
     k_offer_to_label = models.ForeignKey(
@@ -551,6 +565,7 @@ class TbOffer(models.Model):
         default=None,
         on_delete=models.SET_NULL,
         related_name='label_to_offer',  # ← label.label_to_offers.all()
+        db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
         verbose_name='Лейбл',
         help_text='Лейбл, на котором был выпущен релиз, если он известен. Например: <tt>Atlantic</tt> или <tt>Мелодия</tt>',
     )
@@ -560,6 +575,7 @@ class TbOffer(models.Model):
         default=None,
         on_delete=models.CASCADE,  # ← если удалён источник, удалены все офферы
         related_name='source_to_offer',
+        db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
         verbose_name='Источник данных',
         help_text='Обязательно - каждый оффер должен иметь источник. Через источник получаем данные '
                   'продавца: offer.k_offer_to_source.k_source_to_seller',
@@ -571,6 +587,7 @@ class TbOffer(models.Model):
         TbImage,
         blank=True,
         related_name='image_to_offer',
+        db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
         verbose_name='Изображения',
         help_text='Картинки этого товара. Порядок определяется полем i_img_sort в ка��тинке.',
     )
@@ -669,7 +686,20 @@ class TbOffer(models.Model):
     class Meta:
         verbose_name = 'Оффер (предложение)'
         verbose_name_plural = 'Офферы (предложения)'
-        ordering = ('-t_offer_updated', '-t_offer_created' 's_offer')
+        ordering = ('-t_offer_updated', '-t_offer_created', 's_offer')
+        indexes = [
+            # Составной индекс: найти все офферы товара, отсортировать по цене (для витрины)
+            models.Index(fields=['k_offer_to_item', '-f_offer_price'], name='idx_offer_by_item_price'),
+            ## Составной индекс: для фильтра распродаж - по источнику и скидке
+            # models.Index(fields=['k_offer_to_source', '-i_offer_discount_to_daily_sale'], name='idx_offer_by_source_discount'),
+            # Составной индекс: найти актуальные офферы по товару (есть в наличии)
+            models.Index(fields=['k_offer_to_item', 'i_offer_quantity'], name='idx_offer_by_item_qty'),
+        ]
+        constraints = [
+            # Уникальное ограничение: предотвратить дубликаты (один товар + один источник + один формат)
+            models.UniqueConstraint(fields=['k_offer_to_item', 'k_offer_to_source', 'l_offer_primary_media'],
+                                   name='idx_offer_unique_item_source_format'),
+        ]
 
 
 # ============================================================================
@@ -706,6 +736,7 @@ class TbSource(models.Model):
         default=None,
         on_delete=models.SET_NULL,
         related_name='seller_to_source',
+        db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
         verbose_name='Продавец',
     )
 
@@ -779,6 +810,12 @@ class TbSource(models.Model):
         verbose_name = 'Источник данных'
         verbose_name_plural = 'Источники данных'
         ordering = ('-t_source_data', '-t_source_created')
+        # constraints = [
+        #     # Уникальное ограничение: один продавец может иметь несколько источников,
+        #     # но комбинация (продавец + тип источника) должна быть уникальна
+        #     models.UniqueConstraint(fields=['k_source_to_seller', 'l_source_type'],
+        #                            name='idx_source_unique_by_seller_type'),
+        # ]
 
 
 
@@ -794,6 +831,7 @@ class TbOfferHistory(models.Model):
         TbOffer,
         on_delete=models.CASCADE,
         related_name='offer_to_history',  # ← offer.offer_to_history.all()
+        db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
         verbose_name='Оффер',
     )
     f_history_price = models.DecimalField(
@@ -834,19 +872,8 @@ class TbOfferHistory(models.Model):
         verbose_name = 'История оффера'
         verbose_name_plural = 'Истории офферов'
         ordering = ('-t_history_created',)
+        indexes = [
+            # Составной индекс: найти историю оффера, отсортированную по времени (для хронологии изменений цены)
+            models.Index(fields=['k_history_to_offer', '-t_history_created'], name='idx_history_by_offer_date'),
+        ]
 
-
-#
-#
-# ┌────────────────────┐
-# │ ProductEnrichment  │
-# ├────────────────────┤
-# │ id                 │
-# │ product_id         │ FK
-# │ source             │ ← discogs/api/scraper
-# │ confidence_score   │
-# │ data_json          │
-# │ fetched_at         │
-# └────────────────────┘
-#
-#
