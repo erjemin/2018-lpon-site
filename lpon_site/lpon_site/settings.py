@@ -101,8 +101,10 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR.parent.joinpath('database', env('DJANGO_SQLITE_NAME', default='lpon-db.sqlite3')),
+        'CONN_MAX_AGE': 600,        #  время жизни соединения с базой
         'OPTIONS': {
             'timeout': 25,
+            'init_command': "PRAGMA journal_mode=WAL; PRAGMA auto_vacuum=2;",
         },
     }
 }
