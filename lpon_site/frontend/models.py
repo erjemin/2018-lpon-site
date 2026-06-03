@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import F
 from filer.fields.image import FilerImageField
 from filer.fields.file import FilerFileField
 import datetime
@@ -30,7 +31,6 @@ class TbImage(models.Model):
         verbose_name='Файл изображения',
         help_text='Файл изображения, загруженный через django_filer.',
     )
-
     l_img_source = models.CharField(
         max_length=10,
         choices=ImageSource.choices,
@@ -39,7 +39,6 @@ class TbImage(models.Model):
         help_text='Как был получен этот снимок: загружен вручную, получен парсером из внешнего источника (например,'
                   ' Discogs), предоставлен продавцом и т.д.',
     )
-
     l_img_reality = models.CharField(
         max_length=10,
         choices=ImageReality.choices,
@@ -47,46 +46,43 @@ class TbImage(models.Model):
         verbose_name='Тип снимка',
         help_text='Реальная фотография товара или картинка из внешнего источника?',
     )
-
     s_img_src_url = models.URLField(
         blank=True,
         null=True,
         verbose_name='URL источника',
         help_text='Если изображение взято из внешнего источника (например, Discogs)',
     )
-
-    # Порядок вывода
     i_img_sort = models.IntegerField(
+        # Порядок (сортировка) вывода
         default=0,
         db_index=True,
         verbose_name='Cортировка',
         help_text='Порядок отображения изображений. Чем меньше число, тем выше в списке. Можно использовать'
                   ' для указания обложки (0), задника (1) и т.д.',
     )
-
-    # Доверие данным (для парсеров и API)
     f_img_confidence_score = models.FloatField(
+        # Доверие данным (для парсеров и API)
         null=True,
         blank=True,
         default=None,
         verbose_name='Уверенность (для автоматических данных)',
         help_text='0.0 - 1.0, насколько уверены, что это правильное изображение',
     )
-    # Авторские права
     s_img_copyright = models.CharField(
+        # Авторские права и лицензия
         max_length=255,
         blank=True,
         default='',
         verbose_name='Авторские права / Лицензия',
         help_text='Например: "© 2024 User" или "CC-BY"',
     )
-
-    # Timestamps
     t_img_created = models.DateTimeField(
+        # Timestamps
         auto_now_add=True,
         verbose_name='Дата добавления',
     )
     t_img_updated = models.DateTimeField(
+        # Timestamps
         auto_now=True,
         verbose_name='Дата обновления',
     )
@@ -188,6 +184,18 @@ class TbArticle(models.Model):
         help_text='Полный текст статьи. Может содержать HTML-вёрсту (теги, мнемоники, спецсимволы) для'
                   ' типографирования.',
     )
+    i_article_views = models.IntegerField(
+        # Счетчик просмотров (включая просмотры артиста, итема/релиза/товара, лейбла и продавца)
+        default=0,
+        db_index=True,  # для сортировки "самые просматриваемые"
+        verbose_name='Число просмотров',
+    )
+    i_article_favorites = models.IntegerField(
+        # Счетчик добавлений в избранное (включая избранное артиста, итема/релиза/товара, лейбла и продавца)
+        default=0,
+        db_index=True,  # для сортировки "самые добавляемые в избранное"
+        verbose_name='Число в избранном',
+    )
     slug = models.SlugField(
         max_length=255,
         blank=False,
@@ -230,6 +238,18 @@ class TbArticle(models.Model):
 
     def __str__(self):
         return f"article {self.id:0>4}: {self.s_article_title}"
+
+    def increment_views(self):
+        """Безопасный инкремент просмотров (статьи, артиста, лейбла, продавца, товара/релиза/альбома...)"""
+        TbArticle.objects.filter(id=self.id).update(
+            i_article_views=F('i_article_views') + 1
+        )
+
+    def increment_favorites(self):
+        """Безопасный инкремент добавлений в избранное (статьи, артиста, лейбла, продавца, товара/релиза/альбома...)"""
+        TbArticle.objects.filter(id=self.id).update(
+            i_article_favorites=F('i_article_favorites') + 1
+        )
 
     class Meta:
         verbose_name = 'Статья'
@@ -669,6 +689,16 @@ class TbOffer(models.Model):
                   ' Например: "4gfFCJ". Формируется автоматически связкой Skip32 (хаотичное перемешивание) и'
                   ' Base62 (компактная упаковка) из id оффера в методе save().',
     )
+    i_offer_views = models.IntegerField(
+        default=0,
+        db_index=True,
+        verbose_name='Просмотры',
+    )
+    i_offer_favorites = models.IntegerField(
+        default=0,
+        db_index=True,
+        verbose_name='В избранном',
+    )
     t_offer_created = models.DateTimeField(
         auto_now_add=True,
         verbose_name="Дата создания",
@@ -682,6 +712,18 @@ class TbOffer(models.Model):
         seller = self.k_offer_to_source.k_source_to_seller.s_seller if (self.k_offer_to_source
                                                               and self.k_offer_to_source.k_source_to_seller) else "?"
         return f"offer {self.id:0>4} for item {self.k_offer_to_item_id} from seller {seller}"
+
+    def increment_views(self):
+        """Безопасный инкремент просмотров оффера"""
+        TbOffer.objects.filter(id=self.id).update(
+            i_offer_views=F('i_offer_views') + 1
+        )
+
+    def increment_favorites(self):
+        """Безопасный инкремент добавлений в избранное оффера"""
+        TbOffer.objects.filter(id=self.id).update(
+            i_offer_favorites=F('i_offer_favorites') + 1
+        )
 
     class Meta:
         verbose_name = 'Оффер (предложение)'
