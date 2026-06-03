@@ -92,6 +92,51 @@ class TbImage(models.Model):
         verbose_name_plural = 'Изображения'
         ordering = ('-t_img_created', 'i_img_sort',)
 
+
+# ============================================================================
+# МУЗЫКАЛЬНЫЕ СТИЛИ
+# ============================================================================
+class TbMusicStyle(models.Model):
+    """
+    Музыкальный стиль (канонический / опорный).
+
+    Один главный стиль может иметь несколько синонимов (из Discogs).
+    Пример:
+    - Главный: "Rock"
+    - Синонимы: ["rock", "Rock Music", "Rock & Roll", "Hard Rock", ...]
+    """
+    s_style_name = models.CharField(
+        max_length=100,
+        unique=True,
+        db_index=True,
+        verbose_name='Стиль (канонический)',
+        help_text='Основное название стиля. Например: "Rock", "Jazz", "Classical"',
+    )
+    s_style_slug = models.SlugField(
+        max_length=100,
+        unique=True,
+        db_index=True,
+        verbose_name='Слаг',
+    )
+    j_style_synonyms = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='Синонимы из источников',
+        help_text='Список вариантов названия из Discogs, MusicBrainz и т.д. (для матчинга)'
+                  'Пример: ["rock", "Rock Music", "Rock & Roll", "Hard Rock"]',
+    )
+    t_style_created = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
+    t_style_updated = models.DateTimeField(auto_now=True, verbose_name="Дата обновления")
+
+    def __str__(self):
+        return f"style: {self.s_style_slug} ({self.s_style_name})"
+
+    class Meta:
+        verbose_name = 'Музыкальный стиль'
+        verbose_name_plural = 'Музыкальные стили'
+        ordering = ('-i_style_popularity', 's_style_name')
+
+
 # ============================================================================
 # СТАТЬИ (любая текстовая информация о релизе, исполнителе, продавце и т.д...
 #         а так же новости, блог, тексты о спец-предложениях и т.д.)
@@ -183,6 +228,14 @@ class TbArticle(models.Model):
         verbose_name='Статья',
         help_text='Полный текст статьи. Может содержать HTML-вёрсту (теги, мнемоники, спецсимволы) для'
                   ' типографирования.',
+    )
+    k_article_to_styles = models.ManyToManyField(
+        TbMusicStyle,
+        blank=True,
+        related_name='style_to_article',
+        db_index=True,
+        verbose_name='Музыкальные стили',
+        help_text='Стили этой статьи/артиста/релиза (Rock, Jazz, Classical, ...)',
     )
     i_article_views = models.IntegerField(
         # Счетчик просмотров (включая просмотры артиста, итема/релиза/товара, лейбла и продавца)
