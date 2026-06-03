@@ -96,54 +96,177 @@ class TbImage(models.Model):
         verbose_name_plural = 'Изображения'
         ordering = ('i_img_sort', 't_img_created')
 
+# ============================================================================
+# СТАТЬИ (любая тексовая информация о релизе, исполнителе, продавце и т.д...
+#         а так же новости, блог, тексты о спец-предложениях и т.д.)
+# ============================================================================
+class TbArticle(models.Model):
+    """
+    Статья, связанная с релизом, исполнителем, продавцом и т.д.
+    Может быть использована для хранения любой текстовой информации, например, описания релиза из Википедии или
+    Discogs, биографии исполнителя, описания продавца и т.д. Сохранение типографирования и спецсимволов в HTML.
+    """
+    class ArticleType(models.TextChoices):
+        ARTIST = 'artist', 'Artis: артист, группа или бренд'
+        ITEM = 'item', 'Item: Альбом, релиз или товар (кассета, hifi, аксессуар)'
+        OFFER = 'offer', 'Offer: конкретное предложение от продавца'
+        SELLER = 'seller', 'Seller: продавец или магазин'
+        BLOG = 'blog', 'Новость или блог'
+        ACTION = 'action', 'Спецпредложение, акция, распродажа и т.д.'
+        TO_MAIN = 'to_main', 'Текст/Блок для главной страницы'
+        ADV = 'adv', 'Реклама или баннер'
+        OTHER = '???', 'Другое'
+
+    s_article_title = models.CharField(
+        max_length=255,
+        blank=False,
+        default='',
+        unique=True,
+        verbose_name='Технический заголовок',
+        help_text='Технический заголовок статьи для внутреннего использования, например: "Album: Abbey Road"'
+                  ' или "Bio: The Beatles".'
+    )
+    l_article_type = models.CharField(
+        max_length=7,
+        blank=True,
+        choices=ArticleType.choices,
+        default=ArticleType.OTHER,
+        db_index=True,
+        verbose_name='Тип статьи',
+    )
+    b_article_published = models.BooleanField(
+        default=True,
+        db_index=True,
+        verbose_name='Опубликовано',
+    )
+    t_article_started = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+        verbose_name='Дата начала публикации',
+    )
+    t_article_ended = models.DateTimeField(
+        blank=True,
+        null=True,
+        default=None,
+        db_index=True,
+        verbose_name='Дата окончания публикации',
+        help_text='Если указано, статья будет отображаться только между датой начала и датой окончания публикации.'
+                  ' Если не указано, статья будет отображаться всегда (или до тех пор, пока не будет удалена '
+                  ' или снята с публикации через `b_article_published`)',
+    )
+    s_article_title_html = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        verbose_name='Заголовок',
+        help_text='Заголовок статьи, например: "Описание релиза Abbey Road" или "Биография группы The Beatles".'
+                  ' Может содержать HTML-разметку для типографирования (html-мнемоники и -теги). Если не указано,'
+                  ' будет отображаться без заголовка.'
+    )
+    k_article_to_image = models.ForeignKey(
+        TbImage,
+        on_delete=models.SET_NULL,
+        related_name='image_to_article',
+        blank=True,
+        null=True,
+        verbose_name='Изображение для статьи',
+    )
+    s_article_teaser_html = models.TextField(
+        blank=True,
+        null=True,
+        default='',
+        verbose_name='Тизер статьи',
+        help_text='Короткий анонс статьи, который будет отображаться в списках. Может содержать HTML-вёрсту (теги,'
+                  ' мнемоники, спецсимволы) для типографирования.',
+    )
+    s_article_content_html = models.TextField(
+        blank=True,
+        null=True,
+        default='',
+        verbose_name='Статья',
+        help_text='Полный текст статьи. Может содержать HTML-вёрсту (теги, мнемоники, спецсимволы) для'
+                  ' типографирования.',
+    )
+    slug = models.SlugField(
+        max_length=255,
+        blank=False,
+        default='',
+        unique=True,
+        db_index=True,
+        verbose_name='Слаг статьи',
+    )
+    seo_title = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        verbose_name='SEO Title',
+        help_text='SEO Title для статьи. Если не указано, будет использоваться заголовок статьи'
+                  ' (s_article_title_html) без HTML-тегов.',
+    )
+    seo_description = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        verbose_name='SEO Description',
+        help_text='SEO Description для статьи. Если не указано, будет использоваться обрезанный тизер статьи'
+                  ' (s_article_teaser_html) без HTML-тегов.',
+    )
+    seo_keywords = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        verbose_name='SEO Keywords',
+        help_text='SEO Keywords для статьи, через запятую. Например: "The Beatles, Abbey Road, Vinyl, 1969"',
+    )
+    t_article_created = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Дата создания",
+    )
+    t_article_updated = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Дата обновления",
+    )
+
+    def __str__(self):
+        return f"article {self.id:0>4}: {self.s_article_title}"
+
+    class Meta:
+        verbose_name = 'Статья'
+        verbose_name_plural = 'Статьи'
+        ordering = ('-t_article_updated', '-t_article_created')
+
 
 # ============================================================================
 # ИСПОЛНИТЕЛИ
 # ============================================================================
 class TbArtist(models.Model):
     """Исполнитель или музыкальная группа."""
-
     s_artist = models.CharField(
-        max_length=255,
-        db_index=True,
+        max_length=128,
+        unique=True,
         verbose_name='Исполнитель',
-        help_text="Исполнитель или группа.",
+        help_text='Техническое название исполнителя для внутреннего использования, например: "The Beatles" или'
+                  '"David Bowie".'
     )
-    s_artist_html = models.TextField(
-        blank=True,
-        null=True,
-        default='',
-        verbose_name='Исполнитель (типографированно в HTML)',
-        help_text='С сохранением типографирования и спецсимволов (всякие "метки" и иконки, типа "Иноагент",'
-                  ' тоже можно заверстать сюда.',
-    )
-    k_artist_to_image = models.OneToOneField(
-        TbImage,
+    k_artist_to_article = models.OneToOneField(
+        TbArticle,
         on_delete=models.SET_NULL,
-        related_name='image_to_artist',
-        blank=True,
+        related_name='article_to_artist',
+        default=None,
         null=True,
-        verbose_name='Изображение для исполнителя',
-        help_text='Изображение исполнителя, например, логотип группы или фотография. Если указано, будет'
-                  ' отображаться рядом с именем исполнителя.',
+        blank=True,     # <-- Интерфейсное удобство. Связь будет сделана автоматически, и статья создана автоматически.
+        verbose_name='Связанная статья',
+        help_text='Связанная статья об исполнителе (Типографированные заголовок, тизер и текст статьи. Так же'
+                  ' через статью может быть получена картинка, seo атрибуты, слаг (обязательно) и т.п.)<br />'
+                  '<b>ОБЯЗАТЕЛЬНО УКАЗЫВАТЬ</b> т.к. через статью получаем слаг для URL артиста.'
     )
-    s_artist_article_html = models.TextField(
-        blank=True,
-        null=True,
-        default='',
-        verbose_name='Статья',
-        help_text='Статья об исполнителе (типографированно в HTML)',
-    )
-    s_slug = models.SlugField(
-        max_length=64,
-        verbose_name='Слаг',
-    )
-    j_artist_in_source = models.JSONField(
+    j_artist_metadata = models.JSONField(
         default=list,
         blank=True,
         null=True,
-        verbose_name='Варианты написания в источниках',
-        help_text='Список вариантов: ["The Beatles", "Beatles", "Beatles, The"]',
+        verbose_name='Метаданные JSON',
+        help_text='Включая варианты написания в источниках Список вариантов: ["The Beatles", "Beatles",'
+                  ' "Beatles, The"]',
     )
     t_artist_created = models.DateTimeField(
         auto_now_add=True,
@@ -169,58 +292,37 @@ class TbItem(models.Model):
     аксессуар (щётка для виниловых пластинок) и т.д.
     Может быть представлен в виде одного или нескольких предложений от разных продавцов.
     """
-
-    # Исполнители (ManyToMany для поддержки коллабораций)
-    # Например: "David Bowie & Queen", "Elton John & Tim Rice"
+    s_item = models.CharField(
+        max_length=128,
+        unique=True,
+        verbose_name='Товар',
+        help_text='Техническое название товара (альбома, релиза, аксессуара) для внутреннего использования,'
+                  'например: "Abbey Road (LP)" или "TDK CDing I (кассета для записи)".'
+    )
     k_item_to_artist = models.ManyToManyField(
+        # Исполнители (ManyToMany для поддержки коллабораций)
+        # Например: "David Bowie & Queen", "Elton John & Tim Rice"
         TbArtist,
         blank=True,
         related_name='artist_to_item',  # artist.products.all() — найти все релизы артиста
         verbose_name='Исполнители',
         help_text="Один или несколько для коллабораций",
     )
-    s_item_title = models.CharField(
-        max_length=255, blank=False, null=False, default='',
-        # db_index=True,
-        verbose_name='Название товара (релиза)',
-        help_text='Название товара (релиза), как указано на обложке. Например: <tt>Abbey Road</tt>'
-                  ' или <tt>TDK, CDing I, 90</tt>.',
-    )
-    s_item_title_html = models.TextField(
-        blank=True,
-        null=True,
-        default='',
-        verbose_name='Название (типографированно)',
-        help_text='С HTML-тегами для типографирования',
-    )
-    s_item_to_image = models.OneToOneField(
-        TbImage,
+    k_item_to_article = models.OneToOneField(
+        TbArticle,
         on_delete=models.SET_NULL,
-        related_name='image_to_item',
-        blank=True,
+        related_name='article_to_item',
+        default=None,
         null=True,
-        verbose_name='Изображение',
-        help_text='Изображение товара из каталога, например, обложка альбома. Если указано, будет отображаться'
-                  ' рядом с названием товара.',
+        blank=True,     # <-- Интерфейсное удобство. Связь будет сделана автоматически, и статья создана автоматически.
+        verbose_name='Связанная статья',
+        help_text='Связанная статья об альбоме/релизе/товаре (Типографированные заголовок, тизер и текст статьи.'
+                  ' Так же через статью может быть получена картинка, seo атрибуты, слаг (обязательно) и т.п.)<br />'
+                  '<b>ОБЯЗАТЕЛЬНО УКАЗЫВАТЬ</b> т.к. через статью получаем слаг для URL альбома/релиза/товара.'
     )
-    s_item_article_html = models.TextField(
-        blank=True,
-        null=True,
-        default='',
-        verbose_name='Статья',
-        help_text='Статья о релизе, например, описание из Википедии или Discogs (а также список композиций,'
-                  ' исполнители и т.п.). Для товара это может быть техническое описание и характеристики.'
-                  ' Текст сверстан в HTML с сохранением типографирования и спецсимволов.',
-    )
-    s_item_slug = models.SlugField(
-        blank=True,
-        null=True,
-        default='',
-        verbose_name='Слаг',
-        help_text='Слаг для товара, формируемый на основе названия товара (релиза)',
-    )
-    # Год выпуска (важно для коллекционеров)
     s_item_date = models.CharField(
+        # Год выпуска (важно для коллекционеров). Так же в будущем можно использовать для "ЮБИЛЕЙНОГО ПРЕДЛОЖЕНИЯ"
+        # и фан-календаря
         max_length=10,
         blank=True,
         null=True,
@@ -260,12 +362,12 @@ class TbItem(models.Model):
     )
 
     def __str__(self):
-        return f"Item {self.id:0>4}: {self.s_item_title}"
+        return f"Item {self.id:0>4}: {self.s_item}"
 
     class Meta:
         verbose_name = 'Товар в каталоге (релиз, носитель, аксессуар)'
         verbose_name_plural = 'Товары в каталоге'
-        ordering = ('s_item_title',)
+        ordering = ('s_item',)
 
 
 # ============================================================================
@@ -281,24 +383,21 @@ class TbLabel(models.Model):
     s_label = models.CharField(
         max_length=128,
         blank=False,
-        null=False,
-        default='',
-        verbose_name='Название лейбла',
-        help_text='Например: "Sony Records" или "Мелодия"',
+        unique=True,
+        verbose_name='Лейбл',
+        help_text='Техническое название лейбла. Например: "Sony Records" или "Мелодия"',
     )
-    s_label_article_html = models.TextField(
-        blank=True,
+    k_label_to_article = models.OneToOneField(
+        TbArticle,
+        on_delete=models.SET_NULL,
+        related_name='article_to_label',
+        default=None,
         null=True,
-        default='',
-        verbose_name='Статья',
-        help_text='Статья о лейбле (типографированно в HTML)',
-    )
-    s_label_slug = models.SlugField(
-        max_length=64,
-        blank=False,
-        null=False,
-        default='',
-        verbose_name='Слаг',
+        blank=True,     # <-- Интерфейсное удобство. Связь будет сделана автоматически, и статья создана автоматически.
+        verbose_name='Связанная статья',
+        help_text='Связанная статья об лейбле (Типографированные заголовок, тизер и текст статьи.'
+                  ' Так же через статью может быть получена картинка, seo атрибуты, слаг (обязательно) и т.п.)<br />'
+                  '<b>ОБЯЗАТЕЛЬНО УКАЗЫВАТЬ</b> т.к. через статью получаем слаг для URL лейбла.'
     )
     j_label_metadata = models.JSONField(
         default=dict,
@@ -311,7 +410,7 @@ class TbLabel(models.Model):
         auto_now_add=True,
         verbose_name="Дата создания",
     )
-    t_tabel_updated = models.DateTimeField(
+    t_label_updated = models.DateTimeField(
         auto_now=True,
         verbose_name="Дата обновления",
     )
@@ -337,22 +436,26 @@ class TbSeller(models.Model):
         DIY = 'diy', 'Самиздат группы'
         CROWD = 'crowdfunding', 'Краудфандинг'
         OTHER = '++', 'Другое'
+
     s_seller = models.CharField(
-        max_length=32, blank=False, null=False, default='',
+        max_length=128,
+        blank=False,
+        unique=True,
         verbose_name='Название продавца',
-        help_text='Название продавца или магазина, например: <tt>Клюква Рекодс</tt>',
+        help_text='Техническое название продавца или магазина. Например: <tt>Клюква Рекодс</tt>. Может совпадать'
+                  ' с названием продавца, если лейбл сам реализует свои издания через сайт.',
     )
-    s_seller_article_html = models.TextField(
-        blank=True,
+    k_seller_to_article = models.OneToOneField(
+        TbArticle,
+        on_delete=models.SET_NULL,
+        related_name='article_to_seller',
+        default=None,
         null=True,
-        default='',
-        verbose_name='Статья',
-        help_text='Статья о продавце (типографированно в HTML)',
-    )
-    s_seller_slug = models.SlugField(
-        max_length=32, blank=False, null=False, default='',
-        verbose_name='Слаг',
-        help_text='Слаг для продавца, формируемый на основе названия продавца',
+        blank=True,     # <-- Интерфейсное удобство. Связь будет сделана автоматически, и статья создана автоматически.
+        verbose_name='Связанная статья',
+        help_text='Связанная статья о продавце (HTML-готовые заголовок, тизер и текст статьи).'
+                  ' Так же через статью может быть получена картинка, seo атрибуты, слаг (обязательно) и т.п.)<br />'
+                  '<b>ОБЯЗАТЕЛЬНО УКАЗЫВАТЬ</b> т.к. через статью получаем слаг для URL продавца.'
     )
     l_seller_type = models.CharField(
         max_length=9,
@@ -390,7 +493,6 @@ class TbOffer(models.Model):
     Конкретное предложение от продавца.
     Один и тот же релиз может быть несколько раз в системе от разных продавцов.
     """
-
     class Format(models.TextChoices):
         LP = 'lp', 'vinyl'
         CD = 'cd', 'CD'
@@ -413,49 +515,65 @@ class TbOffer(models.Model):
         P = 'p', 'Poor (плохое)'
         OTHER = '++', 'Other'
 
+    s_offer = models.CharField(
+        max_length=128,
+        blank=False,
+        db_index=True,
+        verbose_name='Название оффера',
+        help_text='Техническое название оффера для внутреннего использования, например:'
+                  ' "Abbey Road (LP) AnTrop NM/NM (МЗГ)" или "TDK CDing I 60 (б/у) VG/VG (Janan, 198x синяя-градиент)"'
+    )
     # Связи
+     k_offer_to_article = models.ForeignKey(
+         TbArticle,
+         on_delete=models.SET_NULL,
+         related_name='article_to_offer',
+         default=None,
+         null=True,
+         blank=True,     # <-- Интерфейсное удобство. Статья НЕ БУДЕТ СОЗДАНА автоматически.
+         verbose_name='Связанная статья',
+         help_text='Связанная статья об оффере (HTML-готовые заголовок, тизер и текст статьи).'
+                  ' Так же через статью может быть получена картинка, seo атрибуты, слаг (обязательно) и т.п.)<br />'
+                  '<b>МОЖНО НЕ УКАЗЫВАТЬ</b> т.к. URL оффера (для корзины) формируется через id или хеш.'
+    )
     k_offer_to_item = models.ForeignKey(
         TbItem,
         blank=True,
         null=True,
         default=None,
         on_delete=models.SET_NULL,
-        related_name='item_to_offer',  # ← product.product_offers.all()
+        related_name='item_to_offer',  # ← product.item_to_offer.all()
         verbose_name='Релиз (товар)',
     )
-
     k_offer_to_label = models.ForeignKey(
         TbLabel,
         null=True,
         default=None,
         on_delete=models.SET_NULL,
-        related_name='label_to_offer',  # ← label.label_offers.all()
+        related_name='label_to_offer',  # ← label.label_to_offers.all()
         verbose_name='Лейбл',
         help_text='Лейбл, на котором был выпущен релиз, если он известен. Например: <tt>Atlantic</tt> или <tt>Мелодия</tt>',
     )
-
     k_offer_to_source = models.ForeignKey(
         to='TbSource',
         null=True,
         default=None,
-        on_delete=models.CASCADE,  # ← если удалён источник, удалены офферы
+        on_delete=models.CASCADE,  # ← если удалён источник, удалены все офферы
         related_name='source_to_offer',
         verbose_name='Источник данных',
         help_text='Обязательно - каждый оффер должен иметь источник. Через источник получаем данные '
                   'продавца: offer.k_offer_to_source.k_source_to_seller',
     )
-
-    # Изображения товара (одна картинка может быть у многих офферов, а офер иметь много картинок)
-    # M2M связь для удобства в админке (filter_horizontal)
-    # Порядок картинок определяется полем i_img_sort в TbImage
     k_offer_to_image = models.ManyToManyField(
+        # Изображения товара (одна картинка может быть у многих офферов, а оффер иметь много картинок)
+        # M2M связь для удобства в админке (filter_horizontal)
+        # Порядок картинок определяется полем i_img_sort в TbImage
         TbImage,
         blank=True,
         related_name='image_to_offer',
         verbose_name='Изображения',
         help_text='Картинки этого товара. Порядок определяется полем i_img_sort в ка��тинке.',
     )
-
     # Характеристики
     s_offer_catalog_num = models.TextField(
         blank=True,
@@ -463,7 +581,6 @@ class TbOffer(models.Model):
         verbose_name='Каталожный номер / Barcode',
         help_text='Например: "SD 16023" или "5099923452355"',
     )
-
     l_offer_primary_media = models.CharField(
         max_length=2,
         choices=Format.choices,
@@ -471,7 +588,6 @@ class TbOffer(models.Model):
         verbose_name='Формат',
         help_text='Основной формат носителя (пластинка, CD, кассета и т.п.)'
     )
-
     d_offer_date_release = models.DateField(
         blank=True,
         null=True,
@@ -479,13 +595,12 @@ class TbOffer(models.Model):
         verbose_name='Дата релиза',
         help_text='Дата релиза, если она известна (например, дата выпуска переиздания)',
     )
-
     i_offer_discogs_id = models.IntegerField(
-        blank=True,default=0,
+        blank=True,
+        default=0,
         verbose_name='ID на релиз Discogs',
         help_text='Уникальный идентификатор релиза на Discogs, если он там есть. Например: <tt>306323</tt>',
     )
-
     l_offer_condition_media = models.CharField(
         max_length=2,
         choices=Condition.choices,
@@ -493,7 +608,6 @@ class TbOffer(models.Model):
         verbose_name="Состояние носителя",
         help_text='Состояние носителя (пластинки, CD и т.п.) по шкале от "Still Sealed" (запечатано) до "Poor" (плохое).',
     )
-
     l_offer_condition_sleeve = models.CharField(
         max_length=2,
         choices=Condition.choices,
@@ -501,45 +615,42 @@ class TbOffer(models.Model):
         verbose_name="Состояние обложки",
         help_text='Состояние обложки по шкале от "Still Sealed" (запечатано) до "Poor" (плохое).',
     )
-
     # Цена и наличие
     f_offer_price = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        blank=True,
         default=0.00,
+        db_index=True,   # <-- Чтобы можно было сортировать по цене
         verbose_name='Цена',
         help_text='Цена в валюте источника. Валюта определяется в TbSource: offer.k_offer_to_source.l_currency',
     )
-
     i_offer_quantity = models.IntegerField(
         # Устанавливая количество в ноль, можно указать, что предложение в настоящее время не доступно.
         blank=True,
         default=0,
-        db_index=True,
         verbose_name='Количество в наличии',
     )
-
     i_offer_discount_to_daily_sale = models.IntegerField(
         blank=True,
         default=0,
-        db_index=True,
+        db_index=True,   # <-- Чтобы можно было сортировать по скидке и быстро выбирать то, что участвует в распродажах
         verbose_name='Скидка',
         help_text='Процент возможной скидки, если участвует в "ежедневной распродаже" или акции. Если указано'
                   ' <tt>0</tt> то данное предложение не может участвовать в распродажах, спецпредложениях и акциях',
-    )
-    s_offer_comment_html = models.TextField(
-        blank=True,
-        default='',
-        verbose_name='Доп.инфо',
-        help_text='Дополнительная информация или комментарий к предложению от продавца с сохранением'
-                  ' типографирования и спецсимволов.',
     )
     j_offer_metadata = models.JSONField(
         # Метаданные оффера (сырые данные из источника, координаты в Excel и т.д.)
         default=dict, null=True,
         verbose_name='Дополнительные данные',
         help_text='Дополнительные данные о предложении в виде JSON-словаря.',
+    )
+    s_offer_skip32 = models.CharField(
+        max_length=12,
+        unique=True,
+        verbose_name='Код товара',
+        help_text='Уникальный код товара для идентификации в корзине и при заказе (чтобы не светить id).'
+                  ' Например: "4gfFCJ". Формируется автоматически связкой Skip32 (хаотичное перемешивание) и'
+                  ' Base62 (компактная упаковка) из id оффера в методе save().',
     )
     t_offer_created = models.DateTimeField(
         auto_now_add=True,
@@ -558,7 +669,7 @@ class TbOffer(models.Model):
     class Meta:
         verbose_name = 'Оффер (предложение)'
         verbose_name_plural = 'Офферы (предложения)'
-        ordering = ('-t_offer_updated', '-t_offer_created')
+        ordering = ('-t_offer_updated', '-t_offer_created' 's_offer')
 
 
 # ============================================================================
@@ -682,7 +793,7 @@ class TbOfferHistory(models.Model):
     k_history_to_offer = models.ForeignKey(
         TbOffer,
         on_delete=models.CASCADE,
-        related_name='offer_to_history',  # ← offer.history_to_offer.all()
+        related_name='offer_to_history',  # ← offer.offer_to_history.all()
         verbose_name='Оффер',
     )
     f_history_price = models.DecimalField(
