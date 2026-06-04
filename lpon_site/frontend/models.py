@@ -326,16 +326,8 @@ class TbImage(models.Model):
         verbose_name='Авторские права / Лицензия',
         help_text='Например: "© 2024 User" или "CC-BY"',
     )
-    t_img_created = models.DateTimeField(
-        # Timestamps
-        auto_now_add=True,
-        verbose_name='Дата добавления',
-    )
-    t_img_updated = models.DateTimeField(
-        # Timestamps
-        auto_now=True,
-        verbose_name='Дата обновления',
-    )
+    t_img_created = models.DateTimeField(auto_now_add=True, verbose_name='Дата добавления',)
+    t_img_updated = models.DateTimeField(auto_now=True, verbose_name='Дата обновления',)
 
     class Meta:
         verbose_name = 'Изображение'
@@ -358,6 +350,9 @@ class TbMusicStyle(models.Model):
     Примечание:
     - Slug автоматически генерируется из s_style_name в методе save()
     """
+    # Используем SmallAutoField для оптимизации (макс ~32k)
+    # Стилей обычно 100-1000, поэтому 2 байта достаточно
+    id = models.SmallAutoField(primary_key=True)
     s_style_name = models.CharField(
         max_length=100,
         unique=True,
@@ -380,8 +375,8 @@ class TbMusicStyle(models.Model):
         help_text='Список вариантов названия из Discogs, MusicBrainz и т.д. для матчинга.'
                   ' Пример: ["rock", "Rock Music", "Rock & Roll", "Hard Rock"]',
     )
-    t_style_created = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
-    t_style_updated = models.DateTimeField(auto_now=True, verbose_name="Дата обновления")
+    t_style_created = models.DateTimeField(auto_now_add=True, editable=False, verbose_name="Дата создания")
+    t_style_updated = models.DateTimeField(auto_now=True, editable=False, verbose_name="Дата обновления")
 
     def save(self, *args, **kwargs):
         """
@@ -557,13 +552,8 @@ class TbArticle(models.Model):
         verbose_name='SEO Keywords',
         help_text='SEO Keywords для статьи, через запятую. Например: "The Beatles, Abbey Road, Vinyl, 1969"',
     )
-    t_article_created = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name="Дата создания",
-    )
-    t_article_updated = models.DateTimeField(
-        auto_now=True,
-        verbose_name="Дата обновления",
+    t_article_created = models.DateTimeField(auto_now_add=True, editable=False, verbose_name="Дата создания",)
+    t_article_updated = models.DateTimeField(auto_now=True, editable=False, verbose_name="Дата обновления",
     )
 
     def __str__(self):
@@ -597,6 +587,9 @@ class TbArticle(models.Model):
 # ============================================================================
 class TbArtist(models.Model):
     """Исполнитель или музыкальная группа."""
+    # Используем SmallAutoField для оптимизации (макс ~32k)
+    # Артистов в базе может быть несколько тысяч, достаточно
+    id = models.SmallAutoField(primary_key=True)
     s_artist = models.CharField(
         max_length=128,
         unique=True,
@@ -625,13 +618,8 @@ class TbArtist(models.Model):
         help_text='Включая варианты написания в источниках Список вариантов: ["The Beatles", "Beatles",'
                   ' "Beatles, The"]',
     )
-    t_artist_created = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name="Дата создания",
-    )
-    t_artist_updated = models.DateTimeField(
-        auto_now=True,
-        verbose_name="Дата обновления",
+    t_artist_created = models.DateTimeField(auto_now_add=True, editable=False, verbose_name="Дата создания",)
+    t_artist_updated = models.DateTimeField(auto_now=True, editable=False, verbose_name="Дата обновления",
     )
 
     def __str__(self):
@@ -712,14 +700,8 @@ class TbItem(models.Model):
         help_text='Дополнительные данные и метаданные релиза (страна, жанр, количество треков и т.д.) или товавра'
                   ' в виде JSON-словаря. Сюда же включены варианты написания релиза в источниках',
     )
-    t_item_created = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name="Дата создания",
-    )
-    t_item_updated = models.DateTimeField(
-        auto_now=True,
-        verbose_name="Дата обновления",
-    )
+    t_item_created = models.DateTimeField(auto_now_add=True, editable=False, verbose_name="Дата создания",)
+    t_item_updated = models.DateTimeField(auto_now=True, editable=False, verbose_name="Дата обновления",)
 
     def __str__(self):
         return f"Item {self.id:0>4}: {self.s_item}"
@@ -740,6 +722,9 @@ class TbLabel(models.Model):
              для кассет под запись это: TDK, AXIA, Maxell, JVC ...
              для hi-fi это: Sony, Pioneer, Technics, Marantz ...
     """
+    # Используем SmallAutoField для оптимизации (макс ~32k)
+    # Лейблов обычно несколько сотен-тысяч, достаточно
+    id = models.SmallAutoField(primary_key=True)
     s_label = models.CharField(
         max_length=128,
         blank=False,
@@ -767,14 +752,8 @@ class TbLabel(models.Model):
         verbose_name='Метаданные',
         help_text='JSON: страна лейбла, официальный сайт и т.д.',
     )
-    t_label_created = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name="Дата создания",
-    )
-    t_label_updated = models.DateTimeField(
-        auto_now=True,
-        verbose_name="Дата обновления",
-    )
+    t_label_created = models.DateTimeField(auto_now_add=True, editable=False, verbose_name="Дата создания",)
+    t_label_updated = models.DateTimeField(auto_now=True, editable=False, verbose_name="Дата обновления",)
 
     def __str__(self):
         return f"label: {self.id:0>5}: {self.s_label}"
@@ -798,6 +777,9 @@ class TbSeller(models.Model):
         CROWD = 'crowdfunding', 'Краудфандинг'
         OTHER = '++', 'Другое'
 
+    # Используем SmallAutoField для оптимизации (макс ~32k)
+    # Продавцов обычно до 1000-10000, поэтому достаточно
+    id = models.SmallAutoField(primary_key=True)
     s_seller = models.CharField(
         max_length=128,
         blank=False,
@@ -830,14 +812,8 @@ class TbSeller(models.Model):
         verbose_name='Дополнительные данные',
         help_text='Дополнительные данные о продавце в виде JSON-словаря. Телефон, email, адрес, ссылка на сайт и т.д.',
     )
-    t_seller_created = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name="Дата создания",
-    )
-    t_seller_updated = models.DateTimeField(
-        auto_now=True,
-        verbose_name="Дата обновления",
-    )
+    t_seller_created = models.DateTimeField(auto_now_add=True, editable=False, verbose_name="Дата создания",)
+    t_seller_updated = models.DateTimeField(auto_now=True, editable=False, verbose_name="Дата обновления",)
 
     def __str__(self):
         return f"seller: {self.id:0>2}: {self.s_seller}"
@@ -855,10 +831,11 @@ class TbFormat(models.Model):
     """
     Формат носителя (LP, CD, Cassette и т.д.).
 
-    s_format_slug используется в качестве первичного ключа (вместо id).
-    Это удобно для справочников и предотвращает "дыры" в ID при удалении.
-    Slug автоматически генерируется из s_format в методе save().
+    Используем SmallAutoField для оптимизации (макс ~32k).
+    Форматов обычно 50-100, поэтому 2 байта более чем достаточно.
     """
+    # Используем SmallAutoField для оптимизации
+    id = models.SmallAutoField(primary_key=True)
     s_format = models.CharField(
         max_length=16,
         blank=False,
@@ -1055,14 +1032,8 @@ class TbOffer(models.Model):
         db_index=True,
         verbose_name='В избранном',
     )
-    t_offer_created = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name="Дата создания",
-    )
-    t_offer_updated = models.DateTimeField(
-        auto_now=True,
-        verbose_name="Дата обновления",
-    )
+    t_offer_created = models.DateTimeField(auto_now_add=True, editable=False, verbose_name="Дата создания",)
+    t_offer_updated = models.DateTimeField(auto_now=True, editable=False, verbose_name="Дата обновления",)
 
     def __str__(self):
         seller = self.k_offer_to_source.k_source_to_seller.s_seller if (self.k_offer_to_source
@@ -1128,6 +1099,9 @@ class TbSource(models.Model):
         TON = 'ton', 'TON: криптовалюта TON'
         OTHER = '++', 'Other'
 
+    # Используем SmallAutoField для оптимизации (макс ~32k)
+    # Источников обычно до 1000, достаточно
+    id = models.SmallAutoField(primary_key=True)
     k_source_to_seller = models.ForeignKey(
         TbSeller,
         null=True,
@@ -1137,7 +1111,6 @@ class TbSource(models.Model):
         db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
         verbose_name='Продавец',
     )
-
     l_source_currency = models.CharField(
         max_length=3,
         choices=Currency.choices,
@@ -1192,13 +1165,8 @@ class TbSource(models.Model):
         help_text='Дополнительные данные об источнике (внутреннем устройстве: вкладках и стоkбцах Excel-файла,'
                   ' структуре HTML-страницы и т.п.) в виде JSON-словаря',
     )
-    t_source_created = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name="Дата Создания записи в БД",
-    )
-    t_source_updated = models.DateTimeField(
-        auto_now=True,
-        verbose_name="Дата последнего обновления записи в БД",
+    t_source_created = models.DateTimeField(auto_now_add=True, editable=False, verbose_name="Дата создания",)
+    t_source_updated = models.DateTimeField(auto_now=True, editable=False, verbose_name="Дата обновления",
     )
 
     def __str__(self):
@@ -1258,8 +1226,8 @@ class TbOfferHistory(models.Model):
     t_history_created = models.DateTimeField(
         auto_now_add=True,
         db_index=True,
-        verbose_name="Дата создания",
-    )
+        editable=False,
+        verbose_name="Дата создания",)
     # Нам не нужен `t_history_updated` потому что это "снимок состояния" и его не нужно менять
     # после создания. И если вдруг понадобится, то правильнее будет добавить новую запись.
 
