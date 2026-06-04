@@ -1,9 +1,258 @@
+# LPON Store — Django E-Commerce Database Schema (SQLite optimized)
+# 
+# ╔════════════════════════════════════════════════════════════════════════════╗
+# ║                    ER-ДИАГРАММА СХЕМЫ БД (v1.0)                            ║
+# ╚════════════════════════════════════════════════════════════════════════════╝
+# 
+# Легенда:
+#   Ключи:
+#     PK = Primary Key (первичный ключ)
+#     FK = Foreign Key (внешний ключ)
+#     M2M = Many-to-Many (ключ многие-ко-многим)
+#   Связи:
+#     1:1 = OneToOne связь
+#     1:M = One-to-Many связь
+#     M:M = Many-to-Many связь
+#
+#
+#  ##════════════════════════════════════════════════════════════════════════════##
+#                         МЕДИА И СПРАВОЧНИКИ
+#  ##════════════════════════════════════════════════════════════════════════════##
+#
+# ┌─────────────────────┐
+# │   TbImage           │  Базовые изображения (обложки, фото и т.д.)
+# ├─────────────────────┼─────────────────────────────────────────────────────
+# │ PK: id              │  AutoField
+# │ image               │  FilerImageField
+# │ l_img_source        │  Источник (parser, manual, vendor, other)
+# │ l_img_reality       │  Тип (real, abstract)
+# │ i_img_sort          │  Порядок отображения
+# │ f_img_confidence_   │  Доверие данным (0-1)
+# │ s_img_copyright     │  Авторские права
+# │ t_img_created       │  Timestamp
+# │ t_img_updated       │  Timestamp
+# │                     │  ⬆ Индекс на: id (+), i_img_sort
+# └─────────────────────┘
+#         △
+#         │ M:M TbOffer.k_offer_to_image
+#         │ [промежуточная таблица: offer_id, image_id]
+#         │
+#         ├────┬───────────────────────────────────────────────────────────────────┐
+#         │    │
+#         │    ▼
+#         │  ┌──────────────────────┐
+#         │  │ TbArticle            │  Текстовый контент (статьи, SEO, теги)
+#         │  ├──────────────────────┼──────────────────────────────────────────────────
+#         │  │ PK: id               │  AutoField
+#         │  │ s_article_title      │  Технический заголовок
+#         │  │ l_article_type       │  Тип (artist, item, offer, seller, blog...)
+#         │  │ b_article_published  │  Опубликовано (bool)
+#         │  │ s_article_title_html │  HTML-заголовок
+#         │  │ k_article_to_image   │  FK → TbImage (обложка статьи)
+#         │  │ k_article_to_styles  │  M2M → TbMusicStyle (теги стилей)
+#         │  │ i_article_views      │  Счетчик просмотров
+#         │  │ i_article_favorites  │  Счетчик в избранном
+#         │  │ slug                 │  URL-идентификатор (уникальный)
+#         │  │ seo_title,           │  SEO метаданные
+#         │  │ seo_description      │
+#         │  │ t_article_created    │  Timestamps
+#         │  │ t_article_updated    │  Timestamps
+#         │  │                      │  ⬆ Индексы: id (+), l_article_type, b_article_published, slug,
+#         │  │                      │   k_article_to_image, (type, published, created)
+#         │  └──────────────────────┘
+#         │         △
+#         │         │ 1:1 (OneToOne обратные связи)
+#         │         │
+#         │     ┌───┴─────────┬────────────┬──────────────┐
+#         │     │             │            │              │
+#         │     ▼             ▼            ▼              ▼
+#         │  ┌─────────┐    ┌───────┐    ┌─────────┐    ┌──────────┐
+#         │  │TbArtist │    │TbItem │    │TbLabel  │    │TbSeller  │
+#         │  ├─────────┤    ├───────┤    ├─────────┤    ├──────────┤
+#         │  │PK: id   │    │PK: id │    │ PK: id  │    │ PK: id   │
+#         │  │s_artist │    │s_item │    │ s_label │    │ s_seller │
+#         │  └─────────┘    └───────┘    └─────────┘    └──────────┘
+#         │      ▲
+#         │      │ M:M TbItem.k_item_to_artist
+#         │      │ (для поддержки коллабораций)
+#         │      │
+#         └──────┘
+#
+#
+# ┌──────────────────┐
+# │ TbMusicStyle     │  Музыкальные стили (теги для категоризации)
+# ├──────────────────┼────────────────────────────────────────────────────────
+# │ PK: id           │  AutoField
+# │ s_style_name     │  Название (Rock, Jazz, Classical...)
+# │ s_style_slug     │  SlugField(50) — уникальный, indexed
+# │ j_style_synonyms │  JSON синонимы из Discogs для матчинга
+# │ t_style_created  │  Timestamp
+# │ t_style_updated  │  Timestamp
+# │                  │  ⬆ Индексы: id (+), s_style_slug
+# └──────────────────┘
+#         △
+#         │ M2M TbArticle.k_article_to_styles
+#         │ [промежуточная таблица: article_id, musicstyle_id]
+#
+#
+# ┌──────────────────┐
+# │  TbFormat        │  Форматы носителей (LP, CD, Cassette...)
+# ├──────────────────┼────────────────────────────────────────────────────────
+# │ PK: id           │  AutoField
+# │ s_format         │  Название (LP, CD, Blu-ray, Cassette...)
+# │ s_format_slug    │  SlugField(16) — уникальный
+# └──────────────────┘
+#         △
+#         │ M2M TbOffer.k_offer_to_format
+#         │ [промежуточная таблица: offer_id, format_id]
+#
+#
+#  ##════════════════════════════════════════════════════════════════════════════##
+#                       ПРЕДЛОЖЕНИЯ И ЦЕНЫ
+#  ##════════════════════════════════════════════════════════════════════════════##
+#
+# ┌──────────────────────┐
+# │  TbSeller            │  Продавцы / магазины
+# ├──────────────────────┼──────────────────────────────────────────────────────
+# │ PK: id               │  AutoField
+# │ s_seller             │  Название (уникальный)
+# │ l_seller_type        │  Тип (seller, label, diy, crowdfunding, other)
+# │ k_seller_to_article  │  1:1 FK → TbArticle (content, SEO, slug)
+# │ t_seller_created     │  Timestamp
+# │ t_seller_updated     │  Timestamp
+# │                      │  ⬆ Индекс: id
+# └──────────────────┬───┘
+#                    │
+#                    │ 1:M TbSource.k_source_to_seller
+#                    ▼
+#             ┌──────────────────────┐
+#             │  TbSource            │  Источники данных (Excel, URL, CSV...)
+#             ├──────────────────────┼───────────────────────────────────────
+#             │ PK: id               │  AutoField
+#             │ k_source_to_seller   │  FK → TbSeller [indexed]
+#             │ l_source_type        │  (excel, csv, url, other)
+#             │ l_source_currency    │  (rub, usd, eur, ...)
+#             │ s_source_name        │  Название источника
+#             │ source_file          │  FilerFileField
+#             │ s_source_url         │  URL источника
+#             │ t_source_data        │  Дата данных
+#             │ t_source_created     │  Timestamp
+#             │ t_source_updated     │  Timestamp
+#             │ ⬆ Индекс: k_source_to_seller
+#             └──────────────────┬───┘
+#                                │
+#                                │ 1:M TbOffer.k_offer_to_source
+#                                ▼
+#                ┌────────────────────────────────┐
+#                │  TbOffer                       │  Конкретное предложение товара
+#                ├────────────────────────────────┼───────────────────────────────
+#                │ PK: id                         │  AutoField
+#                │ s_offer                        │  Название (indexed)
+#                │ k_offer_to_item                │  FK → TbItem [indexed]
+#                │ k_offer_to_label               │  FK → TbLabel [indexed]
+#                │ k_offer_to_source              │  FK → TbSource [indexed]
+#                │ k_offer_to_article             │  FK → TbArticle (опционально)
+#                │ k_offer_to_format              │  M2M → TbFormat (может быть несколько)
+#                │ k_offer_to_image               │  M2M → TbImage (несколько фото)
+#                │ l_offer_condition_media        │  Состояние (s, m, nm, vg, g, f, p)
+#                │ l_offer_condition_sleeve       │  Состояние (s, m, nm, vg, g, f, p)
+#                │ f_offer_price                  │  Цена [indexed для сортировки]
+#                │ i_offer_quantity               │  Количество в наличии [indexed]
+#                │ i_offer_discount_to_daily_sale │  % скидка [indexed для фильтров]
+#                │ s_offer_skip32                 │  Хеш для корзины (unique)
+#                │ i_offer_views                  │  Счетчик просмотров
+#                │ i_offer_favorites              │  Счетчик в избранном
+#                │ t_offer_created                │  Timestamp
+#                │ t_offer_updated                │  Timestamp
+#                │                                │  ⬆ Индексы: (item, price↓), (item, quantity), (source, discount)
+#                │                                │  ⬆ Constraint UNIQUE: (item, source, format)
+#                └────────────────────┬───────────┘
+#                                     │
+#                                     │ 1:M TbOfferHistory.k_history_to_offer
+#                                     ▼
+#                          ┌────────────────────┐
+#                          │ TbOfferHistory     │  История изменений цены/кол-ва
+#                          ├────────────────────┼──────────────────────────────
+#                          │ PK: id             │  AutoField
+#                          │ k_history_to_offer │  FK → TbOffer [indexed]
+#                          │ f_history_price    │  Старая цена
+#                          │ i_history_quantity │  Старое количество
+#                          │ t_history_created  │  Timestamp [indexed]
+#                          │                    │  ⬆ Индекс: (offer, created↓)
+#                          └────────────────────┘
+#
+#
+#  ##════════════════════════════════════════════════════════════════════════════##
+#                       КАТАЛОГ ТОВАРОВ
+#  ##════════════════════════════════════════════════════════════════════════════##
+#
+# ┌────────────────────┐
+# │ TbLabel            │  Издатели / лейблы
+# ├────────────────────┼────────────────────────────────────────────────────────
+# │ PK: id             │  AutoField
+# │ s_label            │  Название (Sony, Atlantic, Мелодия...)
+# │ k_label_to_article │  1:1 FK → TbArticle (content, SEO)
+# └────────────────────┘
+#         △
+#         │ 1:M TbOffer.k_offer_to_label
+#         │
+# ┌─────────────────────┐
+# │ TbItem              │  Товары в каталоге (релизы, носители, аксессуары)
+# ├─────────────────────┼────────────────────────────────────────────────────────
+# │ PK: id              │  AutoField
+# │ s_item              │  Название (Abbey Road (LP), TDK CDing I...)
+# │ k_item_to_artist    │  M2M → TbArtist (для коллабораций)
+# │ k_item_to_article   │  1:1 FK → TbArticle (content, SEO, slug)
+# │ t_item_date         │  Дата релиза
+# │ i_discogs_master_id │  ID мастер-релиза на Discogs
+# │ t_item_created      │  Timestamp
+# │ t_item_updated      │  Timestamp
+# └─────────────────────┘
+#         △
+#         │ 1:M TbOffer.k_offer_to_item
+#         │
+#         ├──────────────────── M2M → TbArtist.k_item_to_artist
+#         │                    [промежуточная таблица: item_id, artist_id]
+#         │
+# ┌─────────────────────┐
+# │  TbArtist           │  Исполнители / группы
+# ├─────────────────────┼─────────────────────────────────────────────────────
+# │ PK: id              │  AutoField
+# │ s_artist            │  Название (The Beatles, David Bowie...)
+# │ k_artist_to_article │  1:1 FK → TbArticle (content, SEO, slug)
+# │ t_artist_created    │  Timestamp
+# │ t_artist_updated    │  Timestamp
+# │                     │
+# │                     │  ⬆ Индекс: id
+# └─────────────────────┘
+#
+#
+# ╔════════════════════════════════════════════════════════════════════════════╗
+# ║                           ИТОГО ТАБЛИЦ: 11                                 ║
+# ║  Базовые:      TbImage, TbArticle, TbMusicStyle, TbFormat                  ║
+# ║  Справочники:  TbSeller, TbLabel, TbArtist, TbItem                         ║
+# ║  Коммерческие: TbSource, TbOffer (M2M форматы, фото), TbOfferHistory       ║
+# ║  M2M промежуточные: article←→styles                                        ║
+# ║                     offer←→formats                                         ║
+# ║                     offer←→images                                          ║
+# ║                     item←→artists                                          ║
+# ╚════════════════════════════════════════════════════════════════════════════╝
+#
+# ОПТИМИЗАЦИЯ ДЛЯ SQLite:
+#   - db_index=True на все FK поля (SQLite не создает их автоматически)
+#   - Составные индексы на часто используемые комбинации
+#   - PRAGMA auto_vacuum=2 для невручного сокращения файла БД
+#   - PRAGMA journal_mode=WAL для лучшей concurrency
+#   - M2M использует числовые FK (INT) вместо строк
+#   - Slug'и как UNIQUE indexed fields (не primary_key) для экономии места
+
 from django.db import models
 from django.db.models import F
 from django.utils.text import slugify
 from filer.fields.image import FilerImageField
 from filer.fields.file import FilerFileField
 import datetime
+
 
 # ============================================================================
 # ИЗОБРАЖЕНИЯ
