@@ -1,5 +1,6 @@
 from django.db import models
 from django.db.models import F
+from django.utils.text import slugify
 from filer.fields.image import FilerImageField
 from filer.fields.file import FilerFileField
 import datetime
@@ -104,6 +105,9 @@ class TbMusicStyle(models.Model):
     Пример:
     - Главный: "Rock"
     - Синонимы: ["rock", "Rock Music", "Rock & Roll", "Hard Rock", ...]
+
+    Примечание:
+    - Slug автоматически генерируется из s_style_name в методе save()
     """
     s_style_name = models.CharField(
         max_length=100,
@@ -113,28 +117,52 @@ class TbMusicStyle(models.Model):
         help_text='Основное название стиля. Например: "Rock", "Jazz", "Classical"',
     )
     s_style_slug = models.SlugField(
-        max_length=100,
+        max_length=50,
         unique=True,
-        db_index=True,
-        verbose_name='Слаг',
+        db_index=True,  # Индекс для быстрого поиска по слагу (но НЕ primary_key!)
+        editable=False,  # Не дать админу редактировать вручную (автогенерируется)
+        verbose_name='Слаг (уникальный идентификатор)',
+        help_text='Автоматически генерируется из названия. Используется в URL и API.',
     )
     j_style_synonyms = models.JSONField(
         default=list,
         blank=True,
         verbose_name='Синонимы из источников',
-        help_text='Список вариантов названия из Discogs, MusicBrainz и т.д. (для матчинга)'
-                  'Пример: ["rock", "Rock Music", "Rock & Roll", "Hard Rock"]',
+        help_text='Список вариантов названия из Discogs, MusicBrainz и т.д. для матчинга.'
+                  ' Пример: ["rock", "Rock Music", "Rock & Roll", "Hard Rock"]',
     )
     t_style_created = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
     t_style_updated = models.DateTimeField(auto_now=True, verbose_name="Дата обновления")
 
+    def save(self, *args, **kwargs):
+        """
+        Автоматически генерируем slug из названия стиля.
+        Вызывается при каждом сохранении записи (создание или обновление).
+        """
+        # Если slug не установлен (новая запись) — генерируем его из названия
+        if not self.s_style_slug:
+            # Генерируем базовый slug (Rock → rock, Rock Music → rock-music)
+            base_slug = slugify(self.s_style_name, allow_unicode=True)
+
+            # Проверяем на уникальность и добавляем счетчик если нужно
+            # Это гарантирует, что slug будет уникален даже для похожих названий
+            slug = base_slug
+            counter = 1
+            while TbMusicStyle.objects.filter(s_style_slug=slug).exclude(pk=self.pk).exists():
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+
+            self.s_style_slug = slug
+
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"style: {self.s_style_slug} ({self.s_style_name})"
+        return self.s_style_name
 
     class Meta:
         verbose_name = 'Музыкальный стиль'
         verbose_name_plural = 'Музыкальные стили'
-        ordering = ('-i_style_popularity', 's_style_name')
+        ordering = ('s_style_name',)
 
 
 # ============================================================================
@@ -570,6 +598,43 @@ class TbSeller(models.Model):
         verbose_name_plural = 'Продавцы'
         ordering = ('s_seller',)
 
+
+# ============================================================================
+# ФОРМАТЫ НОСИТЕЛЕЙ
+# ============================================================================
+class TbFormat(models.Model):
+    """
+    Формат носителя (LP, CD, Cassette и т.д.).
+
+    s_format_slug используется в качестве первичного ключа (вместо id).
+    Это удобно для справочников и предотвращает "дыры" в ID при удалении.
+    Slug автоматически генерируется из s_format в методе save().
+    """
+    s_format = models.CharField(
+        max_length=16,
+        blank=False,
+        unique=True,
+        db_index=True,
+        verbose_name='Формат носителя',
+        help_text='Название формата носителя, например: "LP", "CD", "Blu-ray", "Compact Cassette", "MiniDisc",'
+                  ' "Hi-Fi", "Accessory" и т.д.',
+    )
+    s_format_slug = models.SlugField(
+        max_length=16,
+        blank=False,
+        unique=True,
+        verbose_name='Слаг',
+    )
+
+    def __str__(self):
+        return f"format: {self.s_format}"
+
+    class Meta:
+        verbose_name = 'Формат носителя'
+        verbose_name_plural = 'Форматы носителей'
+        ordering = ('s_format',)
+
+
 # ============================================================================
 # ПРЕДЛОЖЕНИЯ / ОФФЕРЫ
 # ============================================================================
@@ -578,18 +643,6 @@ class TbOffer(models.Model):
     Конкретное предложение от продавца.
     Один и тот же релиз может быть несколько раз в системе от разных продавцов.
     """
-    class Format(models.TextChoices):
-        LP = 'lp', 'vinyl'
-        CD = 'cd', 'CD'
-        BD = 'bd', 'Blu-ray'
-        CR = 'cr', 'Кассета с записью (фирменная)'
-        CS = 'cs', 'Кассета под запись (новая или б/у)'
-        MD = 'md', 'MiniDisc'
-        BX = 'bx', 'Box Set'
-        HI = 'hi', 'Hi-Fi (аппаратура)'
-        AC = 'ac', 'Accessory (Аксессуар)'
-        OTHER = '++', 'Other'
-
     class Condition(models.TextChoices):
         S = 's', 'Still Sealed (новое, запечатано)'
         M = 'm', 'Mint (новое, распакованное)'
@@ -671,12 +724,13 @@ class TbOffer(models.Model):
         verbose_name='Каталожный номер / Barcode',
         help_text='Например: "SD 16023" или "5099923452355"',
     )
-    l_offer_primary_media = models.CharField(
-        max_length=2,
-        choices=Format.choices,
-        default=Format.LP,
-        verbose_name='Формат',
-        help_text='Основной формат носителя (пластинка, CD, кассета и т.п.)'
+    k_offer_to_format = models.ManyToManyField(
+        TbFormat,
+        blank=True,
+        related_name='format_to_offer',  # ← format.format_to_offers.all()
+        db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
+        verbose_name='Форматы',
+        help_text='Форматы носителей (пластинка, CD, кассета и т.п.). Можно выбрать несколько.',
     )
     d_offer_date_release = models.DateField(
         blank=True,
