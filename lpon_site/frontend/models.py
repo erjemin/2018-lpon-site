@@ -774,8 +774,8 @@ class TbSeller(models.Model):
         SELLER = 'seller', 'Продавец'
         LABEL = 'label', 'Лейбл (издатель)'
         DIY = 'diy', 'Самиздат группы'
-        CROWD = 'crowdfunding', 'Краудфандинг'
-        OTHER = '++', 'Другое'
+        CROWD = 'crowd', 'Краудфандинг'
+        OTHER = '???', 'Другое'
 
     # Используем SmallAutoField для оптимизации (макс ~32k)
     # Продавцов обычно до 1000-10000, поэтому достаточно
@@ -802,7 +802,7 @@ class TbSeller(models.Model):
                   '<b>ОБЯЗАТЕЛЬНО УКАЗЫВАТЬ</b> т.к. через статью получаем слаг для URL продавца.'
     )
     l_seller_type = models.CharField(
-        max_length=9,
+        max_length=6,
         default=SellerType.SELLER,
         choices=SellerType.choices,
         verbose_name='Тип продавца',
@@ -877,7 +877,7 @@ class TbOffer(models.Model):
         G = 'g', 'Good (хорошее)'
         F = 'f', 'Fair (удовлетворительное)'
         P = 'p', 'Poor (плохое)'
-        OTHER = '++', 'Other'
+        OTHER = '??', 'Other'
 
     s_offer = models.CharField(
         max_length=128,
@@ -1064,11 +1064,8 @@ class TbOffer(models.Model):
             # Составной индекс: найти актуальные офферы по товару (есть в наличии)
             models.Index(fields=['k_offer_to_item', 'i_offer_quantity'], name='idx_offer_by_item_qty'),
         ]
-        constraints = [
-            # Уникальное ограничение: предотвратить дубликаты (один товар + один источник + один формат)
-            models.UniqueConstraint(fields=['k_offer_to_item', 'k_offer_to_source', 'l_offer_primary_media'],
-                                   name='idx_offer_unique_item_source_format'),
-        ]
+        # ПРИМЕЧАНИЕ: UniqueConstraint на (item, source, format) удален, т.к. k_offer_to_format теперь M2M.
+        # M2M не поддерживают участие в constraints. Уникальность на уровне БД не требуется.
 
 
 # ============================================================================
@@ -1084,7 +1081,7 @@ class TbSource(models.Model):
         EXCEL = 'excel', 'Excel-файл от продавца или издателя'
         CSV = 'csv', 'CSV-файл от продавца или издателя'
         URL = 'url', 'URL страницы с данными (например, HTML-страница с каталогом товаров)'
-        OTHER = '++', 'Другое'
+        OTHER = '??', 'Другое'
 
     class Currency(models.TextChoices):
         RUB = 'rub', 'RUB: российский рубль'
@@ -1097,7 +1094,7 @@ class TbSource(models.Model):
         CNY = 'cny', 'CNY: китайский юань'
         BYN = 'byn', 'BYN: белорусский рубль'
         TON = 'ton', 'TON: криптовалюта TON'
-        OTHER = '++', 'Other'
+        OTHER = '??', 'Other'
 
     # Используем SmallAutoField для оптимизации (макс ~32k)
     # Источников обычно до 1000, достаточно
