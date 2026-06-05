@@ -68,7 +68,9 @@ INSTALLED_APPS = [
     # Порядок важен! polymorphic должен быть ДО filer, easy_thumbnails тоже ДО filer
     'polymorphic',
     'easy_thumbnails',
-    'filer',
+    # 'filer',
+    # Кастомная надстройка над filer для переопределения verbose_name (и других настроек)
+    'frontend.apps.CustomFilerConfig',
     # Наше приложение
     'frontend.apps.FrontendConfig',
 ]
