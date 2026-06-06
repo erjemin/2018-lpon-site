@@ -161,48 +161,4 @@ STATICFILES_DIRS = [PUBLIC_DIR.joinpath('static')]
 STATIC_ROOT = PUBLIC_DIR.joinpath('staticfiles')
 
 
-# ============================================================================
-# Django-Filer Configuration (для загрузки файлов через админку)
-# ============================================================================
-# django-filer использует easy_thumbnails для управления вариантами изображений
-# Все файлы хранятся в MEDIA_ROOT/filer_public/ и MEDIA_ROOT/filer_private/
-
-FILER_ENABLE_PERMISSIONS = DEBUG  # В production установить True для ограничения доступа
-
-# Разрешенные расширения файлов для FilerImageField
-FILER_WHITELIST_FOR_PATH_ACCESS = (
-    # ПОДУМАТЬ: поддержка '.heic' требует дополнительных пакетов (и разных для прода и дева) + обработчик сигналов
-    #           для автоматической конвертации .heic в .webp при загрузке. Пока отключаем, и оставим на будущее
-    '.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', # Изображения
-    '.doc', '.docx', '.pdf', '.txt', '.xls', '.xlsx', '.csv',  # Документы
-)
-
-# Максимальный размер загружаемого файла (в байтах): 100 MB
-FILER_MAX_UPLOAD_SIZE = 100 * 1024 * 1024
-
-# Tiny Image Specifications для автоматических вариантов изображений
-THUMBNAIL_ALIASES = {
-    '': {
-        # Для галерей и витрин
-        # Кратные 16х16 картинки для ускорения GPU-рендера браузеров, retina-дисплеев и "копеечная" экономии на сервере
-        'admin_thumbnail': {'size': (64, 64), 'crop': True},  # Для админки
-        'small': {'size': (256, 256), 'crop': True},        # Квадрат 256x256 для миниатюр
-        'medium': {'size': (512, 512), 'crop': True},       # Квадрат 512x512 для просмотра
-        'large': {'size': (1024, 1024), 'crop': 'smart'},   # Большое изображение с умным crop
-    },
-}
-
-# Форматы сохранения для thumbnail'ов (миниатюр)
-THUMBNAIL_PRESERVE_FORMAT = False   # Не сохранять оригинальный формат для thumbnails
-THUMBNAIL_FORMAT = 'WEBP'           # Конвертировать все thumbnails в WebP
-THUMBNAIL_WEBP_QUALITY = 80         # Качество WebP (достаточно 75-85 для thumbnails)
-
-# Интерпретатор для обработки изображений
-THUMBNAIL_ENGINE = 'easy_thumbnails.engines.pil_engine.PilEngine'
-
-# Качество JPEG при сжатии (0-100, по умолчанию 85)
-# THUMBNAIL_QUALITY = 85
-
-# Источник кеша для миниатюр
-THUMBNAIL_DEBUG = DEBUG  # Показывать ошибки генерирования миниатюр в debug режиме
 
