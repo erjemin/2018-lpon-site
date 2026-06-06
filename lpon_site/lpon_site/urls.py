@@ -16,8 +16,15 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
-from lpon_site import settings
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
+    # Админ-сайт с переименованными приложениями (переопределен в frontend/apps.py)
     path(settings.ADMIN_URL, admin.site.urls),
 ]
+
+# Сервировать медиа-файлы в разработке (в production использовать nginx/Apache)
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
