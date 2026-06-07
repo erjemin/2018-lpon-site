@@ -175,15 +175,16 @@ FILER_STORAGES = {
             'UPLOAD_TO_PREFIX': '',
         },
         'thumbnails': {
-            'ENGINE': 'filer.storage.PublicFileSystemStorage',
+            # Используем кастомное хранилище, которое удаляет префикс filer_public_thumbnails/
+            # Смотримайте класс ThumbnailFileSystemStorage в frontend/apps.py (часть CustomFilerConfig)
+            'ENGINE': 'frontend.apps.ThumbnailFileSystemStorage',
             'OPTIONS': {
                 'location': MEDIA_ROOT / 'flrm',
                 'base_url': MEDIA_URL + 'flrm/',
-                # 'location': os.path.join(MEDIA_ROOT, 'flrm'),
-                # 'base_url': os.path.join(MEDIA_URL, 'flrm/'),
             },
-            # 'UPLOAD_TO': 'filer.utils.generate_filename.randomized',
-            # 'UPLOAD_TO_PREFIX': '_',
+            # Используем ту же функцию генерации пути, что и для основных файлов.
+            'UPLOAD_TO': 'filer.utils.generate_filename.randomized',
+            'UPLOAD_TO_PREFIX': '',
         },
     },
 }
@@ -205,6 +206,21 @@ THUMBNAIL_ALIASES = {
 FILER_UPLOADER_MAX_FILES = 3
 FILER_UPLOADER_MAX_FILE_SIZE = 100 * 1024 * 1024
 FILER_MAX_IMAGE_PIXELS = 4096 * 4096
+
+FILER_ENABLE_PERMISSIONS = DEBUG
+FILER_WHITELIST_FOR_PATH_ACCESS = (
+    '.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp',
+    '.doc', '.docx', '.pdf', '.txt', '.xls', '.xlsx', '.csv',
+)
+MIME_TYPE_WHITELIST = (
+    'image/jpeg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp',
+    'application/pdf', 'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain', 'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/csv',
+)
+FILE_VALIDATORS = {}
 
 # Настройки для "умной" обрезки изобращений
 THUMBNAIL_PROCESSORS = (
