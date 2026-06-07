@@ -160,36 +160,64 @@ MEDIA_ROOT = PUBLIC_DIR.joinpath('media')
 STATICFILES_DIRS = [PUBLIC_DIR.joinpath('static')]
 STATIC_ROOT = PUBLIC_DIR.joinpath('staticfiles')
 
+# ============================================================================
+# Django-Filer Configuration - WebP Conversion Storage
+# ============================================================================
+# Настройка хранилища filer для автоматического преобразования изображений в WebP
+# ВАЖНО: эта конфигурация должна быть в settings.py (не в class attribute),
+# т.к. Django-filer загружает её ДО инициализации app configs
+# ВАЖНО: location должна быть равна MEDIA_ROOT, иначе Django не сможет
+# сгенерировать правильные URL для файлов (URL генерируется как MEDIA_URL + relative_path)
+#
+# Структура папок:
+#   public/media/
+#   ├── flr/        <- основные загруженные файлы (картинки)
+#   ├── flrm/       <- миниатюры (thumbnails)
+#   ├── filer_public/          <- старая структура (больше не используется)
+#   └── filer_public_thumbnails/ <- старая структура (больше не используется)
+FILER_STORAGES = {
+    'public': {
+        'main': {
+            # Используем кастомное хранилище FilerWebPStorage для преобразования в WebP
+            'ENGINE': 'frontend.apps.FilerWebPStorage',
+            'OPTIONS': {
+                # location должна быть MEDIA_ROOT для корректной генерации URL!
+                'location': str(MEDIA_ROOT),
+            },
+            # UPLOAD_TO функция добавляет 'flr/' префикс для более компактных путей в шаблонах
+            'UPLOAD_TO': 'frontend.apps.generate_upload_path_flr',
+            'UPLOAD_TO_PREFIX': '',
+        },
+        'thumbnails': {
+            'ENGINE': 'django.core.files.storage.FileSystemStorage',
+            'OPTIONS': {
+                'location': str(MEDIA_ROOT),
+            },
+            # Миниатюры идят в папку flrm через UPLOAD_TO функцию
+            'UPLOAD_TO': 'frontend.apps.generate_upload_path_flrm',
+            'THUMBNAIL_OPTIONS': {
+                'base_dir': 'flrm',
+            },
+        },
+    },
+}
 
 # ============================================================================
-# Easy Thumbnails Configuration (для создания миниатюр в WebP)
+# Easy-Thumbnails Configuration - WebP Generation
 # ============================================================================
+# Настройка генерирования миниатюр в формате WebP вместо JPEG/PNG
+THUMBNAIL_PRESERVE_FORMAT = False  # Не сохранять оригинальный формат для миниатюр
+THUMBNAIL_FORMAT = 'WEBP'  # Конвертировать все миниатюры в WebP
+THUMBNAIL_QUALITY = 80  # Качество WebP (достаточно 75-85 для миниатюр)
 
-# Не сохранять оригинальный формат — все миниатюры в WebP
-# THUMBNAIL_PRESERVE_FORMAT = False
-#
-# # Все миниатюры конвертировать в WebP
-# THUMBNAIL_FORMAT = 'WEBP'
-# THUMBNAIL_PRESERVE_FORMAT = False
-
-#
-# # Качество WebP (75-85 достаточно для миниатюр)
-# THUMBNAIL_QUALITY = 80
-#
-# # Интерпретатор для обработки изображений (Pillow)
-# THUMBNAIL_ENGINE = 'easy_thumbnails.engines.pil_engine.PilEngine'
-#
-# # Показывать ошибки при создании миниатюр в debug режиме
-# THUMBNAIL_DEBUG = DEBUG
-#
-# # Размеры для миниатюр (для фронтенд-галереи)
-# THUMBNAIL_ALIASES = {
-#     '': {
-#         'admin_thumbnail': {'size': (64, 64), 'crop': True},
-#         'small': {'size': (256, 256), 'crop': True},
-#         'medium': {'size': (512, 512), 'crop': True},
-#         'large': {'size': (1024, 1024), 'crop': 'smart'},
-#     },
-# }
-
-
+# Размеры миниатюр для разных использований
+THUMBNAIL_ALIASES = {
+    '': {
+        # Для админ-интерфейса
+        'admin_thumbnail': {'size': (64, 64), 'crop': True},
+        # Для фронтенда
+        'small': {'size': (256, 256), 'crop': True},
+        'medium': {'size': (512, 512), 'crop': True},
+        'large': {'size': (1024, 1024), 'crop': 'smart'},
+    },
+}
