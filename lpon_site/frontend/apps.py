@@ -1,7 +1,15 @@
+import os
+from io import BytesIO
 from django.apps import AppConfig
+from django.core.files.storage import FileSystemStorage
+from django.core.files.base import ContentFile
+from django.db.models.signals import pre_save
+from PIL import Image as PILImage
+
+
 from lpon_site.settings import DEBUG
 
-
+# 1.
 class FrontendConfig(AppConfig):
     name = 'frontend'
     verbose_name = 'Сайт lpon.ru'
@@ -17,8 +25,36 @@ class FrontendConfig(AppConfig):
         admin.site.site_header = 'Управление LPON'
         admin.site.site_title = 'LPON Administrator'
         admin.site.index_title = 'Добро пожаловать в LPON'
-        ## Если надо, импортируем сигналы при запуске приложения
-        # import myapp.signals
+        ## Если надо, импортируем сигналы при запуске приложения.
+
+
+# 2. Создаем кастомное файловое хранилище специально для filer
+class FilerWebPStorage(FileSystemStorage):
+    def _save(self, name, content):
+        filename, ext = os.path.splitext(name)
+
+        # Обрабатываем только форматы картинок, исключая webp, svg и гифки
+        if ext.lower() in [".jpg", ".jpeg", ".png", ".bmp", ".tiff"]:
+            try:
+                # Читаем исходные байты файла
+                content.seek(0)
+                image_bytes = content.read()
+
+                # Конвертируем в WebP через Pillow
+                img = PILImage.open(BytesIO(image_bytes))
+                buffer = BytesIO()
+                img.save(buffer, format="WEBP", quality=85)
+                buffer.seek(0)
+
+                # Подменяем имя и контент на честный WebP
+                name = f"{filename}.webp"
+                content = ContentFile(buffer.read(), name=os.path.basename(name))
+            except Exception as e:
+                print(f"[Filer Storage WebP Error]: {e}")
+
+        # Передаем управление стандартному сохранению на диск
+        return super()._save(name, content)
+
 
 
 # Добавляем кастомный конфиг для filer, чтобы переименовать verbose_name и добавить конфиги
@@ -43,7 +79,7 @@ class CustomFilerConfig(AppConfig):
     FILER_MAX_UPLOAD_SIZE = 100 * 1024 * 1024
 
     # MIME-типы разрешенные для загрузки
-    FILER_MIME_TYPE_WHITELIST = (
+    MIME_TYPE_WHITELIST = (
         'image/jpeg',
         'image/png',
         'image/gif',
@@ -72,7 +108,8 @@ class CustomFilerConfig(AppConfig):
 
     # Форматы сохранения для thumbnail'ов (миниатюр)
     THUMBNAIL_PRESERVE_FORMAT = False  # Не сохранять оригинальный формат для thumbnails
-    THUMBNAIL_FORMAT = 'WEBP'  # Конвертировать все thumbnails в WebP
+    # THUMBNAIL_FORMAT = 'WEBP'  # Конвертировать все thumbnails в WebP
+    THUMBNAIL_FORCE_FORMAT = 'WEBP'
     THUMBNAIL_WEBP_QUALITY = 80  # Качество WebP (достаточно 75-85 для thumbnails)
 
     # Интерпретатор для обработки изображений
@@ -87,3 +124,31 @@ class CustomFilerConfig(AppConfig):
     # Валидаторы файлов (пусто = без ограничений)
     FILE_VALIDATORS = {}
 
+    def ready(self):
+        from django.db.models.signals import pre_save
+        from filer import settings as filer_settings
+        from filer.models.imagemodels import Image as FilerImage
+
+        # ХАК 1: Принудительно заставляем filer использовать наше кастомное хранилище.
+        # Теперь все оригиналы файлов будут сохраняться через класс FilerWebPStorage.
+        filer_settings.FILER_STORAGES["public"]["main"] = {
+            "ENGINE": "frontend.apps.FilerWebPStorage",
+            "OPTIONS": {},
+        }
+
+        # ХАК 2: Подключаем легкий сигнал pre_save только для того, чтобы
+        # прописать в базу данных правильный mime_type и расширение для админки.
+        pre_save.connect(self.fix_meta_before_db_save, sender=FilerImage)
+
+    @staticmethod
+    def fix_meta_before_db_save(sender, instance, **kwargs):
+        if not instance.file or not instance.file.name:
+            return
+
+        filename, ext = os.path.splitext(instance.file.name)
+        if ext.lower() in [".webp", ".svg", ".gif"]:
+            return
+
+        # Меняем метаданные для базы данных, так как на диске файл СТОПРОЦЕНТНО будет .webp
+        instance.file.name = f"{filename}.webp"
+        instance.mime_type = "image/webp"

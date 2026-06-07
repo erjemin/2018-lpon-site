@@ -161,4 +161,35 @@ STATICFILES_DIRS = [PUBLIC_DIR.joinpath('static')]
 STATIC_ROOT = PUBLIC_DIR.joinpath('staticfiles')
 
 
+# ============================================================================
+# Easy Thumbnails Configuration (для создания миниатюр в WebP)
+# ============================================================================
+
+# Не сохранять оригинальный формат — все миниатюры в WebP
+# THUMBNAIL_PRESERVE_FORMAT = False
+#
+# # Все миниатюры конвертировать в WebP
+# THUMBNAIL_FORMAT = 'WEBP'
+# THUMBNAIL_PRESERVE_FORMAT = False
+
+#
+# # Качество WebP (75-85 достаточно для миниатюр)
+# THUMBNAIL_QUALITY = 80
+#
+# # Интерпретатор для обработки изображений (Pillow)
+# THUMBNAIL_ENGINE = 'easy_thumbnails.engines.pil_engine.PilEngine'
+#
+# # Показывать ошибки при создании миниатюр в debug режиме
+# THUMBNAIL_DEBUG = DEBUG
+#
+# # Размеры для миниатюр (для фронтенд-галереи)
+# THUMBNAIL_ALIASES = {
+#     '': {
+#         'admin_thumbnail': {'size': (64, 64), 'crop': True},
+#         'small': {'size': (256, 256), 'crop': True},
+#         'medium': {'size': (512, 512), 'crop': True},
+#         'large': {'size': (1024, 1024), 'crop': 'smart'},
+#     },
+# }
+
 
