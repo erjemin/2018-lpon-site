@@ -66,7 +66,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     # Django-filer и его зависимости
     # Порядок важен! polymorphic должен быть ДО filer, easy_thumbnails тоже ДО filer
-    'polymorphic',
+    # 'polymorphic',
     'easy_thumbnails',
     # 'filer',
     # Кастомная надстройка над filer для переопределения verbose_name (и других настроек)
@@ -161,82 +161,56 @@ STATICFILES_DIRS = [PUBLIC_DIR.joinpath('static')]
 STATIC_ROOT = PUBLIC_DIR.joinpath('staticfiles')
 
 # ============================================================================
-# Django-Filer Configuration - WebP Conversion Storage
+# Django-Filer & Easy-Thumbnails Configuration
 # ============================================================================
-# Настройка хранилища filer для автоматического преобразования изображений в WebP
-# ВАЖНО: эта конфигурация должна быть в settings.py (не в class attribute),
-# т.к. Django-filer загружает её ДО инициализации app configs
-# ВАЖНО: location должна быть равна MEDIA_ROOT, иначе Django не сможет
-# сгенерировать правильные URL для файлов (URL генерируется как MEDIA_URL + relative_path)
-#
-# Структура папок:
-#   public/media/
-#   ├── flr/        <- основные загруженные файлы (картинки)
-#   ├── flrm/       <- миниатюры (thumbnails)
-#   ├── filer_public/          <- старая структура (больше не используется)
-#   └── filer_public_thumbnails/ <- старая структура (больше не используется)
 FILER_STORAGES = {
     'public': {
         'main': {
-            # Используем стандартное хранилище Django. Логика конвертации в apps.py
-            'ENGINE': 'django.core.files.storage.FileSystemStorage',
+            'ENGINE': 'filer.storage.PublicFileSystemStorage',
             'OPTIONS': {
-                'location': str(MEDIA_ROOT),
+                'location': MEDIA_ROOT / 'flr',
+                'base_url': MEDIA_URL + 'flr/',
             },
-            # UPLOAD_TO функция добавляет 'flr/' префикс для более компактных путей в шаблонах
-            'UPLOAD_TO': 'frontend.apps.generate_upload_path_flr',
+            'UPLOAD_TO': 'filer.utils.generate_filename.randomized',
             'UPLOAD_TO_PREFIX': '',
         },
         'thumbnails': {
-            'ENGINE': 'django.core.files.storage.FileSystemStorage',
+            'ENGINE': 'filer.storage.PublicFileSystemStorage',
             'OPTIONS': {
-                'location': str(MEDIA_ROOT),
+                'location': MEDIA_ROOT / 'flrm',
+                'base_url': MEDIA_URL + 'flrm/',
+                # 'location': os.path.join(MEDIA_ROOT, 'flrm'),
+                # 'base_url': os.path.join(MEDIA_URL, 'flrm/'),
             },
-            # Миниатюры идят в папку flrm через UPLOAD_TO функцию
-            'UPLOAD_TO': 'frontend.apps.generate_upload_path_flrm',
-            'THUMBNAIL_OPTIONS': {
-                'base_dir': 'flrm',
-            },
+            # 'UPLOAD_TO': 'filer.utils.generate_filename.randomized',
+            # 'UPLOAD_TO_PREFIX': '_',
         },
     },
 }
 
-# ============================================================================
-# Easy-Thumbnails Configuration - WebP Generation
-# ============================================================================
-# Настройка генерирования миниатюр в формате WebP вместо JPEG/PNG
-THUMBNAIL_PRESERVE_FORMAT = False  # Не сохранять оригинальный формат для миниатюр
-THUMBNAIL_FORMAT = 'WEBP'  # Конвертировать все миниатюры в WebP
-THUMBNAIL_QUALITY = 80  # Качество WebP (достаточно 75-85 для миниатюр)
-# Кастомная настройка для встроенного конвертора загружаемых файлов в WebP (см. apps.py)
-THUMBNAIL_WEBP_QUALITY = 80  # Качество для WebP
 
-FILER_ENABLE_PERMISSIONS = DEBUG
-FILER_WHITELIST_FOR_PATH_ACCESS = (
-    '.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp',
-    '.doc', '.docx', '.pdf', '.txt', '.xls', '.xlsx', '.csv',
-)
-FILER_MAX_UPLOAD_SIZE = 100 * 1024 * 1024
-MIME_TYPE_WHITELIST = (
-    'image/jpeg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp',
-    'application/pdf', 'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'text/plain', 'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'text/csv',
-)
-THUMBNAIL_ENGINE = 'easy_thumbnails.engines.pil_engine.PilEngine'
+THUMBNAIL_PRESERVE_FORMAT = False
+THUMBNAIL_FORMAT = 'WEBP'
 THUMBNAIL_DEBUG = DEBUG
-FILE_VALIDATORS = {}
-
-# Размеры миниатюр для разных использований
+THUMBNAIL_WEBP_QUALITY = 80
+THUMBNAIL_ENGINE = 'easy_thumbnails.engines.pil_engine.PilEngine'
 THUMBNAIL_ALIASES = {
     '': {
-        # Для админ-интерфейса
         'admin_thumbnail': {'size': (64, 64), 'crop': True},
-        # Для фронтенда
         'small': {'size': (256, 256), 'crop': True},
         'medium': {'size': (512, 512), 'crop': True},
         'large': {'size': (1024, 1024), 'crop': 'smart'},
     },
 }
+FILER_UPLOADER_MAX_FILES = 3
+FILER_UPLOADER_MAX_FILE_SIZE = 100 * 1024 * 1024
+FILER_MAX_IMAGE_PIXELS = 4096 * 4096
+
+# Настройки для "умной" обрезки изобращений
+THUMBNAIL_PROCESSORS = (
+    'easy_thumbnails.processors.colorspace',
+    'easy_thumbnails.processors.autocrop',
+    #'easy_thumbnails.processors.scale_and_crop',
+    'filer.thumbnail_processors.scale_and_crop_with_subject_location',
+    'easy_thumbnails.processors.filters',
+)

@@ -6,7 +6,7 @@ from django.apps import AppConfig
 from django.core.files.base import ContentFile
 from PIL import Image as PILImage
 
-from lpon_site.settings import THUMBNAIL_WEBP_QUALITY
+from lpon_site.settings import DEBUG, THUMBNAIL_WEBP_QUALITY
 
 # Получаем логгер для текущего модуля
 logger = logging.getLogger(__name__)
@@ -28,17 +28,24 @@ class CustomFilerConfig(AppConfig):
     name = 'filer'
     verbose_name = 'Медиафайлы'
 
-    @staticmethod
-    def generate_upload_path_flr(instance, filename):
-        from filer.utils.generate_filename import randomized
-        base_path = randomized(instance, filename)
-        return f'flr/{base_path}'
-
-    @staticmethod
-    def generate_upload_path_flrm(instance, filename):
-        from filer.utils.generate_filename import randomized
-        base_path = randomized(instance, filename)
-        return f'flrm/{base_path}'
+    # ========================================================================
+    # Конфигурация Django-Filer, которая читается во время выполнения
+    # ========================================================================
+    FILER_ENABLE_PERMISSIONS = DEBUG
+    FILER_MAX_UPLOAD_SIZE = 100 * 1024 * 1024
+    FILER_WHITELIST_FOR_PATH_ACCESS = (
+        '.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp',
+        '.doc', '.docx', '.pdf', '.txt', '.xls', '.xlsx', '.csv',
+    )
+    MIME_TYPE_WHITELIST = (
+        'image/jpeg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp',
+        'application/pdf', 'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'text/plain', 'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'text/csv',
+    )
+    FILE_VALIDATORS = {}
 
     @staticmethod
     def _convert_to_webp_if_needed(name: str, content):
@@ -52,7 +59,7 @@ class CustomFilerConfig(AppConfig):
                 buffer = BytesIO()
                 img.save(buffer, format="WEBP", quality=THUMBNAIL_WEBP_QUALITY)
                 buffer.seek(0)
-                new_name = name.rsplit(original_ext, 1)[0] + ".webp"
+                new_name = os.path.splitext(name)[0] + ".webp"
                 logger.info(f"Successfully converted '{name}' to '{new_name}' (WebP).")
                 return ContentFile(buffer.read()), new_name, True
             except Exception:
@@ -80,11 +87,8 @@ class CustomFilerConfig(AppConfig):
                 new_content.seek(0)
                 self_instance.instance._file_size = len(file_bytes)
                 self_instance.instance.sha1 = hashlib.sha1(file_bytes).hexdigest()
+            
             return original_save(self_instance, new_name, new_content, save)
 
         MultiStorageFieldFile.save = patched_save
         logger.info("MultiStorageFieldFile.save() patched successfully.")
-
-# Создаем псевдонимы на уровне модуля для функций, чтобы их мог найти Django
-generate_upload_path_flr = CustomFilerConfig.generate_upload_path_flr
-generate_upload_path_flrm = CustomFilerConfig.generate_upload_path_flrm
