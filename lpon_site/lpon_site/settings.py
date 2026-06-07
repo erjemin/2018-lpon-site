@@ -178,10 +178,9 @@ STATIC_ROOT = PUBLIC_DIR.joinpath('staticfiles')
 FILER_STORAGES = {
     'public': {
         'main': {
-            # Используем кастомное хранилище FilerWebPStorage для преобразования в WebP
-            'ENGINE': 'frontend.apps.FilerWebPStorage',
+            # Используем стандартное хранилище Django. Логика конвертации в apps.py
+            'ENGINE': 'django.core.files.storage.FileSystemStorage',
             'OPTIONS': {
-                # location должна быть MEDIA_ROOT для корректной генерации URL!
                 'location': str(MEDIA_ROOT),
             },
             # UPLOAD_TO функция добавляет 'flr/' префикс для более компактных путей в шаблонах
@@ -209,6 +208,26 @@ FILER_STORAGES = {
 THUMBNAIL_PRESERVE_FORMAT = False  # Не сохранять оригинальный формат для миниатюр
 THUMBNAIL_FORMAT = 'WEBP'  # Конвертировать все миниатюры в WebP
 THUMBNAIL_QUALITY = 80  # Качество WebP (достаточно 75-85 для миниатюр)
+# Кастомная настройка для встроенного конвертора загружаемых файлов в WebP (см. apps.py)
+THUMBNAIL_WEBP_QUALITY = 80  # Качество для WebP
+
+FILER_ENABLE_PERMISSIONS = DEBUG
+FILER_WHITELIST_FOR_PATH_ACCESS = (
+    '.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp',
+    '.doc', '.docx', '.pdf', '.txt', '.xls', '.xlsx', '.csv',
+)
+FILER_MAX_UPLOAD_SIZE = 100 * 1024 * 1024
+MIME_TYPE_WHITELIST = (
+    'image/jpeg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp',
+    'application/pdf', 'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain', 'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/csv',
+)
+THUMBNAIL_ENGINE = 'easy_thumbnails.engines.pil_engine.PilEngine'
+THUMBNAIL_DEBUG = DEBUG
+FILE_VALIDATORS = {}
 
 # Размеры миниатюр для разных использований
 THUMBNAIL_ALIASES = {
