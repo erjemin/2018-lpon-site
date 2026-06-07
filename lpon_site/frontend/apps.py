@@ -40,37 +40,36 @@ class CustomFilerConfig(AppConfig):
         base_path = randomized(instance, filename)
         return f'flrm/{base_path}'
 
-    class WebPConverter:
-        def convert_to_webp_if_needed(self, name: str, content):
-            _, original_ext = os.path.splitext(name)
-            if original_ext.lower() in [".jpg", ".jpeg", ".png", ".bmp", ".tiff"]:
-                try:
-                    content.seek(0)
-                    img = PILImage.open(BytesIO(content.read()))
-                    if img.mode == 'CMYK':
-                        img = img.convert('RGB')
-                    buffer = BytesIO()
-                    img.save(buffer, format="WEBP", quality=THUMBNAIL_WEBP_QUALITY)
-                    buffer.seek(0)
-                    new_name = name.rsplit(original_ext, 1)[0] + ".webp"
-                    logger.info(f"Successfully converted '{name}' to '{new_name}' (WebP).")
-                    return ContentFile(buffer.read()), new_name, True
-                except Exception:
-                    logger.error(f"Error converting '{name}' to WebP.", exc_info=True)
-                    content.seek(0)
-                    return content, name, False
-            content.seek(0)
-            return content, name, False
+    @staticmethod
+    def _convert_to_webp_if_needed(name: str, content):
+        _, original_ext = os.path.splitext(name)
+        if original_ext.lower() in [".jpg", ".jpeg", ".png", ".bmp", ".tiff"]:
+            try:
+                content.seek(0)
+                img = PILImage.open(BytesIO(content.read()))
+                if img.mode == 'CMYK':
+                    img = img.convert('RGB')
+                buffer = BytesIO()
+                img.save(buffer, format="WEBP", quality=THUMBNAIL_WEBP_QUALITY)
+                buffer.seek(0)
+                new_name = name.rsplit(original_ext, 1)[0] + ".webp"
+                logger.info(f"Successfully converted '{name}' to '{new_name}' (WebP).")
+                return ContentFile(buffer.read()), new_name, True
+            except Exception:
+                logger.error(f"Error converting '{name}' to WebP.", exc_info=True)
+                content.seek(0)
+                return content, name, False
+        content.seek(0)
+        return content, name, False
 
     def ready(self):
         from filer.fields.multistorage_file import MultiStorageFieldFile
 
         logger.info("Patching MultiStorageFieldFile.save() for WebP conversion...")
         original_save = MultiStorageFieldFile.save
-        webp_converter = self.WebPConverter()
 
         def patched_save(self_instance, name, content, save=True):
-            new_content, new_name, converted = webp_converter.convert_to_webp_if_needed(name, content)
+            new_content, new_name, converted = CustomFilerConfig._convert_to_webp_if_needed(name, content)
             if converted:
                 self_instance.instance.mime_type = "image/webp"
                 if hasattr(self_instance.instance, 'original_filename') and self_instance.instance.original_filename:
