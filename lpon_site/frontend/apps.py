@@ -1,11 +1,15 @@
 import os
 import hashlib
+import logging
 from io import BytesIO
 from django.apps import AppConfig
 from django.core.files.base import ContentFile
 from PIL import Image as PILImage
 
-from lpon_site.settings import DEBUG, THUMBNAIL_WEBP_QUALITY
+from lpon_site.settings import THUMBNAIL_WEBP_QUALITY
+
+# Получаем логгер для текущего модуля
+logger = logging.getLogger(__name__)
 
 
 class FrontendConfig(AppConfig):
@@ -49,20 +53,19 @@ class CustomFilerConfig(AppConfig):
                     img.save(buffer, format="WEBP", quality=THUMBNAIL_WEBP_QUALITY)
                     buffer.seek(0)
                     new_name = name.rsplit(original_ext, 1)[0] + ".webp"
+                    logger.info(f"Successfully converted '{name}' to '{new_name}' (WebP).")
                     return ContentFile(buffer.read()), new_name, True
-                except Exception as e:
-                    import sys
-                    print(f"[WebPConverter] ERROR converting {name}: {e}", file=sys.stderr)
+                except Exception:
+                    logger.error(f"Error converting '{name}' to WebP.", exc_info=True)
                     content.seek(0)
                     return content, name, False
             content.seek(0)
             return content, name, False
 
     def ready(self):
-        import sys
         from filer.fields.multistorage_file import MultiStorageFieldFile
 
-        print("[CustomFilerConfig.ready] Patching MultiStorageFieldFile.save()...", file=sys.stderr)
+        logger.info("Patching MultiStorageFieldFile.save() for WebP conversion...")
         original_save = MultiStorageFieldFile.save
         webp_converter = self.WebPConverter()
 
@@ -81,7 +84,7 @@ class CustomFilerConfig(AppConfig):
             return original_save(self_instance, new_name, new_content, save)
 
         MultiStorageFieldFile.save = patched_save
-        print("[CustomFilerConfig.ready] MultiStorageFieldFile.save() patched successfully", file=sys.stderr)
+        logger.info("MultiStorageFieldFile.save() patched successfully.")
 
 # Создаем псевдонимы на уровне модуля для функций, чтобы их мог найти Django
 generate_upload_path_flr = CustomFilerConfig.generate_upload_path_flr
