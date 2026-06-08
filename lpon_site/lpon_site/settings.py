@@ -211,15 +211,20 @@ FILER_MAX_IMAGE_PIXELS = 4096 * 4096
 
 FILER_ENABLE_PERMISSIONS = DEBUG
 FILER_WHITELIST_FOR_PATH_ACCESS = (
-    '.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp',
+    '.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp',  ".heic", ".heif",
     '.doc', '.docx', '.pdf', '.txt', '.xls', '.xlsx', '.csv',
 )
 MIME_TYPE_WHITELIST = (
-    'image/jpeg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp',
-    'application/pdf', 'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'text/plain', 'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'image/jpeg',  # .jpg / .jpeg
+    'image/png',
+    'image/gif',
+    'image/svg+xml',
+    'image/webp',
+    'image/heic', 'image/heif',  # форматы Apple HEIC/HEIF (без анимации 
+    'application/pdf',
+    'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', # .doc / .docx
+    'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', # .xls / .xlsx
+    'text/plain',
     'text/csv',
 )
 FILE_VALIDATORS = {}

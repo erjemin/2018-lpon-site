@@ -5,6 +5,7 @@ from io import BytesIO
 from django.apps import AppConfig
 from django.core.files.base import ContentFile
 from PIL import Image as PILImage
+import pillow_heif
 
 from lpon_site.settings import (
     THUMBNAIL_WEBP_QUALITY,
@@ -14,6 +15,9 @@ from lpon_site.settings import (
     MIME_TYPE_WHITELIST,
     FILE_VALIDATORS,
 )
+
+# Регистрируем плагин HEIF в Pillow
+pillow_heif.register_heif_opener()
 
 # Получаем логгер для текущего модуля
 logger = logging.getLogger(__name__)
@@ -36,10 +40,6 @@ class FrontendConfig(AppConfig):
 # ==============================================================================
 # Кастомная конфигурация для django-filer
 # - Патчинг MultiStorageFieldFile.save() для автоматической конвертации в WebP
-#
-# Все параметры конфигурации (MIME_TYPE_WHITELIST, FILER_WHITELIST_FOR_PATH_ACCESS и т.д.)
-# определены в settings.py и импортируются оттуда.
-# Удаление префикса filer_public_thumbnails/ достигается через THUMBNAIL_OPTIONS в settings.py
 # ==============================================================================
 class CustomFilerConfig(AppConfig):
     name = 'filer'
@@ -47,7 +47,6 @@ class CustomFilerConfig(AppConfig):
 
     # ========================================================================
     # Атрибуты конфигурации Django-Filer (импортированы из settings.py)
-    # Единое место правды - settings.py
     # ========================================================================
     FILER_ENABLE_PERMISSIONS = FILER_ENABLE_PERMISSIONS
     FILER_UPLOADER_MAX_FILE_SIZE = FILER_UPLOADER_MAX_FILE_SIZE
@@ -60,10 +59,10 @@ class CustomFilerConfig(AppConfig):
     def _convert_to_webp_if_needed(name: str, content):
         """
         Преобразует загруженное изображение в WebP формат.
-        Поддерживает JPEG, PNG, BMP и TIFF.
+        Поддерживает JPEG, PNG, BMP, TIFF и HEIC/HEIF.
         """
         _, original_ext = os.path.splitext(name)
-        if original_ext.lower() in [".jpg", ".jpeg", ".png", ".bmp", ".tiff"]:
+        if original_ext.lower() in [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".heic", ".heif"]:
             try:
                 content.seek(0)
                 img = PILImage.open(BytesIO(content.read()))
@@ -111,4 +110,3 @@ class CustomFilerConfig(AppConfig):
 
         MultiStorageFieldFile.save = patched_save
         logger.info("MultiStorageFieldFile.save() patched successfully.")
-
