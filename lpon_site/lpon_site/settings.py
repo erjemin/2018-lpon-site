@@ -198,7 +198,8 @@ THUMBNAIL_WEBP_QUALITY = 80
 THUMBNAIL_ENGINE = 'easy_thumbnails.engines.pil_engine.PilEngine'
 THUMBNAIL_ALIASES = {
     '': {
-        'admin_thumbnail': {'size': (64, 64), 'crop': True},
+        # Примечание: filer автоматически генерирует свои миниатюры для админки (40x40, 210x210 и 420x420)
+        #             через DEFAULT_THUMBNAILS (см. BaseImage класс в filer).
         'small': {'size': (256, 256), 'crop': True},
         'medium': {'size': (512, 512), 'crop': True},
         'large': {'size': (1024, 1024), 'crop': 'smart'},
