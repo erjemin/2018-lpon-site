@@ -4,7 +4,6 @@ import logging
 from io import BytesIO
 from django.apps import AppConfig
 from django.core.files.base import ContentFile
-from django.core.files.storage import FileSystemStorage
 from PIL import Image as PILImage
 
 from lpon_site.settings import (
@@ -35,12 +34,12 @@ class FrontendConfig(AppConfig):
         admin.site.index_title = 'Добро пожаловать в LPON'
 
 # ==============================================================================
-# Кастомная конфигурация для django-filer, которая включает в себя:
-# - Кастомное хранилище для миниатюр (ThumbnailFileSystemStorage)
+# Кастомная конфигурация для django-filer
 # - Патчинг MultiStorageFieldFile.save() для автоматической конвертации в WebP
 #
-# Все остальные параметры конфигурации (MIME_TYPE_WHITELIST, FILER_WHITELIST_FOR_PATH_ACCESS и т.д.)
+# Все параметры конфигурации (MIME_TYPE_WHITELIST, FILER_WHITELIST_FOR_PATH_ACCESS и т.д.)
 # определены в settings.py и импортируются оттуда.
+# Удаление префикса filer_public_thumbnails/ достигается через THUMBNAIL_OPTIONS в settings.py
 # ==============================================================================
 class CustomFilerConfig(AppConfig):
     name = 'filer'
@@ -113,54 +112,3 @@ class CustomFilerConfig(AppConfig):
         MultiStorageFieldFile.save = patched_save
         logger.info("MultiStorageFieldFile.save() patched successfully.")
 
-
-# ==============================================================================
-# Кастомное хранилище для миниатюр (часть конфигурации CustomFilerConfig)
-# Удаляет префикс filer_public_thumbnails/ при сохранении и генерации URLs
-# ==============================================================================
-class ThumbnailFileSystemStorage(FileSystemStorage):
-    """
-    Кастомное хранилище для миниатюр.
-
-    Удаляет префикс 'filer_public_thumbnails/' из пути сохранения и из URLs,
-    чтобы миниатюры хранились и отображались без этого каталога.
-
-    Используется как часть конфигурации CustomFilerConfig.
-    """
-
-    def get_available_name(self, name, max_length=None):
-        """
-        Переопределяем получение доступного имени файла.
-        Удаляем префикс 'filer_public_thumbnails/' если он присутствует.
-        """
-        # Удаляем префикс filer_public_thumbnails/ если он есть
-        if name.startswith('filer_public_thumbnails/'):
-            name = name.replace('filer_public_thumbnails/', '', 1)
-            logger.debug(f"[ThumbnailFileSystemStorage.get_available_name] Удалён префикс filer_public_thumbnails/, новый путь: {name}")
-
-        return super().get_available_name(name, max_length)
-
-    def _save(self, name, content):
-        """
-        Переопределяем сохранение файла.
-        Удаляем префикс 'filer_public_thumbnails/' перед сохранением на диск.
-        """
-        # Удаляем префикс filer_public_thumbnails/ если он есть
-        if name.startswith('filer_public_thumbnails/'):
-            name = name.replace('filer_public_thumbnails/', '', 1)
-            logger.debug(f"[ThumbnailFileSystemStorage._save] Удалён префикс filer_public_thumbnails/, новый путь: {name}")
-
-        return super()._save(name, content)
-
-    def url(self, name):
-        """
-        Переопределяем генерацию URL.
-        Удаляем префикс 'filer_public_thumbnails/' если он присутствует в URL.
-        Это необходимо потому, что easy_thumbnails может пытаться добавить этот префикс.
-        """
-        # Если имя содержит префикс, удаляем его перед генерацией URL
-        if name.startswith('filer_public_thumbnails/'):
-            name = name.replace('filer_public_thumbnails/', '', 1)
-            logger.debug(f"[ThumbnailFileSystemStorage.url] Удалён префикс filer_public_thumbnails/ из URL, новый путь: {name}")
-
-        return super().url(name)

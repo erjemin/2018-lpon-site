@@ -175,16 +175,17 @@ FILER_STORAGES = {
             'UPLOAD_TO_PREFIX': '',
         },
         'thumbnails': {
-            # Используем кастомное хранилище, которое удаляет префикс filer_public_thumbnails/
-            # Смотримайте класс ThumbnailFileSystemStorage в frontend/apps.py (часть CustomFilerConfig)
-            'ENGINE': 'frontend.apps.ThumbnailFileSystemStorage',
+            'ENGINE': 'filer.storage.PublicFileSystemStorage',
             'OPTIONS': {
                 'location': MEDIA_ROOT / 'flrm',
                 'base_url': MEDIA_URL + 'flrm/',
             },
-            # Используем ту же функцию генерации пути, что и для основных файлов.
-            'UPLOAD_TO': 'filer.utils.generate_filename.randomized',
-            'UPLOAD_TO_PREFIX': '',
+            # Переопределяем THUMBNAIL_OPTIONS чтобы убрать prefix 'filer_public_thumbnails'
+            # По умолчанию filer добавляет 'base_dir': 'filer_public_thumbnails', мы это отключаем
+            # Почему-то этого нет в документации. :(
+            'THUMBNAIL_OPTIONS': {
+                'base_dir': '',
+            },
         },
     },
 }
