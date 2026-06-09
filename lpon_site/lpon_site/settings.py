@@ -191,11 +191,27 @@ FILER_STORAGES = {
 }
 
 
+# Настройки easy_thumbnails для генерации миниатюр
+# Преимущественно используется для django-filer
 THUMBNAIL_PRESERVE_FORMAT = False
 THUMBNAIL_FORMAT = 'WEBP'
 THUMBNAIL_DEBUG = DEBUG
-THUMBNAIL_WEBP_QUALITY = 80
+THUMBNAIL_QUALITY= 80
+THUMBNAIL_WEBP_QUALITY = THUMBNAIL_QUALITY
 THUMBNAIL_ENGINE = 'easy_thumbnails.engines.pil_engine.PilEngine'
+
+# Список расширений, которые нужно сохранять при генерации миниатюр
+# Это важно для WebP файлов - они не должны быть сконвертированы в другой формат
+THUMBNAIL_PRESERVE_EXTENSIONS = ['png', 'gif', 'webp']
+
+# Нейминг миниатюр - стандартный нейминг easy_thumbnails
+# Формат: {source_name}{dimensions}{options}{quality}{extra}
+# Например: image.webp__40x40_q85_crop_subsampling-2.jpg
+THUMBNAIL_NAMER = 'easy_thumbnails.namers.default'
+
+# Показывать ошибки при генерации миниатюр (полезно для отладки)
+THUMBNAIL_VERBOSE = DEBUG
+
 THUMBNAIL_ALIASES = {
     '': {
         # Примечание: filer автоматически генерирует свои миниатюры для админки (40x40, 210x210 и 420x420)
@@ -212,7 +228,7 @@ FILER_MAX_IMAGE_PIXELS = 4096 * 4096
 FILER_ENABLE_PERMISSIONS = DEBUG
 FILER_WHITELIST_FOR_PATH_ACCESS = (
     '.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp',  ".heic", ".heif",
-    '.doc', '.docx', '.pdf', '.txt', '.xls', '.xlsx', '.csv',
+    '.doc', '.docx', '.pdf', '.xls', '.xlsx', '.txt', '.csv',
 )
 MIME_TYPE_WHITELIST = (
     'image/jpeg',  # .jpg / .jpeg
@@ -220,7 +236,7 @@ MIME_TYPE_WHITELIST = (
     'image/gif',
     'image/svg+xml',
     'image/webp',
-    'image/heic', 'image/heif',  # форматы Apple HEIC/HEIF (без анимации 
+    'image/heic', 'image/heif',  # форматы Apple HEIC/HEIF (без анимации
     'application/pdf',
     'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', # .doc / .docx
     'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', # .xls / .xlsx
@@ -229,7 +245,16 @@ MIME_TYPE_WHITELIST = (
 )
 FILE_VALIDATORS = {}
 
-# Настройки для "умной" обрезки изобращений
+# КРИТИЧЕСКИ ВАЖНЫЕ НАСТРОЙКИ ДЛЯ FILER - расширения и mime-типы для WebP и HEIC/HEIF
+# Эти настройки переопределяют defaults в filer/settings.py
+# IMAGE_EXTENSIONS используется filer для определения какие файлы считать изображениями
+FILER_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.heic', '.heif']
+
+# IMAGE_MIME_TYPES используется для проверки mime_type файла
+# Это ЧАСТИ mime-типов которые ищутся внутри полного mime_type (например 'webp' в 'image/webp')
+FILER_IMAGE_MIME_TYPES = ['gif', 'jpeg', 'png', 'x-png', 'svg+xml', 'webp', 'heic', 'heif']
+
+# Настройки для "умной" обрезки изображений
 THUMBNAIL_PROCESSORS = (
     'easy_thumbnails.processors.colorspace',
     'easy_thumbnails.processors.autocrop',
@@ -237,3 +262,49 @@ THUMBNAIL_PROCESSORS = (
     'filer.thumbnail_processors.scale_and_crop_with_subject_location',
     'easy_thumbnails.processors.filters',
 )
+
+# Конфигурация логирования для отладки загрузок и обработки файлов
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{levelname}] {asctime} {name}:{funcName}() line {lineno} - {message}',
+            'style': '{',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR.parent, 'logs', 'uploads.log'),
+            'formatter': 'verbose',
+        },
+    },
+    'loggers': {
+        'frontend.apps': {
+            'level': 'DEBUG',
+            'handlers': ['console', 'file'],
+            'propagate': False,
+        },
+        'frontend.models': {
+            'level': 'DEBUG',
+            'handlers': ['console', 'file'],
+            'propagate': False,
+        },
+        'easy_thumbnails': {
+            'level': 'DEBUG',
+            'handlers': ['console', 'file'],
+            'propagate': False,
+        },
+        'filer': {
+            'level': 'DEBUG',
+            'handlers': ['console', 'file'],
+            'propagate': False,
+        },
+    },
+}
