@@ -1239,37 +1239,3 @@ class TbOfferHistory(models.Model):
             models.Index(fields=['k_history_to_offer', '-t_history_created'], name='idx_history_by_offer_date'),
         ]
 
-
-# ============================================================================
-# СИГНАЛЫ ДЛЯ ОБРАБОТКИ ЗАГРУЗОК И ОБРАБОТКИ ФАЙЛОВ
-# ============================================================================
-import logging
-from django.db.models.signals import post_save, pre_delete
-from django.dispatch import receiver
-from filer.models import File, Image
-
-# Получаем логгер
-logger = logging.getLogger(__name__)
-
-
-@receiver(post_save, sender=Image)
-def log_image_save(sender, instance, created, **kwargs):
-    """
-    Логирует сохранение изображения, включая информацию о формате и размере.
-    Помогает отследить, когда и как файл был загружен.
-    """
-    action = "created" if created else "updated"
-    logger.info(f"[SIGNAL] Image {action}: {instance.name}, "
-               f"mime_type={instance.mime_type}, "
-               f"size={instance.size}, "
-               f"sha1={instance.sha1}")
-
-
-@receiver(pre_delete, sender=Image)
-def log_image_delete(sender, instance, **kwargs):
-    """
-    Логирует удаление изображения для отладки.
-    """
-    logger.info(f"[SIGNAL] Image deleted: {instance.name}, "
-               f"mime_type={instance.mime_type}, "
-               f"size={instance.size}")

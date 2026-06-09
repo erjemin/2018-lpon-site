@@ -227,16 +227,16 @@ FILER_MAX_IMAGE_PIXELS = 4096 * 4096
 
 FILER_ENABLE_PERMISSIONS = DEBUG
 FILER_WHITELIST_FOR_PATH_ACCESS = (
-    '.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp',  ".heic", ".heif",
+    '.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp',  '.heic', '.heif',
     '.doc', '.docx', '.pdf', '.xls', '.xlsx', '.txt', '.csv',
 )
 MIME_TYPE_WHITELIST = (
     'image/jpeg',  # .jpg / .jpeg
-    'image/png',
+    'image/png', 'image/x-png',  # .png
     'image/gif',
     'image/svg+xml',
     'image/webp',
-    'image/heic', 'image/heif',  # форматы Apple HEIC/HEIF (без анимации
+    'image/heic', 'image/heif',  # форматы Apple HEIC/HEIF (без анимации 'image/heic-sequence и 'image/heif-sequence')
     'application/pdf',
     'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', # .doc / .docx
     'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', # .xls / .xlsx
@@ -245,20 +245,11 @@ MIME_TYPE_WHITELIST = (
 )
 FILE_VALIDATORS = {}
 
-# КРИТИЧЕСКИ ВАЖНЫЕ НАСТРОЙКИ ДЛЯ FILER - расширения и mime-типы для WebP и HEIC/HEIF
-# Эти настройки переопределяют defaults в filer/settings.py
-# IMAGE_EXTENSIONS используется filer для определения какие файлы считать изображениями
-FILER_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.heic', '.heif']
-
-# IMAGE_MIME_TYPES используется для проверки mime_type файла
-# Это ЧАСТИ mime-типов которые ищутся внутри полного mime_type (например 'webp' в 'image/webp')
-FILER_IMAGE_MIME_TYPES = ['gif', 'jpeg', 'png', 'x-png', 'svg+xml', 'webp', 'heic', 'heif']
-
 # Настройки для "умной" обрезки изображений
 THUMBNAIL_PROCESSORS = (
     'easy_thumbnails.processors.colorspace',
     'easy_thumbnails.processors.autocrop',
-    #'easy_thumbnails.processors.scale_and_crop',
+    # 'easy_thumbnails.processors.scale_and_crop',
     'filer.thumbnail_processors.scale_and_crop_with_subject_location',
     'easy_thumbnails.processors.filters',
 )
