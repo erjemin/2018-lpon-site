@@ -163,6 +163,11 @@ STATIC_ROOT = PUBLIC_DIR.joinpath('staticfiles')
 # ============================================================================
 # Django-Filer & Easy-Thumbnails Configuration
 # ============================================================================
+# Примечание о потоках обработки:
+# - Django: количество worker-процессов настраивается через gunicorn/uWSGI (--workers, --threads)
+# - Pillow-HEIF: параллелизм настраивается через pillow_heif.options.DECODE_THREADS в apps.py
+# - Easy-Thumbnails: использует Pillow напрямую, параллелизм через Pillow
+# ============================================================================
 FILER_STORAGES = {
     'public': {
         'main': {
@@ -197,7 +202,7 @@ THUMBNAIL_PRESERVE_FORMAT = False
 THUMBNAIL_FORMAT = 'WEBP'
 THUMBNAIL_DEBUG = DEBUG
 THUMBNAIL_QUALITY= 80
-THUMBNAIL_WEBP_QUALITY = THUMBNAIL_QUALITY
+THUMBNAIL_WEBP_QUALITY = THUMBNAIL_QUALITY   # Наша, кастомная настройка для WebP-сжатия исходных картинок
 THUMBNAIL_ENGINE = 'easy_thumbnails.engines.pil_engine.PilEngine'
 
 # Список расширений, которые нужно сохранять при генерации миниатюр

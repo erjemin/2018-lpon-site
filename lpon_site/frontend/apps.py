@@ -2,9 +2,10 @@ import os
 import hashlib
 import logging
 from io import BytesIO
+from typing import Tuple
 
 from django.apps import AppConfig
-from django.core.files.base import ContentFile
+from django.core.files.base import ContentFile, File
 from django.core.exceptions import ValidationError
 from PIL import Image as PILImage
 import pillow_heif
@@ -21,6 +22,17 @@ from lpon_site.settings import (
 # Регистрируем плагин HEIF в Pillow для поддержки HEIC/HEIF файлов
 pillow_heif.register_heif_opener()
 
+# Настройка параллельного декодирования HEIF/HEIC файлов
+# DECODE_THREADS: количество потоков для декодирования
+# - 0 = использовать количество ядер процессора (рекомендуется)
+# - N > 0 = использовать N потоков (больше потоков = быстрее, но больше памяти)
+pillow_heif.options.DECODE_THREADS = 0
+
+# Дополнительные опции Pillow для обработки изображений
+# LOAD_TRUNCATED_IMAGES: загружать некорректно завершенные изображения
+# (полезно для некачественных или поврежденных файлов)
+PILImage.LOAD_TRUNCATED_IMAGES = True
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,7 +44,8 @@ class FrontendConfig(AppConfig):
     verbose_name = 'Сайт lpon.ru'
     default_auto_field = 'django.db.models.AutoField'
 
-    def ready(self):
+    def ready(self) -> None:
+        """Инициализация Django Admin с кастомным заголовком и названиями."""
         from django.contrib import admin
         admin.site.site_header = 'Управление LPON'
         admin.site.site_title = 'LPON Administrator'
@@ -55,19 +68,35 @@ class CustomFilerConfig(AppConfig):
     FILE_VALIDATORS = FILE_VALIDATORS
 
     @staticmethod
-    def _convert_to_webp_if_needed(name: str, content):
+    def _convert_to_webp_if_needed(
+        name: str, content: File
+    ) -> Tuple[File, str, bool, int | None, int | None]:
         """
         Преобразует загруженное изображение в WebP формат.
         Поддерживает JPEG, PNG, BMP, TIFF и HEIC/HEIF.
 
-        Возвращает кортеж: (content, new_name, was_converted, image_width, image_height)
+        Args:
+            name: Имя файла с расширением
+            content: Содержимое файла (Django File object)
+
+        Returns:
+            Кортеж: (content, new_name, was_converted, image_width, image_height)
+            - content: WebP файл или исходный файл
+            - new_name: Новое имя файла (.webp)
+            - was_converted: Был ли произведен конвертирование
+            - image_width: Ширина изображения в пикселях (None если не конвертирован)
+            - image_height: Высота изображения в пикселях (None если не конвертирован)
+
+        Raises:
+            ValidationError: Если произошла ошибка при конвертации
 
         Размеры ОБЯЗАТЕЛЬНО получаются из исходного изображения перед конвертацией.
         При конвертации в WebP размеры пикселей не меняются, меняется только качество файла.
         """
         _, original_ext = os.path.splitext(name)
 
-        convertible_extensions = [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".heic", ".heif"]
+        # PNG исключено, т.к. их планирую использовать для иконок (может быть, верну позже)
+        convertible_extensions = [".jpg", ".jpeg", ".bmp", ".tiff", ".heic", ".heif"]
 
         if original_ext.lower() in convertible_extensions:
             try:
@@ -102,9 +131,10 @@ class CustomFilerConfig(AppConfig):
         content.seek(0)
         return content, name, False, None, None
 
-    def ready(self):
+    def ready(self) -> None:
         """
         Инициализация: патчинг MultiStorageFieldFile.save() для WebP конвертации.
+                       Добавление поддержки HEIC/HEIF в filer.
         """
         from filer.fields.multistorage_file import MultiStorageFieldFile
         from filer import settings as filer_settings
@@ -117,25 +147,34 @@ class CustomFilerConfig(AppConfig):
         filer_settings.IMAGE_EXTENSIONS  = list(set(filer_settings.IMAGE_EXTENSIONS + ['.heic', '.heif']))
         filer_settings.IMAGE_MIME_TYPES = list(set(filer_settings.IMAGE_MIME_TYPES + ['heic', 'heif']))
 
-        def patched_save(self_instance, name, content, save=True):
+        def patched_save(
+            self_instance, name: str, content: File, save: bool = True
+        ) -> str | None:
             """
-            Патчированная версия MultiStorageFieldFile.save().
-            Конвертирует изображения в WebP и передает размеры для генерации миниатюр.
+            Патчированг MultiStorageFieldFile.save().
+            Конвертирует загруженные картинки в WebP и обновляет метаданные.
+
+            Args:
+                self_instance: Экземпляр MultiStorageFieldFile
+                name: Имя файла
+                content: Содержимое файла
+                save: Нужно ли сохранять в БД (по умолчанию True)
+
+            Returns:
+                Имя сохраненного файла или None
             """
             new_content, new_name, converted, img_width, img_height = (
                 CustomFilerConfig._convert_to_webp_if_needed(name, content)
             )
 
             if converted:
-                # Устанавливаем correct mime_type для WebP
+                # Переустанавливаем корректный mime_type (всё станет WebP)
                 self_instance.instance.mime_type = "image/webp"
 
                 # Обновляем original_filename если есть
                 if hasattr(self_instance.instance, 'original_filename'):
                     if self_instance.instance.original_filename:
-                        original_filename, _ = os.path.splitext(
-                            self_instance.instance.original_filename
-                        )
+                        original_filename, _ = os.path.splitext(self_instance.instance.original_filename)
                         self_instance.instance.original_filename = f"{original_filename}.webp"
 
                 # КРИТИЧНО: Обновляем размер файла и sha1 на основе WebP данных, а не исходных
@@ -158,4 +197,3 @@ class CustomFilerConfig(AppConfig):
             return result
 
         MultiStorageFieldFile.save = patched_save
-
