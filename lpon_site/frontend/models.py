@@ -275,9 +275,9 @@ class TbImage(models.Model):
 
     image = FilerImageField(
         # Файл через django_filer
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
+        null=False,
+        blank=False,
+        on_delete=models.DO_NOTHING,
         verbose_name='Файл изображения',
         help_text='Файл изображения, загруженный через django_filer.',
     )
@@ -299,14 +299,14 @@ class TbImage(models.Model):
     s_img_src_url = models.URLField(
         blank=True,
         null=True,
-        verbose_name='URL источника',
-        help_text='Если изображение взято из внешнего источника (например, Discogs)',
+        verbose_name='URL',
+        help_text='URL источника, если изображение взято (в том числе и парсером) из внешнего источника (например, Discogs)',
     )
     i_img_sort = models.IntegerField(
         # Порядок (сортировка) вывода
         default=0,
         db_index=True,
-        verbose_name='Cортировка',
+        verbose_name='Сортировка',
         help_text='Порядок отображения изображений. Чем меньше число, тем выше в списке. Можно использовать'
                   ' для указания обложки (0), задника (1) и т.д.',
     )
@@ -315,14 +315,15 @@ class TbImage(models.Model):
         null=True,
         blank=True,
         default=None,
-        verbose_name='Уверенность (для автоматических данных)',
-        help_text='0.0 - 1.0, насколько уверены, что это правильное изображение',
+        verbose_name='Достоверность',
+        help_text='Уверенность (для автоматических данных) 0.0 - 1.0, насколько уверены, что это правильное изображение',
     )
     s_img_copyright = models.CharField(
-        # Авторские права и лицензия
+        # Авторские права и лицензия (по идее -- ненужное поле. Можно в filer использовать `obj.image.author`.
         max_length=255,
         blank=True,
         default='',
+        editable=False,  # Поле не редактируется. Кандидат на удаление.
         verbose_name='Авторские права / Лицензия',
         help_text='Например: "© 2024 User" или "CC-BY"',
     )
