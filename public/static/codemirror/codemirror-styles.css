@@ -1,0 +1,58 @@
+/* CodeMirror 6 - Стили для правильного отображения */
+
+:root {
+  color-scheme: light dark;
+    --brdr: light-dark(#333, #ccc);
+    --accent-mode-color: light-dark(#222, #eee);
+  }
+
+.cm6-editor-wrapper {
+  /* Основной wrapper, созданный CodeMirror */
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.cm-editor {
+  /* Сам редактор внутри wrapper - растягиваем на всю доступную высоту */
+  flex: 1 1 auto;
+  font-family: monospace;
+  line-height: 1;
+  border: 1px solid var(--brdr);;
+}
+
+/*
+  Утилитарные классы для управления шириной.
+  Мы ищем редактор .cm-editor ВНУТРИ элемента с нашим классом.
+*/
+
+.codemirror-width-s > .cm-editor {
+  /* Маленький (для чисел, коротких ID) */
+  max-width: 8em !important;
+}
+
+.codemirror-width-m .cm-editor {
+  /* Средний (для URL, коротких строк) */
+  max-width: calc(50% - 13em) !important;
+}
+
+.codemirror-width-l > .cm-editor {
+  /* Большой (для текста, JSON, HTML) */
+  max-width: calc(75% - 13em) !important;
+}
+
+.codemirror-width-xl > .cm-editor {
+  /* Во всю ширину контейнера */
+  max-width: calc(100% - 13em) !important;
+}
+
+/* --- Новое правило для скрытия номеров строк --- */
+/* Если у обертки есть наш класс, находим внутри панель с номерами и скрываем ее */
+.codemirror-no-lines .cm-gutters {
+    display: none !important;
+}
+
+
+/* Скрыть оригинальный textarea */
+textarea[data-codemirror-editor] {
+  display: none !important;
+}

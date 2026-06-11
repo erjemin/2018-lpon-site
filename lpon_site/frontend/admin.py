@@ -2,6 +2,8 @@
 # Регистрируем модели с удобным интерфейсом.
 
 from django import forms
+from django.db import models
+from django.forms import TextInput, Textarea, URLField
 from django.contrib import admin
 from django.utils.html import format_html, mark_safe
 from easy_thumbnails.files import get_thumbnailer
@@ -25,8 +27,6 @@ class TbImageAdminForm(forms.ModelForm):
         required=False,
         widget=forms.TextInput(attrs={
             'placeholder': 'Введите alt-текст для картинки',
-            'class': 'vTextField',
-            'size': 200,
         }),
         label='ALT (новый)',
         help_text='Текст для alt-атрибута картинки <tt>&lt;img alt="" .../&gt;</tt>.'
@@ -37,8 +37,6 @@ class TbImageAdminForm(forms.ModelForm):
         required=False,
         widget=forms.TextInput(attrs={
             'placeholder': 'Введите title-описание картинки',
-            'class': 'vTextField',
-            'cols': 120,
         }),
         label='TITLE (новый)',
         help_text='Текст для title-атрибута картинки <tt>&lt;img title="" .../&gt;</tt>.'
@@ -49,8 +47,6 @@ class TbImageAdminForm(forms.ModelForm):
         required=False,
         widget=forms.TextInput(attrs={
             'placeholder': 'XXXX, Авторские права на изображение',
-            'class': 'vTextField',
-            'cols': 120,
         }),
         label='Copyright',
         help_text='Авторские права на изображение (например: <tt>2025, Sergei Erjemin</tt>. Будет сохранён в filer_image.author'
@@ -64,6 +60,13 @@ class TbImageAdminForm(forms.ModelForm):
         """
         При инициализации формы подгружаем текущие значения alt/caption из filer_image.
         """
+        # Атрибуты для активации CodeMirror редактора
+        codemirror_attrs = {
+            'data-codemirror-editor': '1',
+            'data-language': 'text',
+            'data-width': '100%',    # Ширина для патча (100% займет полную ширину)
+        }
+
         super().__init__(*args, **kwargs)
 
         # Если редактируем существующую запись, получаем текущие значения из filer
@@ -71,12 +74,43 @@ class TbImageAdminForm(forms.ModelForm):
             try:
                 filer_image = self.instance.image
                 # Получаем текущие значения из filer и заполняем виртуальные поля
+                # ALT-text
                 self.fields['filer_alt_text'].initial = filer_image.default_alt_text or ''
+                self.fields['filer_alt_text'].widget = Textarea(attrs={
+                    'class': 'codemirror-width-m',
+                    **codemirror_attrs,
+                })
                 self.fields['filer_caption'].initial = filer_image.default_caption or ''
+                self.fields['filer_caption'].widget = Textarea(attrs={
+                    'class': 'codemirror-width-m',
+                    **codemirror_attrs,
+                })
                 self.fields['filer_copyright'].initial = filer_image.author or ''
+                self.fields['filer_copyright'].widget = Textarea(attrs={
+                    'class': 'codemirror-width-m',
+                    **codemirror_attrs,
+                })
             except Exception:
                 # Если ошибка при получении filer_image, просто оставляем пустые значения
                 pass
+
+        # s_img_src_url - поле URL источника (длинная строка)
+        self.fields['s_img_src_url'].widget = Textarea(attrs={
+            'class': 'codemirror-width-xl',
+            **codemirror_attrs,
+        })
+
+        # i_img_sort - поле сортировки (до четырех цифр)
+        self.fields['i_img_sort'].widget = Textarea(attrs={
+            'class': 'codemirror-width-s codemirror-no-lines',
+            **codemirror_attrs,
+        })
+
+        # f_img_confidence_score - поле confidence score (число с плавающей точкой)
+        self.fields['f_img_confidence_score'].widget = Textarea(attrs={
+            'class': 'codemirror-width-s codemirror-no-lines',
+            **codemirror_attrs,
+        })
 
 
 class ImageAdmin(admin.ModelAdmin):
@@ -84,14 +118,26 @@ class ImageAdmin(admin.ModelAdmin):
     Админ для изображений TbImage с поддержкой редактирования метаданных filer_image.
 
     Позволяет пользователю заполнить default_alt_text и default_caption для картинки в filer
-    прямо в админке TbImage, без необходимости отдельного редактирования фiler.
+    прямо в админке TbImage, без необходимости отдельного редактирования filer.
     """
     form = TbImageAdminForm  # Используем кастомную форму с виртуальными полями
+
+    # Подключаем JS через Media (правильный способ!)
+    class Media:
+        css = {
+            'all': ('codemirror/codemirror-styles.css',)  # Стили для CodeMirror
+        }
+        js = (
+            'codemirror/editor.js',              # Основной CodeMirror
+            'codemirror/codemirror-patch.js',  # Патч для управления высотой/шириной
+        )
+
     list_display = ('id', 'image_thumbnail', 'image', '_display_filer_alt_text', 'i_img_sort', 't_img_created')
     list_display_links = ('id', 'image_thumbnail', 'image')
     list_filter = ('l_img_source', 'l_img_reality', 't_img_created')
     ordering = ('image', 'i_img_sort')
     readonly_fields = ('t_img_created', 't_img_updated', '_display_filer_alt_text', '_display_filer_caption')
+
     fieldsets = (
         ('Изображение', {
             'fields': ('image', 'l_img_source', 'l_img_reality', 's_img_src_url', 'i_img_sort',
@@ -101,8 +147,8 @@ class ImageAdmin(admin.ModelAdmin):
         ('Метаданные filer (SEO для картинок)', {
             'fields': ('_display_filer_alt_text', '_display_filer_caption', 'filer_alt_text', 'filer_caption',
                        'filer_copyright'),
-            'description': 'Редактируемые поля для заполнения Alt текста и описания в filer. Если не заполнить,'
-                           ' текущие значения останутся без изменений (или не будут заполнены при создании).',
+            'description': 'Редактируемые поля для заполнения ALT-, TITLE- и ©-текста в filer. Если не заполнить,'
+                           ' текущие значения останутся без изменений (и не будут заполнены при создании).',
             # 'classes': ('collapse',),
         }),
         ('Служебная информация', {
