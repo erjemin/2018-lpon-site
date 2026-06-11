@@ -44,6 +44,17 @@ class TbImageAdminForm(forms.ModelForm):
         help_text='Текст для title-атрибута картинки <tt>&lt;img title="" .../&gt;</tt>.'
                   ' Будет сохранён в filer_image.default_caption'
     )
+    filer_copyright = forms.CharField(
+        max_length=255,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'placeholder': 'XXXX, Авторские права на изображение',
+            'class': 'vTextField',
+            'cols': 120,
+        }),
+        label='Copyright',
+        help_text='Авторские права на изображение (например: <tt>2025, Sergei Erjemin</tt>. Будет сохранён в filer_image.author'
+    )
 
     class Meta:
         model = TbImage
@@ -62,6 +73,7 @@ class TbImageAdminForm(forms.ModelForm):
                 # Получаем текущие значения из filer и заполняем виртуальные поля
                 self.fields['filer_alt_text'].initial = filer_image.default_alt_text or ''
                 self.fields['filer_caption'].initial = filer_image.default_caption or ''
+                self.fields['filer_copyright'].initial = filer_image.author or ''
             except Exception:
                 # Если ошибка при получении filer_image, просто оставляем пустые значения
                 pass
@@ -87,7 +99,8 @@ class ImageAdmin(admin.ModelAdmin):
             'description': 'Основные данные об изображении и источнике',
         }),
         ('Метаданные filer (SEO для картинок)', {
-            'fields': ('_display_filer_alt_text', '_display_filer_caption', 'filer_alt_text', 'filer_caption'),
+            'fields': ('_display_filer_alt_text', '_display_filer_caption', 'filer_alt_text', 'filer_caption',
+                       'filer_copyright'),
             'description': 'Редактируемые поля для заполнения Alt текста и описания в filer. Если не заполнить,'
                            ' текущие значения останутся без изменений (или не будут заполнены при создании).',
             # 'classes': ('collapse',),
@@ -179,15 +192,20 @@ class ImageAdmin(admin.ModelAdmin):
             try:
                 filer_image = obj.image
 
-                # Обновляем alt_text, если было заполнено в форме
+                # Обновляем alt_text (ALT), если было заполнено в форме
                 alt_text = form.cleaned_data.get('filer_alt_text', '').strip()
                 if alt_text:  # Если пользователь что-то ввел
                     filer_image.default_alt_text = alt_text
 
-                # Обновляем caption, если было заполнено в форме
+                # Обновляем caption (TITLE), если было заполнено в форме
                 caption = form.cleaned_data.get('filer_caption', '').strip()
                 if caption:  # Если пользователь что-то ввел
                     filer_image.default_caption = caption
+
+                # Обновляем author (copyrughight), если было заполнено в форме
+                author = form.cleaned_data.get('filer_copyright', '').strip()
+                if author:
+                    filer_image.author = author
 
                 # Сохраняем filer_image с новыми метаданными
                 filer_image.save()
