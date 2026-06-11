@@ -22,7 +22,7 @@ class TbImageAdminForm(forms.ModelForm):
     (default_alt_text и default_caption), которые не хранятся в TbImage, но есть в filer_image
     """
     # Виртуальные поля для заполнения метаданных filer_image
-    filer_alt_text = forms.CharField(
+    alt_text = forms.CharField(
         max_length=255,
         required=False,
         widget=forms.TextInput(attrs={
@@ -32,7 +32,7 @@ class TbImageAdminForm(forms.ModelForm):
         help_text='Текст для alt-атрибута картинки <tt>&lt;img alt="" .../&gt;</tt>.'
                   ' Будет сохранён в filer_image.default_alt_text'
     )
-    filer_caption = forms.CharField(
+    title_text = forms.CharField(
         max_length=255,
         required=False,
         widget=forms.TextInput(attrs={
@@ -42,7 +42,7 @@ class TbImageAdminForm(forms.ModelForm):
         help_text='Текст для title-атрибута картинки <tt>&lt;img title="" .../&gt;</tt>.'
                   ' Будет сохранён в filer_image.default_caption'
     )
-    filer_copyright = forms.CharField(
+    copyright_text = forms.CharField(
         max_length=255,
         required=False,
         widget=forms.TextInput(attrs={
@@ -72,21 +72,24 @@ class TbImageAdminForm(forms.ModelForm):
         # Если редактируем существующую запись, получаем текущие значения из filer
         if self.instance and self.instance.pk and hasattr(self.instance, 'image') and self.instance.image:
             try:
+                # Получаем связанные данные из filer_image
                 filer_image = self.instance.image
-                # Получаем текущие значения из filer и заполняем виртуальные поля
-                self.fields['filer_alt_text'].initial = filer_image.default_alt_text or ''
-                self.fields['filer_caption'].initial = filer_image.default_caption or ''
-                self.fields['filer_copyright'].initial = filer_image.author or ''
-                # Активация CodeMirror и устанавливаем CSS-классы для виртуальных полей
-                self.fields['filer_alt_text'].widget = Textarea(attrs={
+
+                # Устанавливаем значения из filer в виртуальные поля
+                self.fields['alt_text'].initial = filer_image.default_alt_text or ''
+                self.fields['title_text'].initial = filer_image.default_caption or ''
+                self.fields['copyright_text'].initial = filer_image.author or ''
+
+                # Активируем CodeMirror и устанавливаем CSS-классы для виртуальных полей
+                self.fields['alt_text'].widget = Textarea(attrs={
                     **codemirror_attrs,
                     'class': 'codemirror-width-m',
                 })
-                self.fields['filer_caption'].widget = Textarea(attrs={
+                self.fields['title_text'].widget = Textarea(attrs={
                     **codemirror_attrs,
                     'class': 'codemirror-width-m',
                 })
-                self.fields['filer_copyright'].widget = Textarea(attrs={
+                self.fields['copyright_text'].widget = Textarea(attrs={
                     **codemirror_attrs,
                     'class': 'codemirror-width-m',
                 })
@@ -94,22 +97,18 @@ class TbImageAdminForm(forms.ModelForm):
                 # Если ошибка при получении filer_image, просто оставляем пустые значения
                 pass
 
-        # s_img_src_url - поле URL источника (длинная строка)
+        # Активируем CodeMirror и устанавливаем классы для реальных полей
         self.fields['s_img_src_url'].widget = Textarea(attrs={
+            **codemirror_attrs,
             'class': 'codemirror-width-xl',
-            **codemirror_attrs,
         })
-
-        # i_img_sort - поле сортировки (до четырех цифр)
         self.fields['i_img_sort'].widget = Textarea(attrs={
-            'class': 'codemirror-width-s codemirror-no-lines',
             **codemirror_attrs,
+            'class': 'codemirror-width-s codemirror-no-lines',
         })
-
-        # f_img_confidence_score - поле confidence score (число с плавающей точкой)
         self.fields['f_img_confidence_score'].widget = Textarea(attrs={
-            'class': 'codemirror-width-s codemirror-no-lines',
             **codemirror_attrs,
+            'class': 'codemirror-width-s codemirror-no-lines',
         })
 
 
@@ -129,14 +128,14 @@ class ImageAdmin(admin.ModelAdmin):
         }
         js = (
             'codemirror/editor.js',              # Основной CodeMirror
-            'codemirror/codemirror-patch.js',  # Патч для управления высотой/шириной
+            'codemirror/codemirror-patch.js',    # Патч для управления высотой/шириной
         )
 
-    list_display = ('id', 'image_thumbnail', 'image', '_display_filer_alt_text', 'i_img_sort', 't_img_created')
+    list_display = ('id', 'image_thumbnail', 'image', '_display_alt_text', 'i_img_sort', 't_img_created')
     list_display_links = ('id', 'image_thumbnail', 'image')
     list_filter = ('l_img_source', 'l_img_reality', 't_img_created')
     ordering = ('image', 'i_img_sort')
-    readonly_fields = ('t_img_created', 't_img_updated', '_display_filer_alt_text', '_display_filer_caption')
+    readonly_fields = ('t_img_created', 't_img_updated', '_display_alt_text', '_display_title_text')
 
     fieldsets = (
         ('Изображение', {
@@ -145,8 +144,8 @@ class ImageAdmin(admin.ModelAdmin):
             'description': 'Основные данные об изображении и источнике',
         }),
         ('Метаданные filer (SEO для картинок)', {
-            'fields': ('_display_filer_alt_text', '_display_filer_caption', 'filer_alt_text', 'filer_caption',
-                       'filer_copyright'),
+            'fields': ('_display_alt_text', '_display_title_text', 'alt_text', 'title_text',
+                       'copyright_text'),
             'description': 'Редактируемые поля для заполнения ALT-, TITLE- и ©-текста в filer. Если не заполнить,'
                            ' текущие значения останутся без изменений (и не будут заполнены при создании).',
             # 'classes': ('collapse',),
@@ -192,7 +191,7 @@ class ImageAdmin(admin.ModelAdmin):
     # Установляем название столбца в админке
     image_thumbnail.short_description = 'Миниатюра (40x40)'
 
-    def _display_filer_alt_text(self, obj):
+    def _display_alt_text(self, obj):
         """
         Display-метод для отображения текущего alt-текста в filer (read-only).
         Показывает, какой текст сейчас установлен в filer_image.
@@ -205,9 +204,9 @@ class ImageAdmin(admin.ModelAdmin):
                 return '(ошибка при получении)'
         return '(новая запись, значение будет установлено после сохранения)'
 
-    _display_filer_alt_text.short_description = 'ALT из filer'
+    _display_alt_text.short_description = 'ALT из filer'
 
-    def _display_filer_caption(self, obj):
+    def _display_title_text(self, obj):
         """
         Display-метод для отображения текущего caption в filer (read-only).
         Показывает, какой текст сейчас установлен в filer_image.
@@ -220,13 +219,13 @@ class ImageAdmin(admin.ModelAdmin):
                 return '(ошибка при получении)'
         return '(новая запись, значение будет установлено после сохранения)'
 
-    _display_filer_caption.short_description = 'TITLE из filer'
+    _display_title_text.short_description = 'TITLE из filer'
 
     def save_model(self, request, obj, form, change):
         """
         Переопределяем save_model для обновления метаданных filer_image.
 
-        Если пользователь заполнил виртуальные поля filer_alt_text или filer_caption,
+        Если пользователь заполнил виртуальные поля alt_text или title_text,
         их значения сохраняются в соответствующие поля filer_image.
         Если поля не заполнены, текущие значения в filer остаются без изменений.
         """
@@ -239,17 +238,17 @@ class ImageAdmin(admin.ModelAdmin):
                 filer_image = obj.image
 
                 # Обновляем alt_text (ALT), если было заполнено в форме
-                alt_text = form.cleaned_data.get('filer_alt_text', '').strip()
+                alt_text = form.cleaned_data.get('alt_text', '').strip()
                 if alt_text:  # Если пользователь что-то ввел
                     filer_image.default_alt_text = alt_text
 
                 # Обновляем caption (TITLE), если было заполнено в форме
-                caption = form.cleaned_data.get('filer_caption', '').strip()
+                caption = form.cleaned_data.get('title_text', '').strip()
                 if caption:  # Если пользователь что-то ввел
                     filer_image.default_caption = caption
 
                 # Обновляем author (copyrughight), если было заполнено в форме
-                author = form.cleaned_data.get('filer_copyright', '').strip()
+                author = form.cleaned_data.get('copyright_text', '').strip()
                 if author:
                     filer_image.author = author
 
