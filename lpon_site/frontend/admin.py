@@ -74,21 +74,21 @@ class TbImageAdminForm(forms.ModelForm):
             try:
                 filer_image = self.instance.image
                 # Получаем текущие значения из filer и заполняем виртуальные поля
-                # ALT-text
                 self.fields['filer_alt_text'].initial = filer_image.default_alt_text or ''
-                self.fields['filer_alt_text'].widget = Textarea(attrs={
-                    'class': 'codemirror-width-m',
-                    **codemirror_attrs,
-                })
                 self.fields['filer_caption'].initial = filer_image.default_caption or ''
-                self.fields['filer_caption'].widget = Textarea(attrs={
-                    'class': 'codemirror-width-m',
-                    **codemirror_attrs,
-                })
                 self.fields['filer_copyright'].initial = filer_image.author or ''
-                self.fields['filer_copyright'].widget = Textarea(attrs={
-                    'class': 'codemirror-width-m',
+                # Активация CodeMirror и устанавливаем CSS-классы для виртуальных полей
+                self.fields['filer_alt_text'].widget = Textarea(attrs={
                     **codemirror_attrs,
+                    'class': 'codemirror-width-m',
+                })
+                self.fields['filer_caption'].widget = Textarea(attrs={
+                    **codemirror_attrs,
+                    'class': 'codemirror-width-m',
+                })
+                self.fields['filer_copyright'].widget = Textarea(attrs={
+                    **codemirror_attrs,
+                    'class': 'codemirror-width-m',
                 })
             except Exception:
                 # Если ошибка при получении filer_image, просто оставляем пустые значения

@@ -30,7 +30,7 @@
   max-width: 8em !important;
 }
 
-.codemirror-width-m .cm-editor {
+.codemirror-width-m > .cm-editor {
   /* Средний (для URL, коротких строк) */
   max-width: calc(50% - 13em) !important;
 }
@@ -45,10 +45,9 @@
   max-width: calc(100% - 13em) !important;
 }
 
-/* --- Новое правило для скрытия номеров строк --- */
-/* Если у обертки есть наш класс, находим внутри панель с номерами и скрываем ее */
 .codemirror-no-lines .cm-gutters {
-    display: none !important;
+  /* Скрываем  нумерацию строк */
+  display: none !important;
 }
 
 
