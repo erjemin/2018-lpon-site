@@ -46,17 +46,16 @@ cp "$ROOT_DIR/package.json" "$ROOT_DIR/package-lock.json" "$WORK_DIR/"
 
 cat > "$WORK_DIR/src/editor.js" <<'EOF'
 import { Compartment, EditorState } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { EditorView, lineNumbers, placeholder } from '@codemirror/view';
 import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { html } from '@codemirror/lang-html';
 import { javascript } from '@codemirror/lang-javascript';
 import { json } from '@codemirror/lang-json';
 import { css } from '@codemirror/lang-css';
 import { solarizedDark, solarizedLight } from '@uiw/codemirror-theme-solarized';
-import { lineNumbers } from '@codemirror/view';
 
 const themeCompartment = new Compartment();
-const processedForms = new Set(); // Храним формы, на которые уже повесили обработчик
+const processedForms = new Set();
 
 function isDarkTheme() {
   const rootTheme = document.documentElement.dataset.theme;
@@ -74,51 +73,50 @@ function reconfigureTheme(view) {
 function initCodeMirrorEditors() {
   document.querySelectorAll('textarea[data-codemirror-editor]').forEach((textarea) => {
     const language = textarea.dataset.language || 'text';
+    const inputMode = textarea.dataset.inputMode || 'default';
     let initialDoc = textarea.value ?? '';
     const wrapper = document.createElement('div');
     wrapper.className = 'cm6-editor-wrapper';
     textarea.insertAdjacentElement('beforebegin', wrapper);
 
-    // --- Beautify JSON on load ---
     if (language === 'json') {
       try {
         const parsed = JSON.parse(initialDoc);
-        initialDoc = JSON.stringify(parsed, null, 2); // Форматируем с отступом в 2 пробела
+        initialDoc = JSON.stringify(parsed, null, 2);
       } catch (e) {
-        // Если в поле невалидный JSON, оставляем как есть
         console.warn("CodeMirror: Initial content is not valid JSON, displaying as is.", e);
       }
     }
 
     const syncTextarea = EditorView.updateListener.of((update) => {
       if (update.docChanged) {
-        // Синхронизируем "красивый" JSON в textarea для немедленного отображения
         textarea.value = update.state.doc.toString();
       }
     });
 
+    // --- Собираем расширения в правильном порядке ---
     const extensions = [
-      EditorView.lineWrapping,
       syntaxHighlighting(defaultHighlightStyle),
       syncTextarea,
       themeCompartment.of(isDarkTheme() ? solarizedDark : solarizedLight),
     ];
 
-    // Добавляем нумерацию строк, если не указано обратное
-    if (!textarea.classList.contains('codemirror-no-lines')) {
-      extensions.unshift(lineNumbers());
-    }
+    // Язык
+    if (language === 'javascript') extensions.push(javascript());
+    else if (language === 'css') extensions.push(css());
+    else if (language === 'json') extensions.push(json());
+    else if (language === 'html') extensions.push(html());
 
-    if (language === 'javascript') {
-      extensions.unshift(javascript());
-    } else if (language === 'css') {
-      extensions.unshift(css());
-    } else if (language === 'json') {
-      extensions.unshift(json());
-    } else if (language === 'html') {
-      extensions.unshift(html());
+    // Режим ввода
+    if (inputMode === 'url') {
+      extensions.push(placeholder('https://example.com/path'));
+      // Для URL не добавляем lineWrapping и lineNumbers
+    } else {
+      extensions.push(EditorView.lineWrapping);
+      if (!textarea.classList.contains('codemirror-no-lines')) {
+        extensions.push(lineNumbers());
+      }
     }
-    // Для 'text' язык не добавляется, будет обычное поле
 
     const state = EditorState.create({
       doc: initialDoc,
@@ -130,7 +128,6 @@ function initCodeMirrorEditors() {
       parent: wrapper,
     });
 
-    // Сохраняем ссылку на инстанс редактора для последующего доступа
     textarea.cmView = view;
 
     reconfigureTheme(view);
@@ -144,7 +141,6 @@ function initCodeMirrorEditors() {
     const colorScheme = window.matchMedia('(prefers-color-scheme: dark)');
     colorScheme.addEventListener('change', () => reconfigureTheme(view));
 
-    // --- Minify JSON on save ---
     const form = textarea.closest('form');
     if (form && !processedForms.has(form)) {
       form.addEventListener('submit', () => {
@@ -154,10 +150,9 @@ function initCodeMirrorEditors() {
             try {
               const parsed = JSON.parse(prettyJson);
               const minifiedJson = JSON.stringify(parsed);
-              jsonTextarea.value = minifiedJson; // Подменяем значение на сжатое
+              jsonTextarea.value = minifiedJson;
             } catch (e) {
-              // Если пользователь ввел невалидный JSON, позволяем Django его отвергнуть
-              console.warn("CodeMirror: Could not minify invalid JSON before submit. Django will likely reject this.", e);
+              console.warn("CodeMirror: Could not minify invalid JSON before submit.", e);
             }
           }
         });
