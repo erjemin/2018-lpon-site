@@ -362,9 +362,63 @@ class SellerAdmin(admin.ModelAdmin):
     search_fields = ('s_seller',)
     readonly_fields = ('t_seller_created', 't_seller_updated')
 
+# ============================================================================
+# АДМИНКА ИСТОЧНИКОВ ДАННЫХ
+#
+# Кастомная форма
+class SourceAdminForm(forms.ModelForm):
+    """
+    Кастомная форма для админки источников данных (TbSource).
+    Добавляет виджеты CodeMirror для текстовых полей
+    """
+    class Meta:
+        model = TbSource
+        fields = ('id', 'k_source_to_seller', 's_source_name', 'l_source_type', 't_source_data',
+                  'source_file', 's_source_url', 'j_source_metadata',)
 
+    def __init__(self, *args, **kwargs):
+        """
+        При инициализации формы подгружаем
+        """
+        # Атрибуты для активации CodeMirror редактора
+        codemirror_attrs = {
+            'data-codemirror-editor': '1',
+            'data-width': '100%',    # Ширина для патча (100% займет полную ширину)
+        }
+
+        super().__init__(*args, **kwargs)
+
+        # Активируем CodeMirror и устанавливаем классы для реальных полей
+        self.fields['s_source_name'].widget = Textarea(attrs={
+            **codemirror_attrs,
+            'class': 'codemirror-width-l codemirror-no-lines',
+            'data-language': 'text',
+        })
+        self.fields['s_source_url'].widget = Textarea(attrs={
+            **codemirror_attrs,
+            'class': 'codemirror-width-xl codemirror-no-lines',
+            'data-language': 'url',
+        })
+        self.fields['j_source_metadata'].widget = Textarea(attrs={
+            **codemirror_attrs,
+            'class': 'codemirror-width-l codemirror-min-height-5',
+            'data-language': 'json',
+        })
+
+#
 class SourceAdmin(admin.ModelAdmin):
     """Админ для источников"""
+    form = SourceAdminForm  # Используем кастомную форму с виртуальными полями
+
+    # Подключаем JS через Media (правильный способ!)
+    class Media:
+        css = {
+            'all': ('codemirror/codemirror-styles.css',)  # Стили для CodeMirror
+        }
+        js = (
+            'codemirror/editor.js',              # Основной CodeMirror
+            'codemirror/codemirror-patch.js',    # Патч для управления высотой/шириной
+        )
     list_display = ('id', 's_source_name', 'k_source_to_seller', 'l_source_type', 't_source_data')
     list_filter = ('l_source_type', 't_source_data')
     search_fields = ('s_source_name',)
