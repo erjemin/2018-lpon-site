@@ -105,6 +105,7 @@
 # ├──────────────────────┼──────────────────────────────────────────────────────
 # │ PK: id               │  AutoField
 # │ s_seller             │  Название (уникальный)
+# │ l_seller_currency    │  (rub, usd, eur, ...)
 # │ l_seller_type        │  Тип (seller, label, diy, crowdfunding, other)
 # │ k_seller_to_article  │  1:1 FK → TbArticle (content, SEO, slug)
 # │ t_seller_created     │  Timestamp
@@ -120,7 +121,6 @@
 #             │ PK: id               │  AutoField
 #             │ k_source_to_seller   │  FK → TbSeller [indexed]
 #             │ l_source_type        │  (excel, csv, url, other)
-#             │ l_source_currency    │  (rub, usd, eur, ...)
 #             │ s_source_name        │  Название источника
 #             │ source_file          │  FilerFileField
 #             │ s_source_url         │  URL источника
@@ -747,6 +747,8 @@ class TbLabel(models.Model):
 
 # ============================================================================
 # ПРОДАВЦЫ / МАГАЗИНЫ
+#     - Валюта привязана к продавцу. Если у продавца несколько валют,
+#       создаем несколько продавцов с разными валютами.
 # ============================================================================
 class TbSeller(models.Model):
     """Продавец или магазин, который продаёт товары."""
@@ -756,6 +758,19 @@ class TbSeller(models.Model):
         DIY = 'diy', 'Самиздат группы'
         CROWD = 'crowd', 'Краудфандинг'
         OTHER = '???', 'Другое'
+
+    class Currency(models.TextChoices):
+        RUB = 'rub', 'RUB: российский рубль'
+        USD = 'usd', 'USD: американский доллар'
+        EUR = 'eur', 'EUR: евро'
+        AMD = 'amd', 'AMD: армянских драм'
+        TRY = 'try', 'TRY: турецкая лира'
+        JPY = 'jpy', 'JPY: японская иена'
+        GBP = 'gbp', 'GBP: британский фунт'
+        CNY = 'cny', 'CNY: китайский юань'
+        BYN = 'byn', 'BYN: белорусский рубль'
+        TON = 'ton', 'TON: криптовалюта TON'
+        OTHER = '??', 'Other'
 
     # Используем SmallAutoField для оптимизации (макс ~32k)
     # Продавцов обычно до 1000-10000, поэтому достаточно
@@ -767,6 +782,13 @@ class TbSeller(models.Model):
         verbose_name='Название продавца',
         help_text='Техническое название продавца или магазина. Например: <tt>Клюква Рекодс</tt>. Может совпадать'
                   ' с названием продавца, если лейбл сам реализует свои издания через сайт.',
+    )
+    l_seller_currency = models.CharField(
+        max_length=3,
+        choices=Currency.choices,
+        default=Currency.RUB,
+        verbose_name='Валюта источника',
+        help_text='В какой валюте указаны цены в этом источнике. Все офферы из этого источника будут в этой валюте.',
     )
     k_seller_to_article = models.OneToOneField(
         TbArticle,
@@ -1042,19 +1064,6 @@ class TbSource(models.Model):
         URL = 'url', 'URL страницы с данными (например, HTML-страница с каталогом товаров)'
         OTHER = '??', 'Другое'
 
-    class Currency(models.TextChoices):
-        RUB = 'rub', 'RUB: российский рубль'
-        USD = 'usd', 'USD: американский доллар'
-        EUR = 'eur', 'EUR: евро'
-        TRY = 'try', 'TRY: турецкая лира'
-        AMD = 'amd', 'AMD: армянский драм'
-        JPY = 'jpy', 'JPY: японская иена'
-        GBP = 'gbp', 'GBP: британский фунт'
-        CNY = 'cny', 'CNY: китайский юань'
-        BYN = 'byn', 'BYN: белорусский рубль'
-        TON = 'ton', 'TON: криптовалюта TON'
-        OTHER = '??', 'Other'
-
     # Используем SmallAutoField для оптимизации (макс ~32k)
     # Источников обычно до 1000, достаточно
     id = models.SmallAutoField(primary_key=True)
@@ -1066,13 +1075,6 @@ class TbSource(models.Model):
         related_name='seller_to_source',
         db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
         verbose_name='Продавец',
-    )
-    l_source_currency = models.CharField(
-        max_length=3,
-        choices=Currency.choices,
-        default=Currency.RUB,
-        verbose_name='Валюта источника',
-        help_text='В какой валюте указаны цены в этом источнике. Все офферы из этого источника будут в этой валюте.',
     )
     s_source_name = models.CharField(
         max_length=128,

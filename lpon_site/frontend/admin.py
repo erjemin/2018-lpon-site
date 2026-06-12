@@ -309,16 +309,16 @@ class LabelAdmin(admin.ModelAdmin):
 
 class SellerAdmin(admin.ModelAdmin):
     """Админ для продавцов"""
-    list_display = ('id', 's_seller', 'l_seller_type', 't_seller_created')
-    list_filter = ('l_seller_type',)
+    list_display = ('id', 's_seller', 'l_seller_type', 'l_seller_currency', 't_seller_created')
+    list_filter = ('l_seller_type', 'l_seller_currency', )
     search_fields = ('s_seller',)
     readonly_fields = ('t_seller_created', 't_seller_updated')
 
 
 class SourceAdmin(admin.ModelAdmin):
     """Админ для источников"""
-    list_display = ('id', 's_source_name', 'k_source_to_seller', 'l_source_type', 'l_source_currency', 't_source_data')
-    list_filter = ('l_source_type', 'l_source_currency', 't_source_data')
+    list_display = ('id', 's_source_name', 'k_source_to_seller', 'l_source_type', 't_source_data')
+    list_filter = ('l_source_type', 't_source_data')
     search_fields = ('s_source_name',)
     readonly_fields = ('t_source_created', 't_source_updated')
 
