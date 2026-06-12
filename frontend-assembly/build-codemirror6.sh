@@ -56,18 +56,12 @@ import { solarizedDark, solarizedLight } from '@uiw/codemirror-theme-solarized';
 import { lineNumbers } from '@codemirror/view';
 
 const themeCompartment = new Compartment();
+const processedForms = new Set(); // Храним формы, на которые уже повесили обработчик
 
 function isDarkTheme() {
   const rootTheme = document.documentElement.dataset.theme;
-
-  if (rootTheme === 'dark') {
-    return true;
-  }
-
-  if (rootTheme === 'light') {
-    return false;
-  }
-
+  if (rootTheme === 'dark') return true;
+  if (rootTheme === 'light') return false;
   return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
@@ -79,26 +73,41 @@ function reconfigureTheme(view) {
 
 function initCodeMirrorEditors() {
   document.querySelectorAll('textarea[data-codemirror-editor]').forEach((textarea) => {
-    const language = textarea.dataset.language || 'html';
-    const initialDoc = textarea.value ?? '';
+    const language = textarea.dataset.language || 'text';
+    let initialDoc = textarea.value ?? '';
     const wrapper = document.createElement('div');
     wrapper.className = 'cm6-editor-wrapper';
     textarea.insertAdjacentElement('beforebegin', wrapper);
-    textarea.hidden = true;
+
+    // --- Beautify JSON on load ---
+    if (language === 'json') {
+      try {
+        const parsed = JSON.parse(initialDoc);
+        initialDoc = JSON.stringify(parsed, null, 2); // Форматируем с отступом в 2 пробела
+      } catch (e) {
+        // Если в поле невалидный JSON, оставляем как есть
+        console.warn("CodeMirror: Initial content is not valid JSON, displaying as is.", e);
+      }
+    }
 
     const syncTextarea = EditorView.updateListener.of((update) => {
       if (update.docChanged) {
+        // Синхронизируем "красивый" JSON в textarea для немедленного отображения
         textarea.value = update.state.doc.toString();
       }
     });
 
     const extensions = [
-      lineNumbers(),
       EditorView.lineWrapping,
       syntaxHighlighting(defaultHighlightStyle),
       syncTextarea,
       themeCompartment.of(isDarkTheme() ? solarizedDark : solarizedLight),
     ];
+
+    // Добавляем нумерацию строк, если не указано обратное
+    if (!textarea.classList.contains('codemirror-no-lines')) {
+      extensions.unshift(lineNumbers());
+    }
 
     if (language === 'javascript') {
       extensions.unshift(javascript());
@@ -106,9 +115,10 @@ function initCodeMirrorEditors() {
       extensions.unshift(css());
     } else if (language === 'json') {
       extensions.unshift(json());
-    } else {
+    } else if (language === 'html') {
       extensions.unshift(html());
     }
+    // Для 'text' язык не добавляется, будет обычное поле
 
     const state = EditorState.create({
       doc: initialDoc,
@@ -119,6 +129,9 @@ function initCodeMirrorEditors() {
       state,
       parent: wrapper,
     });
+
+    // Сохраняем ссылку на инстанс редактора для последующего доступа
+    textarea.cmView = view;
 
     reconfigureTheme(view);
 
@@ -131,7 +144,26 @@ function initCodeMirrorEditors() {
     const colorScheme = window.matchMedia('(prefers-color-scheme: dark)');
     colorScheme.addEventListener('change', () => reconfigureTheme(view));
 
-    textarea.value = view.state.doc.toString();
+    // --- Minify JSON on save ---
+    const form = textarea.closest('form');
+    if (form && !processedForms.has(form)) {
+      form.addEventListener('submit', () => {
+        form.querySelectorAll('textarea[data-language="json"]').forEach(jsonTextarea => {
+          if (jsonTextarea.cmView) {
+            const prettyJson = jsonTextarea.cmView.state.doc.toString();
+            try {
+              const parsed = JSON.parse(prettyJson);
+              const minifiedJson = JSON.stringify(parsed);
+              jsonTextarea.value = minifiedJson; // Подменяем значение на сжатое
+            } catch (e) {
+              // Если пользователь ввел невалидный JSON, позволяем Django его отвергнуть
+              console.warn("CodeMirror: Could not minify invalid JSON before submit. Django will likely reject this.", e);
+            }
+          }
+        });
+      });
+      processedForms.add(form);
+    }
   });
 }
 
