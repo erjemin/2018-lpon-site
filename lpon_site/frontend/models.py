@@ -108,6 +108,7 @@
 # │ l_seller_currency    │  (rub, usd, eur, ...)
 # │ l_seller_type        │  Тип (seller, label, diy, crowdfunding, other)
 # │ k_seller_to_article  │  1:1 FK → TbArticle (content, SEO, slug)
+# │ j_seller_metadata    │  JSON с дополнительными данными (ссылки, контакты, соцсети)
 # │ t_seller_created     │  Timestamp
 # │ t_seller_updated     │  Timestamp
 # │                      │  ⬆ Индекс: id

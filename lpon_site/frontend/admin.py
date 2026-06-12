@@ -306,9 +306,57 @@ class LabelAdmin(admin.ModelAdmin):
     search_fields = ('s_label',)
     readonly_fields = ('t_label_created', 't_label_updated')
 
+# ================
+# АДМИН-ПАНЕЛЬ ДЛЯ ПРОДАВЦА/SELLER
+#
+# Кастомная форма
+class SellerAdminForm(forms.ModelForm):
+    """
+    Кастомная форма для админки продавца (Seller).
+    Добавлaет виджеты CodeMirror для текстовых полей
+    """
+    class Meta:
+        model = TbSeller
+        fields = ('id', 's_seller', 'j_seller_metadata', 'l_seller_type', 'l_seller_currency',)
 
+    def __init__(self, *args, **kwargs):
+        """
+        При инициализации формы подгружаем
+        """
+        # Атрибуты для активации CodeMirror редактора
+        codemirror_attrs = {
+            'data-codemirror-editor': '1',
+            'data-width': '100%',    # Ширина для патча (100% займет полную ширину)
+        }
+
+        super().__init__(*args, **kwargs)
+
+        # Активируем CodeMirror и устанавливаем классы для реальных полей
+        self.fields['s_seller'].widget = Textarea(attrs={
+            **codemirror_attrs,
+            'class': 'codemirror-width-l codemirror-no-lines',
+            'data-language': 'text',
+        })
+        self.fields['j_seller_metadata'].widget = Textarea(attrs={
+            **codemirror_attrs,
+            'class': 'codemirror-width-xl codemirror-min-height-5',
+            'data-language': 'json',
+        })
+
+# Админ для продавца (Seller)
 class SellerAdmin(admin.ModelAdmin):
     """Админ для продавцов"""
+    form = SellerAdminForm  # Используем кастомную форму с виртуальными полями
+
+    # Подключаем JS через Media (правильный способ!)
+    class Media:
+        css = {
+            'all': ('codemirror/codemirror-styles.css',)  # Стили для CodeMirror
+        }
+        js = (
+            'codemirror/editor.js',              # Основной CodeMirror
+            'codemirror/codemirror-patch.js',    # Патч для управления высотой/шириной
+        )
     list_display = ('id', 's_seller', 'l_seller_type', 'l_seller_currency', 't_seller_created')
     list_filter = ('l_seller_type', 'l_seller_currency', )
     search_fields = ('s_seller',)
