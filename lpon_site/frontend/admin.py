@@ -87,7 +87,7 @@ class TbImageAdminForm(forms.ModelForm):
                 })
                 self.fields['title_text'].widget = Textarea(attrs={
                     **codemirror_attrs,
-                    'class': 'codemirror-width-m',
+                    'class': 'codemirror-width-l',
                 })
                 self.fields['copyright_text'].widget = Textarea(attrs={
                     **codemirror_attrs,

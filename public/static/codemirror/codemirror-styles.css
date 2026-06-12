@@ -32,7 +32,7 @@
 
 .codemirror-width-m > .cm-editor {
   /* Средний (для URL, коротких строк) */
-  max-width: calc(50% - 13em) !important;
+  max-width: calc(50% - 13em) !important;  /* Вычитание 13em подобрано. Это ширина бокового меню слева */
 }
 
 .codemirror-width-l > .cm-editor {
@@ -43,6 +43,17 @@
 .codemirror-width-xl > .cm-editor {
   /* Во всю ширину контейнера */
   max-width: calc(100% - 13em) !important;
+}
+
+/* Ширина редактора зависит от видимости бокового меню Django Admin.
+   На экранах < 767px меню прячется, поэтому вычитание 13em неактуально.
+   Подобрано значение 3ex. */
+@media (max-width: 767px) {
+  .codemirror-width-m > .cm-editor,
+  .codemirror-width-l > .cm-editor,
+  .codemirror-width-xl > .cm-editor {
+    max-width: calc(100% - 3ex) !important;
+  }
 }
 
 .codemirror-no-lines .cm-gutters {
