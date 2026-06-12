@@ -50,6 +50,7 @@ import { EditorView } from '@codemirror/view';
 import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { html } from '@codemirror/lang-html';
 import { javascript } from '@codemirror/lang-javascript';
+import { json } from '@codemirror/lang-json';
 import { css } from '@codemirror/lang-css';
 import { solarizedDark, solarizedLight } from '@uiw/codemirror-theme-solarized';
 import { lineNumbers } from '@codemirror/view';
@@ -103,6 +104,8 @@ function initCodeMirrorEditors() {
       extensions.unshift(javascript());
     } else if (language === 'css') {
       extensions.unshift(css());
+    } else if (language === 'json') {
+      extensions.unshift(json());
     } else {
       extensions.unshift(html());
     }

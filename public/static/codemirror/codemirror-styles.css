@@ -60,6 +60,9 @@
 .codemirror-min-height-5 .cm-editor {
     min-height: 8em; /* 5 строк */
 }
+.codemirror-min-height-10 .cm-editor {
+    min-height: 16em; /* 10 строк */
+}
 
 .codemirror-no-lines .cm-gutters {
   /* Скрываем  нумерацию строк */
