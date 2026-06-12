@@ -9,7 +9,7 @@ from django.utils.html import format_html, mark_safe
 from easy_thumbnails.files import get_thumbnailer
 from .models import (
     TbImage, TbArticle, TbArtist, TbItem, TbLabel, TbSeller,
-    TbOffer, TbSource, TbOfferHistory, TbMusicStyle, TbFormat
+    TbOffer, TbSource, TbOfferHistory, TbMusicStyle
 )
 
 # ============================================================================
@@ -283,12 +283,6 @@ class MusicStyleAdmin(admin.ModelAdmin):
     readonly_fields = ('s_style_slug',)
 
 
-class FormatAdmin(admin.ModelAdmin):
-    """Админ для форматов"""
-    list_display = ('id', 's_format', 's_format_slug')
-    search_fields = ('s_format',)
-    readonly_fields = ('s_format_slug',)
-
 
 class ArtistAdmin(admin.ModelAdmin):
     """Админ для артистов"""
@@ -332,9 +326,9 @@ class SourceAdmin(admin.ModelAdmin):
 class OfferAdmin(admin.ModelAdmin):
     """Админ для предложений"""
     list_display = ('id', 's_offer', 'k_offer_to_item', 'f_offer_price', 'i_offer_quantity', 'i_offer_views')
-    list_filter = ('l_offer_condition_media', 'l_offer_condition_sleeve', 't_offer_created')
+    list_filter = ('l_offer_condition_media', 'l_offer_condition_sleeve', 't_offer_created', 'l_offer_to_format')
     search_fields = ('s_offer',)
-    filter_horizontal = ('k_offer_to_format', 'k_offer_to_image')
+    filter_horizontal = ('k_offer_to_image',)
     readonly_fields = ('s_offer_skip32', 't_offer_created', 't_offer_updated', 'i_offer_views', 'i_offer_favorites')
 
 
@@ -351,7 +345,6 @@ class OfferHistoryAdmin(admin.ModelAdmin):
 admin.site.register(TbImage, ImageAdmin)
 admin.site.register(TbArticle, ArticleAdmin)
 admin.site.register(TbMusicStyle, MusicStyleAdmin)
-admin.site.register(TbFormat, FormatAdmin)
 admin.site.register(TbArtist, ArtistAdmin)
 admin.site.register(TbItem, ItemAdmin)
 admin.site.register(TbLabel, LabelAdmin)

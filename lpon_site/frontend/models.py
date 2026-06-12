@@ -28,7 +28,6 @@
 # │ l_img_reality       │  Тип (real, abstract)
 # │ i_img_sort          │  Порядок отображения
 # │ f_img_confidence_   │  Доверие данным (0-1)
-# │ s_img_copyright     │  Авторские права
 # │ t_img_created       │  Timestamp
 # │ t_img_updated       │  Timestamp
 # │                     │  ⬆ Индекс на: id (+), i_img_sort
@@ -95,16 +94,6 @@
 #         │ [промежуточная таблица: article_id, musicstyle_id]
 #
 #
-# ┌──────────────────┐
-# │  TbFormat        │  Форматы носителей (LP, CD, Cassette...)
-# ├──────────────────┼────────────────────────────────────────────────────────
-# │ PK: id           │  AutoField
-# │ s_format         │  Название (LP, CD, Blu-ray, Cassette...)
-# │ s_format_slug    │  SlugField(16) — уникальный
-# └──────────────────┘
-#         △
-#         │ M2M TbOffer.k_offer_to_format
-#         │ [промежуточная таблица: offer_id, format_id]
 #
 #
 #  ##════════════════════════════════════════════════════════════════════════════##
@@ -148,11 +137,11 @@
 #                ├────────────────────────────────┼───────────────────────────────
 #                │ PK: id                         │  AutoField
 #                │ s_offer                        │  Название (indexed)
+#                │ l_offer_to_format              │  Формат (CD, Vinyl, Digital...)
 #                │ k_offer_to_item                │  FK → TbItem [indexed]
 #                │ k_offer_to_label               │  FK → TbLabel [indexed]
 #                │ k_offer_to_source              │  FK → TbSource [indexed]
 #                │ k_offer_to_article             │  FK → TbArticle (опционально)
-#                │ k_offer_to_format              │  M2M → TbFormat (может быть несколько)
 #                │ k_offer_to_image               │  M2M → TbImage (несколько фото)
 #                │ l_offer_condition_media        │  Состояние (s, m, nm, vg, g, f, p)
 #                │ l_offer_condition_sleeve       │  Состояние (s, m, nm, vg, g, f, p)
@@ -317,15 +306,6 @@ class TbImage(models.Model):
         default=10.0,
         verbose_name='Достоверность',
         help_text='Уверенность (для автоматических данных) 0.0 - 10.0, насколько уверены, что это правильное изображение',
-    )
-    s_img_copyright = models.CharField(
-        # Авторские права и лицензия (по идее -- ненужное поле. Можно в filer использовать `obj.image.author`.
-        max_length=255,
-        blank=True,
-        default='',
-        editable=False,  # Поле не редактируется. Кандидат на удаление.
-        verbose_name='Авторские права / Лицензия',
-        help_text='Например: "© 2024 User" или "CC-BY"',
     )
     t_img_created = models.DateTimeField(auto_now_add=True, verbose_name='Дата добавления',)
     t_img_updated = models.DateTimeField(auto_now=True, verbose_name='Дата обновления',)
@@ -825,43 +805,6 @@ class TbSeller(models.Model):
 
 
 # ============================================================================
-# ФОРМАТЫ НОСИТЕЛЕЙ
-# ============================================================================
-class TbFormat(models.Model):
-    """
-    Формат носителя (LP, CD, Cassette и т.д.).
-
-    Используем SmallAutoField для оптимизации (макс ~32k).
-    Форматов обычно 50-100, поэтому 2 байта более чем достаточно.
-    """
-    # Используем SmallAutoField для оптимизации
-    id = models.SmallAutoField(primary_key=True)
-    s_format = models.CharField(
-        max_length=16,
-        blank=False,
-        unique=True,
-        db_index=True,
-        verbose_name='Формат носителя',
-        help_text='Название формата носителя, например: "LP", "CD", "Blu-ray", "Compact Cassette", "MiniDisc",'
-                  ' "Hi-Fi", "Accessory" и т.д.',
-    )
-    s_format_slug = models.SlugField(
-        max_length=16,
-        blank=False,
-        unique=True,
-        verbose_name='Слаг',
-    )
-
-    def __str__(self):
-        return f"format: {self.s_format}"
-
-    class Meta:
-        verbose_name = 'Формат носителя'
-        verbose_name_plural = 'Форматы носителей'
-        ordering = ('s_format',)
-
-
-# ============================================================================
 # ПРЕДЛОЖЕНИЯ / ОФФЕРЫ
 # ============================================================================
 class TbOffer(models.Model):
@@ -879,6 +822,20 @@ class TbOffer(models.Model):
         P = 'p', 'Poor (плохое)'
         OTHER = '??', 'Other'
 
+    class Format(models.TextChoices):
+        LP = 'lp', 'Vinyl Long-Play (12")'
+        EP = 'ep', 'Vinyl Extended-Play (12", 10", 7")'
+        V45 = '45', 'Vinyl 7" (45 rpm)'
+        CD = 'cd', 'Compact Disc'
+        LD = 'ld', 'LaserDisc'
+        REC_MD = 'md', 'MiniDisc Record'
+        USE_MD = 'ms', 'Used MiniDisc (для записи)'
+        REC_CS = 'cs', 'Cassette Record'
+        USE_CS = 'uc', 'Used Cassette (для записи)'
+        REC_RR = 'tp', 'Tape Reel Record'
+        USE_RR = 'ur', 'Used Tape Reel (для записи)'
+        OTHER = '??', 'Other'
+
     s_offer = models.CharField(
         max_length=128,
         blank=False,
@@ -886,6 +843,16 @@ class TbOffer(models.Model):
         verbose_name='Название оффера',
         help_text='Техническое название оффера для внутреннего использования, например:'
                   ' "Abbey Road (LP) AnTrop NM/NM (МЗГ)" или "TDK CDing I 60 (б/у) VG/VG (Janan, 198x синяя-градиент)"'
+    )
+    l_offer_to_format = models.CharField(
+        max_length=2,
+        choices=Format.choices,
+        default=Format.OTHER,
+        db_index=True,
+        verbose_name='Формат',
+        help_text='Форматы основного носителей (пластинка, CD, кассета и т.п.). Если несколько носителей (и разных),'
+                  ' то это указывать в "Дополнительных данных" в JSON-формате. Например:'
+                  ' <tt>{"formats": {"lp": 2, "cd": 1},}</tt>',
     )
     # Связи
     k_offer_to_article = models.ForeignKey(
@@ -949,14 +916,6 @@ class TbOffer(models.Model):
         default='',
         verbose_name='Каталожный номер / Barcode',
         help_text='Например: "SD 16023" или "5099923452355"',
-    )
-    k_offer_to_format = models.ManyToManyField(
-        TbFormat,
-        blank=True,
-        related_name='format_to_offer',  # ← format.format_to_offers.all()
-        db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
-        verbose_name='Форматы',
-        help_text='Форматы носителей (пластинка, CD, кассета и т.п.). Можно выбрать несколько.',
     )
     d_offer_date_release = models.DateField(
         blank=True,
