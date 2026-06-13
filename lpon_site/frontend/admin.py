@@ -317,7 +317,8 @@ class SellerAdminForm(forms.ModelForm):
     """
     class Meta:
         model = TbSeller
-        fields = ('id', 's_seller', 'j_seller_metadata', 'l_seller_type', 'l_seller_currency',)
+        fields = ('id', 's_seller', 'l_seller_currency', 'k_seller_to_article', 'l_seller_type',
+                  'j_seller_metadata',)
 
     def __init__(self, *args, **kwargs):
         """
@@ -361,6 +362,30 @@ class SellerAdmin(admin.ModelAdmin):
     list_filter = ('l_seller_type', 'l_seller_currency', )
     search_fields = ('s_seller',)
     readonly_fields = ('t_seller_created', 't_seller_updated')
+
+    fieldsets = (
+        ('Основные данные о продавце', {
+            'fields': ('s_seller', 'l_seller_currency', 'l_seller_type',
+                       'j_seller_metadata',),
+        }),
+        ('Связанная публикация', {
+            'fields': ('k_seller_to_article', ),
+            'description': 'Прикреп&shy;ленная статья (если есть) будет отображаться на&nbsp;странице продавца'
+                           ' на&nbsp;сайте. Также позволяет получать список всех предложений продавца, управлять'
+                           ' SEO-атрибутами для&nbsp;улучшения видимости поисковых систем, иметь красивый'
+                           ' slag для&nbsp;URL-странички, подсчитывать число просмотров и&nbsp;добавлений'
+                           ' в&nbsp;избранные. <b style=\'color: green;\'>ОЧЕНЬ РЕКОМЕН&shy;ДУЕТСЯ СОЗДАВАТЬ'
+                           ' И&nbsp;ПРИВЯЗЫВАТЬ СТАТЬЮ ВРУЧНУЮ</b>. Если публикация не&nbsp;создана вручную,'
+                           ' то&nbsp;она будет создана автоматически (пустая) при&nbsp;сохранении продавца,'
+                           ' со&nbsp;всеми SEO-атрибутами и&nbsp;slag, но&nbsp;автоматика несовершенна.<br />&nbsp;',
+            # 'classes': ('collapse',),
+        }),
+        ('Служебная информация', {
+            'fields': ('t_seller_created', 't_seller_updated'),
+            'classes': ('collapse',),
+        }),
+    )
+
 
 # ============================================================================
 # АДМИНКА ИСТОЧНИКОВ ДАННЫХ
