@@ -79,19 +79,16 @@
 #
 #
 # ┌──────────────────┐
-# │ TbMusicStyle     │  Музыкальные стили (теги для категоризации)
+# │ TbMusicStyle     │  Музыкальные стили (теги для категоризации - собственные статьи)
 # ├──────────────────┼────────────────────────────────────────────────────────
-# │ PK: id           │  AutoField
+# │ PK: id           │  SmallAutoField
 # │ s_style_name     │  Название (Rock, Jazz, Classical...)
-# │ s_style_slug     │  SlugField(50) — уникальный, indexed
-# │ j_style_synonyms │  JSON синонимы из Discogs для матчинга
+# │ k_style_to_article│ 1:1 OneToOne FK → TbArticle (для SEO, слага, контента)
+# │ j_style_synonyms │  JSON синонимы из Discogs для матчинга при импорте
 # │ t_style_created  │  Timestamp
 # │ t_style_updated  │  Timestamp
-# │                  │  ⬆ Индексы: id (+), s_style_slug
+# │                  │  ⬆ Индексы: id (+), related_name→article_to_style
 # └──────────────────┘
-#         △
-#         │ M2M TbArticle.k_article_to_styles
-#         │ [промежуточная таблица: article_id, musicstyle_id]
 #
 #
 #
@@ -192,6 +189,7 @@
 # │ PK: id              │  AutoField
 # │ s_item              │  Название (Abbey Road (LP), TDK CDing I...)
 # │ k_item_to_artist    │  M2M → TbArtist (для коллабораций)
+# │ k_item_to_style     │  M2M → TbMusicStyle (жанры альбома)
 # │ k_item_to_article   │  1:1 FK → TbArticle (content, SEO, slug)
 # │ t_item_date         │  Дата релиза
 # │ i_discogs_master_id │  ID мастер-релиза на Discogs
@@ -204,6 +202,8 @@
 #         ├──────────────────── M2M → TbArtist.k_item_to_artist
 #         │                    [промежуточная таблица: item_id, artist_id]
 #         │
+#         └──────────────────── M2M → TbMusicStyle.k_item_to_style
+#                              [промежуточная таблица: item_id, musicstyle_id]
 # ┌─────────────────────┐
 # │  TbArtist           │  Исполнители / группы
 # ├─────────────────────┼─────────────────────────────────────────────────────
@@ -213,19 +213,20 @@
 # │ t_artist_created    │  Timestamp
 # │ t_artist_updated    │  Timestamp
 # │                     │
-# │                     │  ⬆ Индекс: id
+# │                     │  ⬆ Индекс: id, k_artist_to_article
 # └─────────────────────┘
 #
 #
 # ╔════════════════════════════════════════════════════════════════════════════╗
-# ║                           ИТОГО ТАБЛИЦ: 11                                 ║
-# ║  Базовые:      TbImage, TbArticle, TbMusicStyle, TbFormat                  ║
-# ║  Справочники:  TbSeller, TbLabel, TbArtist, TbItem                         ║
-# ║  Коммерческие: TbSource, TbOffer (M2M форматы, фото), TbOfferHistory       ║
-# ║  M2M промежуточные: article←→styles                                        ║
-# ║                     offer←→formats                                         ║
-# ║                     offer←→images                                          ║
-# ║                     item←→artists                                          ║
+# ║                           ИТОГО ТАБЛИЦ: 10                                 ║
+# ║  Справочники:  TbImage, TbArticle, TbMusicStyle (1:1→article)              ║
+# ║  Сущности:     TbSeller, TbLabel, TbArtist, TbItem                         ║
+# ║  Коммерческие: TbSource, TbOffer (format как CharField), TbOfferHistory    ║
+# ║  M2M связи:    offer←→images                                               ║
+# ║                item←→artists (для коллабораций)                            ║
+# ║                item←→styles (жанры альбома)                                ║
+# ║  OneToOne:     style→article, artist→article, item→article, label→article  ║
+# ║                seller→article (все равно связаны через TbArticle)          ║
 # ╚════════════════════════════════════════════════════════════════════════════╝
 #
 # ОПТИМИЗАЦИЯ ДЛЯ SQLite:
@@ -318,80 +319,6 @@ class TbImage(models.Model):
 
 
 # ============================================================================
-# МУЗЫКАЛЬНЫЕ СТИЛИ
-# ============================================================================
-class TbMusicStyle(models.Model):
-    """
-    Музыкальный стиль (канонический / опорный).
-
-    Один главный стиль может иметь несколько синонимов (из Discogs).
-    Пример:
-    - Главный: "Rock"
-    - Синонимы: ["rock", "Rock Music", "Rock & Roll", "Hard Rock", ...]
-
-    Примечание:
-    - Slug автоматически генерируется из s_style_name в методе save()
-    """
-    # Используем SmallAutoField для оптимизации (макс ~32k)
-    # Стилей обычно 100-1000, поэтому 2 байта достаточно
-    id = models.SmallAutoField(primary_key=True)
-    s_style_name = models.CharField(
-        max_length=100,
-        unique=True,
-        db_index=True,
-        verbose_name='Стиль (канонический)',
-        help_text='Основное название стиля. Например: "Rock", "Jazz", "Classical"',
-    )
-    s_style_slug = models.SlugField(
-        max_length=50,
-        unique=True,
-        db_index=True,  # Индекс для быстрого поиска по слагу (но НЕ primary_key!)
-        editable=False,  # Не дать админу редактировать вручную (автогенерируется)
-        verbose_name='Слаг (уникальный идентификатор)',
-        help_text='Автоматически генерируется из названия. Используется в URL и API.',
-    )
-    j_style_synonyms = models.JSONField(
-        default=list,
-        blank=True,
-        verbose_name='Синонимы из источников',
-        help_text='Список вариантов названия из Discogs, MusicBrainz и т.д. для матчинга.'
-                  ' Пример: ["rock", "Rock Music", "Rock & Roll", "Hard Rock"]',
-    )
-    t_style_created = models.DateTimeField(auto_now_add=True, editable=False, verbose_name="Дата создания")
-    t_style_updated = models.DateTimeField(auto_now=True, editable=False, verbose_name="Дата обновления")
-
-    def save(self, *args, **kwargs):
-        """
-        Автоматически генерируем slug из названия стиля.
-        Вызывается при каждом сохранении записи (создание или обновление).
-        """
-        # Если slug не установлен (новая запись) — генерируем его из названия
-        if not self.s_style_slug:
-            # Генерируем базовый slug (Rock → rock, Rock Music → rock-music)
-            base_slug = slugify(self.s_style_name, allow_unicode=True)
-
-            # Проверяем на уникальность и добавляем счетчик если нужно
-            # Это гарантирует, что slug будет уникален даже для похожих названий
-            slug = base_slug
-            counter = 1
-            while TbMusicStyle.objects.filter(s_style_slug=slug).exclude(pk=self.pk).exists():
-                slug = f"{base_slug}-{counter}"
-                counter += 1
-
-            self.s_style_slug = slug
-
-        super().save(*args, **kwargs)
-
-    def __str__(self):
-        return self.s_style_name
-
-    class Meta:
-        verbose_name = 'Музыкальный стиль'
-        verbose_name_plural = 'Музыкальные стили'
-        ordering = ('s_style_name',)
-
-
-# ============================================================================
 # СТАТЬИ (любая текстовая информация о релизе, исполнителе, продавце и т.д...)
 #         а так же новости, блог, тексты о спец-предложениях и т.д.)
 # ============================================================================
@@ -403,6 +330,7 @@ class TbArticle(models.Model):
     """
     class ArticleType(models.TextChoices):
         ARTIST = 'artist', 'Artis: артист, группа или бренд'
+        STYLE = 'style', 'Slyle: музыкальный стиль'
         ITEM = 'item', 'Item: Альбом, релиз или товар (кассета, hifi, аксессуар)'
         OFFER = 'offer', 'Offer: конкретное предложение от продавца'
         SELLER = 'seller', 'Seller: продавец или магазин'
@@ -483,14 +411,6 @@ class TbArticle(models.Model):
         help_text='Полный текст статьи. Может содержать HTML-вёрсту (теги, мнемоники, спецсимволы) для'
                   ' типографирования.',
     )
-    k_article_to_styles = models.ManyToManyField(
-        TbMusicStyle,
-        blank=True,
-        related_name='style_to_article',
-        db_index=True,
-        verbose_name='Музыкальные стили',
-        help_text='Стили этой статьи/артиста/релиза (Rock, Jazz, Classical, ...)',
-    )
     i_article_views = models.IntegerField(
         # Счетчик просмотров (включая просмотры артиста, итема/релиза/товара, лейбла и продавца)
         default=0,
@@ -553,6 +473,28 @@ class TbArticle(models.Model):
             i_article_favorites=F('i_article_favorites') + 1
         )
 
+    def save(self, *args, **kwargs):
+        """
+        Автоматически генерируем slug на основе заголовка статьи.
+        Вызывается при каждом сохранении записи (создание или обновление).
+        """
+        # Если slug не установлен (новая запись) — генерируем его из названия
+        if not self.slug:
+            # Генерируем базовый slug на основе заголовка статьи
+            base_slug = slugify(self.s_article_title, allow_unicode=True)
+
+            # Проверяем на уникальность и добавляем счетчик если нужно
+            # Это гарантирует, что slug будет уникален даже для похожих названий
+            slug = base_slug
+            counter = 1
+            while TbArticle.objects.filter(slug=slug).exclude(pk=self.pk).exists():
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+
+            self.slug = slug
+
+        super().save(*args, **kwargs)
+
     class Meta:
         verbose_name = 'Статья'
         verbose_name_plural = 'Статьи'
@@ -562,6 +504,63 @@ class TbArticle(models.Model):
             models.Index(fields=['l_article_type', 'b_article_published', '-t_article_created'],
                         name='idx_articles_by_type_published'),
         ]
+
+
+# ============================================================================
+# МУЗЫКАЛЬНЫЕ СТИЛИ
+# ============================================================================
+class TbMusicStyle(models.Model):
+    """
+    Музыкальный стиль (канонический / опорный).
+
+    Один главный стиль может иметь несколько синонимов (из Discogs).
+    Пример:
+    - Главный: "Rock"
+    - Синонимы: ["rock", "Rock Music", "Rock & Roll", "Hard Rock", ...]
+
+    Примечание:
+    - Slug автоматически генерируется из s_style_name в методе save()
+    """
+    # Используем SmallAutoField для оптимизации (макс ~32k)
+    # Стилей обычно 100-1000, поэтому 2 байта достаточно
+    id = models.SmallAutoField(primary_key=True)
+    s_style_name = models.CharField(
+        max_length=100,
+        unique=True,
+        db_index=True,
+        verbose_name='Стиль (канонический)',
+        help_text='Основное название стиля. Например: "Rock", "Jazz", "Classical"',
+    )
+    k_style_to_article = models.OneToOneField(
+        TbArticle,
+        on_delete=models.SET_NULL,
+        related_name='article_to_style',
+        db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
+        default=None,
+        null=True,
+        blank=True,  # <-- Интерфейсное удобство. Связь будет сделана автоматически, и статья создана автоматически.
+        verbose_name='Связанная статья',
+        help_text='Связанная статья о музыкальном стиле (Типографированные заголовок, тизер и текст статьи. Так же'
+                  ' через статью может быть получена картинка, seo атрибуты, слаг (обязательно) и т.п.)<br />'
+                  '<b>ОБЯЗАТЕЛЬНО УКАЗЫВАТЬ</b> т.к. через статью получаем слаг для URL музыкального стиля.'
+    )
+    j_style_synonyms = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='Синонимы из источников',
+        help_text='Список вариантов названия из Discogs, MusicBrainz и т.д. для матчинга.'
+                  ' Пример: ["rock", "Rock Music", "Rock & Roll", "Hard Rock"]',
+    )
+    t_style_created = models.DateTimeField(auto_now_add=True, editable=False, verbose_name="Дата создания")
+    t_style_updated = models.DateTimeField(auto_now=True, editable=False, verbose_name="Дата обновления")
+
+    def __str__(self):
+        return self.s_style_name
+
+    class Meta:
+        verbose_name = 'Музыкальный стиль'
+        verbose_name_plural = 'Музыкальные стили'
+        ordering = ('s_style_name',)
 
 
 # ============================================================================
@@ -636,6 +635,17 @@ class TbItem(models.Model):
         db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
         verbose_name='Исполнители',
         help_text="Один или несколько для коллабораций",
+    )
+    k_item_to_style = models.ManyToManyField(
+        # Музыкальные стили (ManyToMany для альбомов с множеством жанров)
+        # Например: "Abbey Road" → [Rock, Progressive Rock, ...]
+        # Позволяет: найти все альбомы стиля / найти стили альбома / найти артистов в стиле
+        TbMusicStyle,
+        blank=True,     # Стиль может быть не указан (например для аксессуаров)
+        related_name='style_to_item',  # style.style_to_item.all() — найти все релизы в стиле
+        db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
+        verbose_name='Музыкальные стили',
+        help_text='Один или несколько стилей, характеризующих альбом/товар. Например: Rock, Progressive Rock.',
     )
     k_item_to_article = models.OneToOneField(
         TbArticle,
