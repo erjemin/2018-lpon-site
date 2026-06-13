@@ -13,8 +13,9 @@ from .models import (
 )
 
 # ============================================================================
-# Кастомная форма для админки TbImage
-# ============================================================================
+# АДМИНИСТРИРОВАНИЕ TbImage
+#
+# Кастомня форма для админки TbImage
 class TbImageAdminForm(forms.ModelForm):
     """
     Кастомная форма для TbImage в админке.
@@ -111,7 +112,7 @@ class TbImageAdminForm(forms.ModelForm):
             'class': 'codemirror-width-s codemirror-no-lines',
         })
 
-
+# Админка для TbImage с кастомной формой
 class ImageAdmin(admin.ModelAdmin):
     """
     Админ для изображений TbImage с поддержкой редактирования метаданных filer_image.
@@ -283,12 +284,83 @@ class MusicStyleAdmin(admin.ModelAdmin):
     readonly_fields = ('s_style_slug',)
 
 
+# ============================================================================
+# АДМИНКА для TbArtist
+#
+# Кастомная форма для
+class ArtistAdminForm(forms.ModelForm):
+    """
+    Кастомная форма для админки продавца (Seller).
+    Добавлaет виджеты CodeMirror для текстовых полей
+    """
+    class Meta:
+        model = TbArtist
+        fields = ('s_artist', 'k_artist_to_article', 'j_artist_metadata', )
 
+    def __init__(self, *args, **kwargs):
+        """
+        При инициализации формы подгружаем
+        """
+        # Атрибуты для активации CodeMirror редактора
+        codemirror_attrs = {
+            'data-codemirror-editor': '1',
+            'data-width': '100%',    # Ширина для патча (100% займет полную ширину)
+        }
+
+        super().__init__(*args, **kwargs)
+
+        # Активируем CodeMirror и устанавливаем классы для реальных полей
+        self.fields['s_artist'].widget = Textarea(attrs={
+            **codemirror_attrs,
+            'data-codemirror-mode': 'text',
+            'class': 'codemirror-width-xl codemirror-no-lines',
+        })
+        self.fields['j_artist_metadata'].widget = Textarea(attrs={
+            **codemirror_attrs,
+            'data-language': 'json',
+            'class': 'codemirror-width-l codemirror-min-height-5',
+        })
+
+# Админка для TbArtist с кастомной формой
 class ArtistAdmin(admin.ModelAdmin):
     """Админ для артистов"""
+    form = ArtistAdminForm  # Используем кастомную форму с виртуальными полями
+
+    # Подключаем JS через Media (правильный способ!)
+    class Media:
+        css = {
+            'all': ('codemirror/codemirror-styles.css',)  # Стили для CodeMirror
+        }
+        js = (
+            'codemirror/editor.js',              # Основной CodeMirror
+            'codemirror/codemirror-patch.js',    # Патч для управления высотой/шириной
+        )
+
     list_display = ('id', 's_artist', 't_artist_created')
+    list_display_links = ('id', 's_artist',)
     search_fields = ('s_artist',)
     readonly_fields = ('t_artist_created', 't_artist_updated')
+    fieldsets = (
+        ('Основные данные об исполнителе (артисте, группе)', {
+            'fields': ('s_artist', 'j_artist_metadata',),
+        }),
+        ('Связанная публикация', {
+            'fields': ('k_artist_to_article', ),
+            'description': 'Прикреп&shy;ленная статья (если есть) будет отображаться на&nbsp;странице исполнителя'
+                           ' на&nbsp;сайте. Также позволяет получать список всех альбом исполнителя, управлять'
+                           ' SEO-атрибутами для&nbsp;улучшения видимости поисковых систем, иметь красивый'
+                           ' slag для&nbsp;URL-странички, подсчитывать число просмотров и&nbsp;добавлений'
+                           ' в&nbsp;избранные. <b style=\'color: green;\'>ОЧЕНЬ РЕКОМЕН&shy;ДУЕТСЯ СОЗДАВАТЬ'
+                           ' И&nbsp;ПРИВЯЗЫВАТЬ СТАТЬЮ ВРУЧНУЮ</b>. Если публикация не&nbsp;создана вручную,'
+                           ' то&nbsp;она будет создана автоматически (пустая) при&nbsp;сохранении исполнителя,'
+                           ' со&nbsp;всеми SEO-атрибутами и&nbsp;slag, но&nbsp;автоматика несовершенна.<br />&nbsp;',
+            # 'classes': ('collapse',),
+        }),
+        ('Служебная информация', {
+            'fields': ('t_artist_created', 't_artist_updated'),
+            'classes': ('collapse',),
+        }),
+    )
 
 
 class ItemAdmin(admin.ModelAdmin):
@@ -358,11 +430,11 @@ class SellerAdmin(admin.ModelAdmin):
             'codemirror/editor.js',              # Основной CodeMirror
             'codemirror/codemirror-patch.js',    # Патч для управления высотой/шириной
         )
-    list_display = ('id', 's_seller', 'l_seller_type', 'l_seller_currency', 't_seller_created')
-    list_filter = ('l_seller_type', 'l_seller_currency', )
+    list_display = ('id', 's_seller', 'l_seller_type', 'l_seller_currency', 't_seller_created',)
+    list_display_links = ('id', 's_seller',)
+    list_filter = ('l_seller_type', 'l_seller_currency',)
     search_fields = ('s_seller',)
-    readonly_fields = ('t_seller_created', 't_seller_updated')
-
+    readonly_fields = ('t_seller_created', 't_seller_updated',)
     fieldsets = (
         ('Основные данные о продавце', {
             'fields': ('s_seller', 'l_seller_currency', 'l_seller_type',
@@ -445,6 +517,7 @@ class SourceAdmin(admin.ModelAdmin):
             'codemirror/codemirror-patch.js',    # Патч для управления высотой/шириной
         )
     list_display = ('id', 's_source_name', 'k_source_to_seller', 'l_source_type', 't_source_data')
+    list_display_links = ('id', 's_source_name',)
     list_filter = ('l_source_type', 't_source_data')
     search_fields = ('s_source_name',)
     readonly_fields = ('t_source_created', 't_source_updated')
