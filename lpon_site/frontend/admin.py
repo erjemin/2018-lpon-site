@@ -274,24 +274,96 @@ class ArticleAdmin(admin.ModelAdmin):
     search_fields = ('s_article_title', 'slug')
     prepopulated_fields = {'slug': ('s_article_title',)}
     readonly_fields = ('t_article_created', 't_article_updated')
-    filter_horizontal = ('k_article_to_styles',)
-
-
-class MusicStyleAdmin(admin.ModelAdmin):
-    """Админ для музыкальных стилей"""
-    list_display = ('id', 's_style_name', 's_style_slug')
-    search_fields = ('s_style_name', 's_style_slug')
-    readonly_fields = ('s_style_slug',)
+    # filter_horizontal = ('k_article_to_styles',)
 
 
 # ============================================================================
-# АДМИНКА для TbArtist
+# АДМИНКА для музыкальных стилей, таблица TbMusicStyle
 #
-# Кастомная форма для
+# Кастомная форма для MusicStyleAdmin
+class MusicStyleAdminForm(forms.ModelForm):
+    """
+    Кастомная форма для админки музыкальных стилей.
+    Добавляет виджеты CodeMirror для текстовых полей
+    """
+    class Meta:
+        model = TbMusicStyle
+        fields = ('s_style_name', 'j_style_synonyms', 'k_style_to_article',)
+
+    def __init__(self, *args, **kwargs):
+        """
+        При инициализации формы подгружаем
+        """
+        # Атрибуты для активации CodeMirror редактора
+        codemirror_attrs = {
+            'data-codemirror-editor': '1',
+            'data-width': '100%',  # Ширина для патча (100% займет полную ширину)
+        }
+
+        super().__init__(*args, **kwargs)
+
+        # Активируем CodeMirror и устанавливаем классы для реальных полей
+        self.fields['s_style_name'].widget = Textarea(attrs={
+            **codemirror_attrs,
+            'data-codemirror-mode': 'text',
+            'class': 'codemirror-width-xl codemirror-no-lines',
+        })
+        self.fields['j_style_synonyms'].widget = Textarea(attrs={
+            **codemirror_attrs,
+            'data-language': 'json',
+            'class': 'codemirror-width-l codemirror-min-height-5',
+        })
+
+# Админка для TbMusicStyle с кастомной формой MusicStyleAdminForm
+class MusicStyleAdmin(admin.ModelAdmin):
+    """Админ для музыкальных стилей"""
+    form = MusicStyleAdminForm
+
+    # Подключаем JS через Media (правильный способ!)
+    class Media:
+        css = {
+            'all': ('codemirror/codemirror-styles.css',)  # Стили для CodeMirror
+        }
+        js = (
+            'codemirror/editor.js',              # Основной CodeMirror
+            'codemirror/codemirror-patch.js',    # Патч для управления высотой/шириной
+        )
+
+    list_display = ('id', 's_style_name', 'j_style_synonyms', 't_style_created', 't_style_updated',)
+    list_display_links = ('id', 's_style_name',)
+    search_fields = ('s_style_name', 'j_style_synonyms',)
+    readonly_fields = ('t_style_created', 't_style_updated',)
+    fieldsets = (
+        ('Основные данные о музыкальном стиле', {
+            'fields': ('s_style_name', 'j_style_synonyms',),
+        }),
+        ('Связанная публикация', {
+            'fields': ('k_style_to_article',),
+            'description': 'Прикреп&shy;ленная статья (если есть) будет отображаться на&nbsp;странице музыкального'
+                           ' стиля на&nbsp;сайте. Также позволяет получать список всех альбомов музыкального стиля,'
+                           ' управлять SEO-атрибутами для&nbsp;улучшения видимости поисковых систем, иметь красивый'
+                           ' slag для&nbsp;URL-странички, подсчитывать число просмотров и&nbsp;добавлений'
+                           ' в&nbsp;избранные. <b style=\'color: green;\'>ОЧЕНЬ РЕКОМЕН&shy;ДУЕТСЯ СОЗДАВАТЬ'
+                           ' И&nbsp;ПРИВЯЗЫВАТЬ СТАТЬЮ ВРУЧНУЮ</b>. Если публикация не&nbsp;создана вручную,'
+                           ' то&nbsp;она будет создана автоматически (пустая) при&nbsp;сохранении музыкального стиля,'
+                           ' со&nbsp;всеми SEO-атрибутами и&nbsp;slag, но&nbsp;автоматика несовершенна.<br />&nbsp;',
+            # 'classes': ('collapse',),
+        }),
+        ('Служебная информация', {
+            'fields': ('t_style_created', 't_style_updated'),
+            'classes': ('collapse',),
+        }),
+    )
+
+
+# ============================================================================
+# АДМИНКА для Исполнителей/Групп/Артистов, таблица TbArtist
+#
+# Кастомная форма для ArtistAdmin
 class ArtistAdminForm(forms.ModelForm):
     """
     Кастомная форма для админки продавца (Seller).
-    Добавлaет виджеты CodeMirror для текстовых полей
+    Добавляет виджеты CodeMirror для текстовых полей
     """
     class Meta:
         model = TbArtist
@@ -321,7 +393,7 @@ class ArtistAdminForm(forms.ModelForm):
             'class': 'codemirror-width-l codemirror-min-height-5',
         })
 
-# Админка для TbArtist с кастомной формой
+# Админка для TbArtist с кастомной формой ArtistAdminForm
 class ArtistAdmin(admin.ModelAdmin):
     """Админ для артистов"""
     form = ArtistAdminForm  # Используем кастомную форму с виртуальными полями
@@ -347,7 +419,7 @@ class ArtistAdmin(admin.ModelAdmin):
         ('Связанная публикация', {
             'fields': ('k_artist_to_article', ),
             'description': 'Прикреп&shy;ленная статья (если есть) будет отображаться на&nbsp;странице исполнителя'
-                           ' на&nbsp;сайте. Также позволяет получать список всех альбом исполнителя, управлять'
+                           ' на&nbsp;сайте. Также позволяет получать список всех альбомов исполнителя, управлять'
                            ' SEO-атрибутами для&nbsp;улучшения видимости поисковых систем, иметь красивый'
                            ' slag для&nbsp;URL-странички, подсчитывать число просмотров и&nbsp;добавлений'
                            ' в&nbsp;избранные. <b style=\'color: green;\'>ОЧЕНЬ РЕКОМЕН&shy;ДУЕТСЯ СОЗДАВАТЬ'
@@ -368,7 +440,7 @@ class ItemAdmin(admin.ModelAdmin):
     list_display = ('id', 's_item', 't_item_date', 't_item_created')
     list_filter = ('t_item_date', 't_item_created')
     search_fields = ('s_item',)
-    filter_horizontal = ('k_item_to_artist',)
+    filter_horizontal = ('k_item_to_artist', 'k_item_to_style')
     readonly_fields = ('t_item_created', 't_item_updated')
 
 
