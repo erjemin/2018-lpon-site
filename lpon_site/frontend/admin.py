@@ -63,7 +63,6 @@ class TbImageAdminForm(forms.ModelForm):
         # Атрибуты для активации CodeMirror редактора
         codemirror_attrs = {
             'data-codemirror-editor': '1',
-            'data-language': 'text',
             'data-width': '100%',    # Ширина для патча (100% займет полную ширину)
         }
 
@@ -100,6 +99,7 @@ class TbImageAdminForm(forms.ModelForm):
         # Активируем CodeMirror и устанавливаем классы для реальных полей
         self.fields['s_img_src_url'].widget = Textarea(attrs={
             **codemirror_attrs,
+            'data-language': 'url',
             'class': 'codemirror-width-xl',
         })
         self.fields['i_img_sort'].widget = Textarea(attrs={
