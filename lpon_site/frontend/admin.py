@@ -264,20 +264,6 @@ class ImageAdmin(admin.ModelAdmin):
 
 
 # ============================================================================
-# Остальные ModelAdmin классы
-# ============================================================================
-
-class ArticleAdmin(admin.ModelAdmin):
-    """Админ для статей"""
-    list_display = ('id', 's_article_title', 'l_article_type', 'b_article_published', 't_article_created')
-    list_filter = ('l_article_type', 'b_article_published', 't_article_created')
-    search_fields = ('s_article_title', 'slug')
-    prepopulated_fields = {'slug': ('s_article_title',)}
-    readonly_fields = ('t_article_created', 't_article_updated')
-    # filter_horizontal = ('k_article_to_styles',)
-
-
-# ============================================================================
 # АДМИНКА для музыкальных стилей, таблица TbMusicStyle
 #
 # Кастомная форма для MusicStyleAdmin
@@ -435,20 +421,84 @@ class ArtistAdmin(admin.ModelAdmin):
     )
 
 
-class ItemAdmin(admin.ModelAdmin):
-    """Админ для товаров"""
-    list_display = ('id', 's_item', 't_item_date', 't_item_created')
-    list_filter = ('t_item_date', 't_item_created')
-    search_fields = ('s_item',)
-    filter_horizontal = ('k_item_to_artist', 'k_item_to_style')
-    readonly_fields = ('t_item_created', 't_item_updated')
 
 
+# ================
+# АДМИН-ПАНЕЛЬ ДЛЯ ЛЕЙБЛОВ/ИЗДАТЕЛЕЙ
+#
+# Кастомная форма
+class LabelAdminForm(forms.ModelForm):
+    """
+    Кастомная форма для админки лейблов (Label).
+    Добавляет виджеты CodeMirror для текстовых полей
+    """
+    class Meta:
+        model = TbLabel
+        fields = ('s_label', 'k_label_to_article', 'j_label_metadata',)
+
+    def __init__(self, *args, **kwargs):
+        """
+        При инициализации формы подгружаем
+        """
+        # Атрибуты для активации CodeMirror редактора
+        codemirror_attrs = {
+            'data-codemirror-editor': '1',
+            'data-width': '100%',    # Ширина для патча (100% займет полную ширину)
+        }
+
+        super().__init__(*args, **kwargs)
+
+        # Активируем CodeMirror и устанавливаем классы для реальных полей
+        self.fields['s_label'].widget = Textarea(attrs={
+            **codemirror_attrs,
+            'class': 'codemirror-width-xl codemirror-no-lines',
+            'data-language': 'text',
+        })
+        self.fields['j_label_metadata'].widget = Textarea(attrs={
+            **codemirror_attrs,
+            'class': 'codemirror-width-l codemirror-min-height-5',
+            'data-language': 'json',
+        })
+
+# Админ для лейбла (Label)
 class LabelAdmin(admin.ModelAdmin):
     """Админ для лейблов"""
+    form = LabelAdminForm  # Используем кастомную форму с виджетами CodeMirror
+
+    # Подключаем JS через Media (правильный способ!)
+    class Media:
+        css = {
+            'all': ('codemirror/codemirror-styles.css',)  # Стили для CodeMirror
+        }
+        js = (
+            'codemirror/editor.js',              # Основной CodeMirror
+            'codemirror/codemirror-patch.js',    # Патч для управления высотой/шириной
+        )
     list_display = ('id', 's_label', 't_label_created')
+    list_display_links = ('id', 's_label',)
     search_fields = ('s_label',)
     readonly_fields = ('t_label_created', 't_label_updated')
+    fieldsets = (
+        ('Основные данные о лейбле/издателе', {
+            'fields': ('s_label', 'j_label_metadata',),
+        }),
+        ('Связанная публикация', {
+            'fields': ('k_label_to_article', ),
+            'description': 'Прикреп&shy;ленная статья (если есть) будет отображаться на&nbsp;странице лейбла'
+                           ' на&nbsp;сайте. Также позволяет получать список всех альбомов лейбла, управлять'
+                           ' SEO-атрибутами для&nbsp;улучшения видимости поисковых систем, иметь красивый'
+                           ' slag для&nbsp;URL-странички, подсчитывать число просмотров и&nbsp;добавлений'
+                           ' в&nbsp;избранные. <b style=\'color: green;\'>ОЧЕНЬ РЕКОМЕН&shy;ДУЕТСЯ СОЗДАВАТЬ'
+                           ' И&nbsp;ПРИВЯЗЫВАТЬ СТАТЬЮ ВРУЧНУЮ</b>. Если публикация не&nbsp;создана вручную,'
+                           ' то&nbsp;она будет создана автоматически (пустая) при&nbsp;сохранении лейбла,'
+                           ' со&nbsp;всеми SEO-атрибутами и&nbsp;slag, но&nbsp;автоматика несовершенна.<br />&nbsp;',
+            # 'classes': ('collapse',),
+        }),
+        ('Служебная информация', {
+            'fields': ('t_label_created', 't_label_updated'),
+            'classes': ('collapse',),
+        }),
+    )
 
 # ================
 # АДМИН-ПАНЕЛЬ ДЛЯ ПРОДАВЦА/SELLER
@@ -595,6 +645,20 @@ class SourceAdmin(admin.ModelAdmin):
     readonly_fields = ('t_source_created', 't_source_updated')
 
 
+# ============================================================================
+# Остальные ModelAdmin классы
+# ============================================================================
+
+
+class ItemAdmin(admin.ModelAdmin):
+    """Админ для товаров"""
+    list_display = ('id', 's_item', 't_item_date', 't_item_created')
+    list_filter = ('t_item_date', 't_item_created')
+    search_fields = ('s_item',)
+    filter_horizontal = ('k_item_to_artist', 'k_item_to_style')
+    readonly_fields = ('t_item_created', 't_item_updated')
+
+
 class OfferAdmin(admin.ModelAdmin):
     """Админ для предложений"""
     list_display = ('id', 's_offer', 'k_offer_to_item', 'f_offer_price', 'i_offer_quantity', 'i_offer_views')
@@ -602,6 +666,16 @@ class OfferAdmin(admin.ModelAdmin):
     search_fields = ('s_offer',)
     filter_horizontal = ('k_offer_to_image',)
     readonly_fields = ('s_offer_skip32', 't_offer_created', 't_offer_updated', 'i_offer_views', 'i_offer_favorites')
+
+
+class ArticleAdmin(admin.ModelAdmin):
+    """Админ для статей"""
+    list_display = ('id', 's_article_title', 'l_article_type', 'b_article_published', 't_article_created')
+    list_filter = ('l_article_type', 'b_article_published', 't_article_created')
+    search_fields = ('s_article_title', 'slug')
+    prepopulated_fields = {'slug': ('s_article_title',)}
+    readonly_fields = ('t_article_created', 't_article_updated')
+    # filter_horizontal = ('k_article_to_styles',)
 
 
 class OfferHistoryAdmin(admin.ModelAdmin):
