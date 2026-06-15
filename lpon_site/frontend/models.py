@@ -242,6 +242,7 @@ from django.db.models import F
 from django.utils.text import slugify
 from filer.fields.image import FilerImageField
 from filer.fields.file import FilerFileField
+from frontend.utils import make_slug
 import datetime
 
 
@@ -332,6 +333,7 @@ class TbArticle(models.Model):
         ARTIST = 'artist', 'Artis: артист, группа или бренд'
         STYLE = 'style', 'Slyle: музыкальный стиль'
         ITEM = 'item', 'Item: Альбом, релиз или товар (кассета, hifi, аксессуар)'
+        LABEL = 'label', 'Label: Лейбл, издатель или компания'
         OFFER = 'offer', 'Offer: конкретное предложение от продавца'
         SELLER = 'seller', 'Seller: продавец или магазин'
         BLOG = 'blog', 'Новость или блог'
@@ -481,7 +483,7 @@ class TbArticle(models.Model):
         # Если slug не установлен (новая запись) — генерируем его из названия
         if not self.slug:
             # Генерируем базовый slug на основе заголовка статьи
-            base_slug = slugify(self.s_article_title, allow_unicode=True)
+            base_slug = make_slug(self.s_article_title)
 
             # Проверяем на уникальность и добавляем счетчик если нужно
             # Это гарантирует, что slug будет уникален даже для похожих названий
@@ -749,6 +751,50 @@ class TbLabel(models.Model):
 
     def __str__(self):
         return f"label: {self.id:0>5}: {self.s_label}"
+
+    def save(self, *args, **kwargs):
+        """
+        Переопределяем save для создания связанной статьи для лейблов (если ее нет).
+
+        При сохранении лейбла:
+        1. Если связанная статья не существует - создаем её автоматически
+        2. Генерируем правильный заголовок статьи (техническое название лейбла)
+        3. Генерируем slug для URL
+        4. Устанавливаем тип статьи как 'label'
+        5. Гарантируем целостность данных при парсинге
+        """
+        # Флаг для отслеживания новой записи (нужна ли статья)
+        is_new = self.pk is None
+
+        # Если статья не забыта (но может быть пустой из-за blank=True)
+        if not self.k_label_to_article:
+            # Генерируем техническое название для статьи на основе названия лейбла
+            # Формат: "Label: {название лейбла}"
+            article_title = f"[label] {self.s_label} (auto-make)"
+
+            # Пытаемся найти существующую статью с таким же названием
+            # (может быть ситуация, когда статья создана отдельно)
+            try:
+                article = TbArticle.objects.get(s_article_title=article_title)
+            except TbArticle.DoesNotExist:
+                # Если статьи нет - создаем новую
+                article = TbArticle(
+                    s_article_title=article_title,
+                    s_article_title_html = self.s_label,
+                    seo_title = self.s_label,
+                    seo_keywords = f"{self.s_label}, лейбл, производитель",
+                    seo_description = f"Информация о лейбле {self.s_label}.",
+                    l_article_type=TbArticle.ArticleType.LABEL,
+                    b_article_published=True,
+                    slug=make_slug(slug_it=self.s_label, slug_default='label'),
+                )
+                article.save()
+
+            # Привязываем статью к лейблу
+            self.k_label_to_article = article
+
+        # Вызываем оригинальный save родительского класса
+        super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = 'Лейбл'
