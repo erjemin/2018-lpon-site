@@ -30,9 +30,9 @@ def safe_html_special_symbols(s: str) -> str:
             str: Чистый текст без HTML-разметки и спецсимволов.
 
         Example:
-            >>> safe_html_special_symbols('<p>Привет&nbsp;<b>мир</b>!</p>')
+            >> safe_html_special_symbols('<p>Привет&nbsp;<b>мир</b>!</p>')
             'Привет мир!'
-            >>> safe_html_special_symbols('Текст с\\u00a0неразрывным и \\u202Fтонким пробелом')
+            >> safe_html_special_symbols('Текст с\\u00a0неразрывным и \\u202Fтонким пробелом')
             'Текст с неразрывным и тонким пробелом'
     """
     if not s:
@@ -103,6 +103,9 @@ def make_slug(slug_it: str, max_length: int | None = None, slug_default: str = "
 
     max_length = max_length or SLUG_MAX_LENGTH
 
+    # Вычисляем минимальную длину fallback'а: "slug_default-xyz"
+    min_fallback_length = len(slug_default) + 1 + 3  # "-" и 3 hex-символа
+
     # Очищаем текст от HTML и спецсимволов
     clean_text = safe_html_special_symbols(slug_it).lower()
 
@@ -112,8 +115,10 @@ def make_slug(slug_it: str, max_length: int | None = None, slug_default: str = "
     # Нормализуем множественные дефисы,  удаляем дефисы в начале/конце
     slug = re.sub(pattern=r"-+", repl="-", string=slug).strip("-")
 
-    # Обрезаем излишнее
-    slug = slug[:max_length]
+    # Обрезаем излишнее (но только если это не нарушит fallback)
+    # Если max_length недостаточен для slug_default, не обрезаем
+    if max_length >= min_fallback_length:
+        slug = slug[:max_length]
 
-    # Если все еще пусто — генерируем fallback
+    # Если все еще пусто — генерируем fallback (БЕЗ обрезания!)
     return slug or f"{slug_default}-{random.randint(1, 4095):03x}"
