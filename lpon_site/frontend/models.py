@@ -243,6 +243,7 @@ from django.utils.text import slugify
 from filer.fields.image import FilerImageField
 from filer.fields.file import FilerFileField
 from frontend.utils import make_slug
+from lpon_site.settings import KEY_SYNONYM
 import datetime
 
 
@@ -754,36 +755,83 @@ class TbLabel(models.Model):
 
     def save(self, *args, **kwargs):
         """
-        Переопределяем save для создания связанной статьи для лейблов (если ее нет).
+        Переопределяем save для управления синонимами лейблов и создания связанной статьи.
 
-        При сохранении лейбла:
-        1. Если связанная статья не существует - создаем её автоматически
-        2. Генерируем правильный заголовок статьи (техническое название лейбла)
-        3. Генерируем slug для URL
-        4. Устанавливаем тип статьи как 'label'
-        5. Гарантируем целостность данных при парсинге
+        При сохранении лейбла (создание и обновление):
+        1. Управляем синонимами лейбла:
+           - Для новых лейблов: добавляем текущий s_label в SYNONYM
+           - При изменении s_label: добавляем как старый, так и новый s_label в SYNONYM
+           - При редактировании: используем j_label_metadata из формы (приоритет админу)
+        2. Если статья не привязана - создаём новую автоматически
+        3. Генерируем технический заголовок и slug для статьи
         """
-        # Флаг для отслеживания новой записи (нужна ли статья)
+        # Определяем новый ли это лейбл или обновление существующего
         is_new = self.pk is None
 
-        # Если статья не забыта (но может быть пустой из-за blank=True)
+        # Получаем старое значение s_label из БД (для случая, если это редактирование, а не созданиее нового лейбла)
+        old_s_label = None
+        if not is_new:
+            try:
+                old_instance = TbLabel.objects.get(pk=self.pk)
+                old_s_label = old_instance.s_label
+            except TbLabel.DoesNotExist:
+                # На случай если что-то пошло не так, считаем это новым
+                is_new = True
+
+        # Инициализируем j_label_metadata если оно пусто (хотя в моделях есть defaul-значение)
+        if not self.j_label_metadata:
+            self.j_label_metadata = {}
+
+        # Убеждаемся, что ключ 'SYNONYM' существует и это список
+        if KEY_SYNONYM not in self.j_label_metadata or not isinstance(self.j_label_metadata[KEY_SYNONYM], list):
+            self.j_label_metadata[KEY_SYNONYM] = []
+
+        # Добавляем синонимы: текущий s_label и старый (если при редактировании он изменился)
+        # Это происходит при создании новой записи И при изменении s_label
+        if is_new or old_s_label != self.s_label:
+            # Если лейбл был обновлен и s_label изменился - добавляем старый вариант
+            if old_s_label and old_s_label not in self.j_label_metadata[KEY_SYNONYM]:
+                self.j_label_metadata[KEY_SYNONYM].append(old_s_label)
+
+            # Добавляем текущий s_label если его еще нет в синонимах
+            if self.s_label not in self.j_label_metadata[KEY_SYNONYM]:
+                self.j_label_metadata[KEY_SYNONYM].append(self.s_label)
+
+        # Очищаем дубликаты в списке синонимов, сохраняя порядок
+        # (может случиться если пользователь вручную редактировал метаданные)
+        # Используем dict.fromkeys() для сохранения порядка элементов
+        if KEY_SYNONYM in self.j_label_metadata and isinstance(self.j_label_metadata[KEY_SYNONYM], list):
+            self.j_label_metadata[KEY_SYNONYM] = list(dict.fromkeys(self.j_label_metadata[KEY_SYNONYM]))
+
+        # Если статья не привязана (но может быть пустой из-за blank=True)
         if not self.k_label_to_article:
-            # Генерируем техническое название для статьи на основе названия лейбла
-            # Формат: "Label: {название лейбла}"
+            # Генерируем техническое название для статьи (для админа)
+            # Формат: "[label] {название лейбла} (auto-make)"
             article_title = f"[label] {self.s_label} (auto-make)"
 
             # Пытаемся найти существующую статью с таким же названием
-            # (может быть ситуация, когда статья создана отдельно)
+            # (может быть ситуация, когда статья уже создана отдельно)
             try:
                 article = TbArticle.objects.get(s_article_title=article_title)
             except TbArticle.DoesNotExist:
-                # Если статьи нет - создаем новую
+                # Если статьи нет - создаём новую
+                # Собираем все синонимы для SEO ключевых слов
+                # (на этом этапе в SYNONYM уже есть текущий s_label и все, что добавил пользователь)
+                synonyms_list = self.j_label_metadata.get(KEY_SYNONYM, [])
+
+                # Исключаем текущий s_label из списка (он будет добавлен первым в SEO)
+                other_synonyms = [s for s in synonyms_list if str(s) != self.s_label]
+
+                # Собираем все синонимы с текущим s_label первым (для приоритета в поиске)
+                all_synonyms = [self.s_label] + other_synonyms if other_synonyms else [self.s_label]
+                synonyms_str = ", ".join(str(s) for s in all_synonyms)
+
                 article = TbArticle(
                     s_article_title=article_title,
-                    s_article_title_html = self.s_label,
-                    seo_title = self.s_label,
-                    seo_keywords = f"{self.s_label}, лейбл, производитель",
-                    seo_description = f"Информация о лейбле {self.s_label}.",
+                    s_article_title_html=self.s_label,
+                    seo_title=self.s_label,
+                    seo_keywords=f"{synonyms_str}, лейбл, производитель",
+                    seo_description=f"Информация о лейбле {self.s_label}.",
                     l_article_type=TbArticle.ArticleType.LABEL,
                     b_article_published=True,
                     slug=make_slug(slug_it=self.s_label, slug_default='label'),

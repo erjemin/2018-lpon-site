@@ -314,3 +314,6 @@ LOGGING = {
 #                          (20-30 символов максимум).
 # SLUG_MAX_LENGTH задает ограничение для slug-ов созданных автоматически. Вручную в admin можно задать до 255 символов.
 SLUG_MAX_LENGTH = 60
+
+# Ключи для типовых параметров в мета-полях (для TbLabel, TbSeller, TbArtist, TbMusicStyle и т.д.)
+KEY_SYNONYM = 'SYNONYM'
