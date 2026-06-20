@@ -239,10 +239,9 @@
 
 from django.db import models
 from django.db.models import F
-from django.core.exceptions import ValidationError
 from filer.fields.image import FilerImageField
 from filer.fields.file import FilerFileField
-from frontend.utils import make_slug, validate_and_raise_for_duplicates
+from frontend.utils import make_slug, validate_and_raise_for_duplicates, update_synonyms_in_metadata
 from lpon_site.settings import KEY_SYNONYM
 import datetime
 import logging
@@ -771,47 +770,13 @@ class TbLabel(models.Model):
         # ===== ВАЛИДАЦИЯ НА ДУБЛИКАТЫ =====
         # Проверяем ДО работы с синонимами и метаданными!
         # Страховка: защита от прямого вызова save() минуя админку или (в будущем) парсер
-        validate_and_raise_for_duplicates(instance=self, main_field_name='s_label',
-                                          metadata_field_name='j_label_metadata')
+        validate_and_raise_for_duplicates(self, 's_label', 'j_label_metadata')
 
-        # Определяем новый ли это лейбл или обновление существующего
-        is_new = self.pk is None
+        # ===== УПРАВЛЕНИЕ СИНОНИМАМИ =====
+        # Обновляем список синонимов в метаданных (универсальный хелпер для всех моделей)
+        update_synonyms_in_metadata(self, 's_label', 'j_label_metadata')
 
-        # Получаем старое значение s_label из БД (для случая, если это редактирование, а не создание нового лейбла)
-        old_s_label = None
-        if not is_new:
-            try:
-                old_instance = TbLabel.objects.get(pk=self.pk)
-                old_s_label = old_instance.s_label
-            except TbLabel.DoesNotExist:
-                # На случай если что-то пошло не так, считаем это новым
-                is_new = True
-
-        # Инициализируем j_label_metadata если оно пусто (хотя в моделях есть defaul-значение)
-        if not self.j_label_metadata:
-            self.j_label_metadata = {}
-
-        # Убеждаемся, что ключ 'SYNONYM' существует и это список
-        if KEY_SYNONYM not in self.j_label_metadata or not isinstance(self.j_label_metadata[KEY_SYNONYM], list):
-            self.j_label_metadata[KEY_SYNONYM] = []
-
-        # Добавляем синонимы: текущий s_label и старый (если при редактировании он изменился)
-        # Это происходит при создании новой записи И при изменении s_label
-        if is_new or old_s_label != self.s_label:
-            # Если лейбл был обновлен и s_label изменился - добавляем старый вариант
-            if old_s_label and old_s_label not in self.j_label_metadata[KEY_SYNONYM]:
-                self.j_label_metadata[KEY_SYNONYM].append(old_s_label)
-
-            # Добавляем текущий s_label если его еще нет в синонимах
-            if self.s_label not in self.j_label_metadata[KEY_SYNONYM]:
-                self.j_label_metadata[KEY_SYNONYM].append(self.s_label)
-
-        # Очищаем дубликаты в списке синонимов, сохраняя порядок
-        # (может случиться если пользователь вручную редактировал метаданные)
-        # Используем dict.fromkeys() для сохранения порядка элементов
-        if KEY_SYNONYM in self.j_label_metadata and isinstance(self.j_label_metadata[KEY_SYNONYM], list):
-            self.j_label_metadata[KEY_SYNONYM] = list(dict.fromkeys(self.j_label_metadata[KEY_SYNONYM]))
-
+        # ===== СОЗДАНИЕ СВЯЗАННОЙ СТАТЬИ =====
         # Если статья не привязана (но может быть пустой из-за blank=True)
         if not self.k_label_to_article:
             # Генерируем техническое название для статьи (для админа)

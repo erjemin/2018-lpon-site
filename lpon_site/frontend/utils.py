@@ -10,7 +10,7 @@ from html import unescape
 from etpgrf.config import HANGING_PUNCTUATION_SPACE_CHARS as SPACE_CHARS
 from django.core.exceptions import ValidationError
 from lpon_site.settings import (
-    SLUG_MAX_LENGTH,
+    SLUG_MAX_LENGTH, KEY_SYNONYM,
     VALIDATE_KEY__MATCH_TYPE, VALIDATE_KEY__MODEL, VALIDATE_KEY__VALUE,
     ValidateMatchType
 )
@@ -440,4 +440,95 @@ def validate_and_raise_for_duplicates(
                     f"{model_name}.save(): Неизвестный тип совпадения: "
                     f"{duplicates_result.get(VALIDATE_KEY__MATCH_TYPE)}"
                 )
+
+
+def update_synonyms_in_metadata(
+    instance,
+    main_field_name: str,
+    metadata_field_name: str,
+) -> None:
+    """
+    Обновляет список синонимов в метаданных экземпляра модели.
+
+    Универсальный хелпер для управления синонимами во всех моделях (TbLabel, TbArtist, TbMusicStyle и т.д.)
+
+    Логика:
+    - При создании новой записи: добавляет текущее значение поля в SYNONYM
+    - При редактировании: если значение поля изменилось, добавляет ОБА (старое и новое) в SYNONYM
+    - Очищает дубликаты в списке синонимов, сохраняя порядок
+    - Использует KEY_SYNONYM из settings как ключ в metadata словаре
+
+    Args:
+        instance: Экземпляр модели (self из save методе). Обязателен!
+        main_field_name: Имя основного поля ('s_label', 's_artist', 's_style_name'). Обязателен!
+        metadata_field_name: Имя поля метаданных ('j_label_metadata', 'j_artist_metadata'). Обязателен!
+
+    Пример использования в TbLabel.save():
+        def save(self, *args, **kwargs):
+            validate_and_raise_for_duplicates(self, 's_label', 'j_label_metadata')
+            update_synonyms_in_metadata(self, 's_label', 'j_label_metadata')
+            # ... остальная логика save()
+            super().save(*args, **kwargs)
+
+    Пример использования в TbArtist.save():
+        def save(self, *args, **kwargs):
+            validate_and_raise_for_duplicates(self, 's_artist', 'j_artist_metadata')
+            update_synonyms_in_metadata(self, 's_artist', 'j_artist_metadata')
+            # ... остальная логика save()
+            super().save(*args, **kwargs)
+    """
+    model_class = instance.__class__
+
+    # Проверяем, что указанные поля существуют в модели
+    for field_name in [main_field_name, metadata_field_name]:
+        if not hasattr(instance, field_name):
+            raise AttributeError(
+                f"{model_class.__name__} instance has no attribute '{field_name}'. "
+                f"Check that main_field_name and metadata_field_name are correct."
+            )
+
+    # ===== ОПРЕДЕЛЯЕМ, ЭТО СОЗДАНИЕ ИЛИ РЕДАКТИРОВАНИЕ =====
+    # Получаем текущее значение основного поля
+    current_field_value = getattr(instance, main_field_name)
+
+    # Определяем новая ли это запись или обновление
+    is_new = instance.pk is None
+
+    # Получаем старое значение поля (для редактирования)
+    old_field_value = None
+    if not is_new:
+        try:
+            old_instance = model_class.objects.get(pk=instance.pk)
+            old_field_value = getattr(old_instance, main_field_name)
+        except model_class.DoesNotExist:
+            # На случай если что-то пошло не так, считаем это новым
+            is_new = True
+
+    # ===== ИНИЦИАЛИЗИРУЕМ МЕТАДАННЫЕ =====
+    # Инициализируем metadata если оно пусто
+    metadata_dict = getattr(instance, metadata_field_name)
+    if not metadata_dict:
+        metadata_dict = {}
+        setattr(instance, metadata_field_name, metadata_dict)
+
+    # Убеждаемся, что ключ 'SYNONYM' существует и это список
+    if KEY_SYNONYM not in metadata_dict or not isinstance(metadata_dict[KEY_SYNONYM], list):
+        metadata_dict[KEY_SYNONYM] = []
+
+    # ===== ДОБАВЛЯЕМ СИНОНИМЫ =====
+    # Добавляем синонимы при создании ИЛИ если значение поля изменилось
+    if is_new or old_field_value != current_field_value:
+        # Если поле было обновлено и значение изменилось - добавляем старое значение
+        if old_field_value and old_field_value not in metadata_dict[KEY_SYNONYM]:
+            metadata_dict[KEY_SYNONYM].append(old_field_value)
+
+        # Добавляем текущее значение если его еще нет в синонимах
+        if current_field_value not in metadata_dict[KEY_SYNONYM]:
+            metadata_dict[KEY_SYNONYM].append(current_field_value)
+
+    # ===== ОЧИЩАЕМ ДУБЛИКАТЫ =====
+    # Удаляем дубликаты в списке синонимов, сохраняя порядок
+    # (может случиться если пользователь вручную редактировал метаданные)
+    if KEY_SYNONYM in metadata_dict and isinstance(metadata_dict[KEY_SYNONYM], list):
+        metadata_dict[KEY_SYNONYM] = list(dict.fromkeys(metadata_dict[KEY_SYNONYM]))
 
