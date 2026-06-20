@@ -298,7 +298,6 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
             )
             return cleaned_data
     """
-    from django.urls import reverse
     from django.utils.html import mark_safe
 
     # Получаем класс модели из метаинформации формы
@@ -335,15 +334,13 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
                 # ОБРАБОТКА ТОЧНЫХ ДУБЛИКАТОВ
                 # Строим ссылки на найденные дубликаты для быстрого перехода в админке
                 dup_links = []
-                for dup in duplicates_queryset:
-                    # Получаем admin URL автоматически через Django meta
-                    model_name = model_class._meta.model_name
-                    app_label = model_class._meta.app_label
-                    admin_url = reverse(f'admin:{app_label}_{model_name}_change', args=[dup.pk])
-                    # Делаем ссылку относительной (убираем начальный слэш для универсальности)
-                    rel_url = admin_url.lstrip('/')
 
-                    # Получаем значение основного поля из дубликата
+                for dup in duplicates_queryset:
+                    # Относительная ссылка зависит от режима админки:
+                    # При создании: /admin/app/model/add/ → ../456/change/
+                    # При редактировании: /admin/app/model/123/change/ → ../..456/change/
+                    rel_url = f"../{dup.pk}/change/" if form_instance.instance.pk is None else f"../../{dup.pk}/change/"
+                    # Получаем значение основного поля из дубликата для вывода в ссылке
                     dup_value = getattr(dup, main_field_name, '?')
                     dup_links.append(f"<big><a href='{rel_url}'>#{dup.pk} '{dup_value}'</a></big>")
 
