@@ -12,7 +12,7 @@ from django.core.exceptions import ValidationError
 from lpon_site.settings import (
     SLUG_MAX_LENGTH,
     VALIDATE_KEY__MATCH_TYPE, VALIDATE_KEY__MODEL, VALIDATE_KEY__VALUE,
-    VALIDATE_VAL__IS_DUPLICATE
+    ValidateMatchType
 )
 
 logger = logging.getLogger(__name__)
@@ -251,7 +251,7 @@ def validate_for_duplicates(
         exact_matches = exact_matches.exclude(pk=instance_pk)
     if exact_matches.exists():
         duplicates_found.update({
-            VALIDATE_KEY__MATCH_TYPE: VALIDATE_VAL__IS_DUPLICATE,
+            VALIDATE_KEY__MATCH_TYPE: ValidateMatchType.IS_DUPLICATE,
             VALIDATE_KEY__VALUE: exact_matches,
         })
         return duplicates_found
@@ -265,3 +265,102 @@ def validate_for_duplicates(
 
     # Когда все проверки прошли -- возвращаем пустой словарь
     return duplicates_found
+
+
+def validate_entity_for_admin_form(form_instance, cleaned_data,
+                                   main_field_name='s_label',
+                                   metadata_field_name='j_label_metadata'):
+    """
+    Универсальный валидатор для админских форм.
+
+    Проверяет сущность на совпадения (дубликаты) с уже существующими записями.
+    Выбрасывает ValidationError с кликабельными ссылками на найденные дубликаты.
+
+    Используется во всех админских forms: LabelAdminForm, ArtistAdminForm, MusicStyleAdminForm и т.д.
+
+    Args:
+        form_instance: Экземпляр формы (self из clean методе)
+        cleaned_data: Очищенные данные формы
+        main_field_name: Имя основного поля ('s_label', 's_artist', 's_style_name')
+        metadata_field_name: Имя поля метаданных ('j_label_metadata', 'j_artist_metadata')
+
+    Raises:
+        ValidationError: Если найдены совпадения (дубликаты)
+
+    Пример использования в LabelAdminForm:
+        def clean(self):
+            cleaned_data = super().clean()
+            validate_entity_for_admin_form(
+                self,
+                cleaned_data,
+                main_field_name='s_label',
+                metadata_field_name='j_label_metadata'
+            )
+            return cleaned_data
+    """
+    from django.urls import reverse
+    from django.utils.html import mark_safe
+
+    # Получаем класс модели из метаинформации формы
+    model_class = form_instance.Meta.model
+
+    # Получаем значения из формы
+    main_field_value = cleaned_data.get(main_field_name)
+    metadata_dict = cleaned_data.get(metadata_field_name) or {}
+
+    # Если основное поле не заполнено, пропускаем валидацию
+    if not main_field_value:
+        return
+
+    # Вызываем основной валидатор дубликатов
+    result = validate_for_duplicates(
+        model_class=model_class,
+        instance_pk=form_instance.instance.pk,
+        main_field_value=main_field_value,
+        metadata_dict=metadata_dict,
+        main_field_name=main_field_name,
+        metadata_field_name=metadata_field_name,
+    )
+
+    # Обрабатываем результаты проверки в зависимости от типа найденного совпадения
+    if VALIDATE_KEY__MATCH_TYPE in result:
+        match_type = result[VALIDATE_KEY__MATCH_TYPE]
+        duplicates_queryset = result[VALIDATE_KEY__VALUE]
+
+        # Используем match-case для удобной обработки разных типов совпадений
+        # С Enum вместо магических чисел код становится самодокументируемым
+        # В будущем легко добавить новые типы: ValidateMatchType.PARTIAL_MATCH = 2 и т.д.
+        match match_type:
+            case ValidateMatchType.IS_DUPLICATE:
+                # ОБРАБОТКА ТОЧНЫХ ДУБЛИКАТОВ
+                # Строим ссылки на найденные дубликаты для быстрого перехода в админке
+                dup_links = []
+                for dup in duplicates_queryset:
+                    # Получаем admin URL автоматически через Django meta
+                    model_name = model_class._meta.model_name
+                    app_label = model_class._meta.app_label
+                    admin_url = reverse(f'admin:{app_label}_{model_name}_change', args=[dup.pk])
+                    # Делаем ссылку относительной (убираем начальный слэш для универсальности)
+                    rel_url = admin_url.lstrip('/')
+
+                    # Получаем значение основного поля из дубликата
+                    dup_value = getattr(dup, main_field_name, '?')
+                    dup_links.append(f"<big><a href='{rel_url}'>#{dup.pk} '{dup_value}'</a></big>")
+
+                # Объединяем все найденные дубликаты в один список
+                dup_list = ", ".join(dup_links)
+
+                # Выбрасываем ValidationError с HTML ссылками на дубликаты
+                raise ValidationError(
+                    mark_safe(
+                        f"ОШИБКА: Найдено совпадение! "
+                        f"Отредактируйте {dup_list} "
+                        f"или используйте синонимы из найденной записи."
+                    )
+                )
+
+            case _:
+                # Неизвестный или не обработанный тип совпадения
+                # В будущем сюда можно добавить логирование неожиданных типов
+                pass
+

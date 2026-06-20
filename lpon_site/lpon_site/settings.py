@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 import environ
 import os
+from enum import IntEnum
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -318,8 +319,15 @@ SLUG_MAX_LENGTH = 60
 # Ключи для типовых параметров в мета-полях (для TbLabel, TbSeller, TbArtist, TbMusicStyle и т.д.)
 KEY_SYNONYM = 'SYNONYM'
 
-# ДЛЯ МАТЧИНГА (поиска похожих исполнителей, стилей и т.д. (используется в TbLabel.matching_type, TbSeller.matching_type и т.д.)
+# ДЛЯ ВАЛИДАЦИИ (поиска похожих исполнителей, стилей и т.д. (используется в TbLabel.matching_type, TbSeller.matching_type и т.д.)
 VALIDATE_KEY__MATCH_TYPE = 'MATCH_TYPE'
 VALIDATE_KEY__MODEL = 'MODEL'
 VALIDATE_KEY__VALUE = 'MATCH_VALUE'
-VALIDATE_VAL__IS_DUPLICATE = 'exact'       # Строгое совпадение (по имени, без учета регистра)
+
+# Типы совпадений как Enum (более информативно чем просто числа, работает в match-case)
+class ValidateMatchType(IntEnum):
+    """Типы совпадений при поиске дубликатов."""
+    IS_DUPLICATE = 1      # Точное совпадение основного поля (s_label, s_artist и т.д.)
+    # PARTIAL_MATCH = 2   # Частичное совпадение
+    # SYNONYM_MATCH = 3   # Совпадение по синониму
+
