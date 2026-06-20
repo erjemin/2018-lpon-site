@@ -1,33 +1,82 @@
 # frontend/utils.py
 # Служебные функции и хелперы проекта
 
-from bs4 import BeautifulSoup
-from html import unescape
-from lpon_site.settings import SLUG_MAX_LENGTH
-from etpgrf.config import HANGING_PUNCTUATION_SPACE_CHARS as SPACE_CHARS
 import re
 import pytils
 import random
 import logging
+from bs4 import BeautifulSoup
+from html import unescape
+from etpgrf.config import HANGING_PUNCTUATION_SPACE_CHARS as SPACE_CHARS
+from django.core.exceptions import ValidationError
+from lpon_site.settings import (
+    SLUG_MAX_LENGTH,
+    VALIDATE_KEY__MATCH_TYPE, VALIDATE_KEY__MODEL, VALIDATE_KEY__VALUE,
+    VALIDATE_VAL__IS_DUPLICATE
+)
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_string(s: str) -> str:
+    """
+    Нормализует строку: удаляет невидимые символы, начальные, конечные и дублирующие пробелы.
+
+    Работает со ВСЕМИ типами пробельных символов (не-breaking space, thin space и т.д.).
+
+    Args:
+        s: Строка для нормализации
+
+    Returns:
+        str: Нормализованная строка (или пустая если была пуста)
+
+    Пример:
+        >> normalize_string("  Sony   Music  ")
+        'Sony Music'
+        >> normalize_string("Sony\u00a0\u202FMusic")  # с неразрывными пробелами
+        'Sony Music'
+    """
+    if not s:
+        return ""
+
+    result = str(s)
+
+    # Удаляем невидимые символы (не заменять, а полностью удалять)
+    result = result.translate({
+        ord("\xad"): None,    # символ мягкого переноса
+        ord("\u200b"): None,  # символ нулевой ширины (zero-width space)
+        ord("\u200c"): None,  # символ нулевой ширины (zero-width non-joiner)
+        ord("\u200d"): None,  # символ Zero Width Joiner (ZWJ)
+        ord("\u2060"): None,  # символ Word Joiner (WJ)
+        ord("\ufeff"): None,  # символ Zero Width No-Break Space (BOM)
+    })
+
+    # Все типы пробельных символов для замены на обычный пробел
+    all_spaces = SPACE_CHARS | frozenset([
+        "\u00a0",   # non-breaking space (&nbsp)
+        "\u202F",   # narrow no-break space (тонкий неразрывный пробел)
+    ])
+
+    # Заменяем ВСЕ типы пробелов на обычный пробел
+    for space_char in all_spaces:
+        result = result.replace(space_char, " ")
+
+    # Удаляем начальные/конечные пробелы и нормализуем множественные пробелы
+    # Финальная подстраховка: regex для ВСЕХ unicode whitespace символов (даже неизвестных)
+    result = re.sub(r'\s+', ' ', result).strip()
+    return result
 
 
 def safe_html_special_symbols(s: str) -> str:
     """Преобразует HTML-фрагмент в чистый текст.
 
-       Удаляет все HTML-теги и декодирует HTML-мнемоники в Unicode, убирает невидимые символы и нормализует пробелы.
-
-       Обработка пробелов:
-       - Заменяет ВСЕ типы пробелов из SPACE_CHARS на обычный пробел
-       - Добавляет явно: \\u00a0 (non-breaking space) и \\u202F (narrow no-break space)
-       - Удаляет нулевой ширины символы (ZWJ, zero-width space и т.д.)
-       - Нормализует множественные пробелы в один
+       Удаляет все HTML-теги и декодирует HTML-мнемоники в Unicode.
+       Затем нормализует пробелы через normalize_string().
 
        Args:
             s: Строка, которую надо очистить (с возможной HTML-разметкой).
        Returns:
-            str: Чистый текст без HTML-разметки и спецсимволов.
+            str: Чистый текст без HTML-разметки, спецсимволов и нормализованный.
 
         Example:
             >> safe_html_special_symbols('<p>Привет&nbsp;<b>мир</b>!</p>')
@@ -51,27 +100,8 @@ def safe_html_special_symbols(s: str) -> str:
     result = soup.get_text()
     result = unescape(result)
 
-    # Убираем символы, которые нужно удалить (не заменять, а удалять)
-    result = result.translate({
-        ord("\xad"): None,    # символ мягкого переноса
-        ord("\u200b"): None,  # символ нулевой ширины (zero-width space)
-        ord("\u200c"): None,  # символ нулевой ширины (zero-width non-joiner)
-        ord("\u200d"): None,  # символ Zero Width Joiner (ZWJ)
-        ord("\u2060"): None,  # символ Word Joiner (WJ)
-        ord("\ufeff"): None,  # символ Zero Width No-Break Space (BOM)
-    })
-
-    # Заменяем все типы пробелов из SPACE_CHARS из библиотеки etpgrf на обычный пробел
-    # Важно сделать это после обработки "мягкого переноса" потому что он включен в SPACE_CHARS (frozenset)
-    all_spaces = SPACE_CHARS | frozenset([
-        "\u00a0",   # non-breaking space (&nbsp)
-        "\u202F",   # narrow no-break space (нет мнемоники) — тонкий неразрывный пробел
-    ])
-    for space_char in all_spaces:
-        result = result.replace(space_char, " ")
-
-    # Нормализуем пробелы (удаляем множественные пробелы и приводим к стандарту)
-    return " ".join(result.split())
+    # Нормализуем: удаляем невидимые символы, все типы пробелов, дубли и края
+    return normalize_string(result)
 
 
 def make_slug(slug_it: str, max_length: int | None = None, slug_default: str = "content") -> str:
@@ -122,3 +152,116 @@ def make_slug(slug_it: str, max_length: int | None = None, slug_default: str = "
 
     # Если все еще пусто — генерируем fallback (БЕЗ обрезания!)
     return slug or f"{slug_default}-{random.randint(1, 4095):03x}"
+
+
+
+def validate_for_duplicates(
+    model_class,
+    instance_pk: int | None,
+    main_field_value: str,
+    metadata_dict: dict | None,
+    main_field_name: str | None = None,
+    metadata_field_name: str | None = None,
+) -> dict:
+    """
+    Универсальный валидатор для проверки дубликатов в моделях БД.
+
+    Находит дубликаты и возвращает их список.
+    Логика обработки (исключение, логирование, API ответ) — дело вызывающего кода.
+
+    Args:
+        model_class: Класс модели для поиска (TbLabel, TbArtist и т.д.). Обязателен!
+        instance_pk: PK текущей записи или None для новых записей
+        main_field_value: Значение основного поля для проверки (s_label, s_artist и т.д.). Не может быть пусто!
+        metadata_dict: Словарь метаданных, содержащий синонимы. Может быть None или {}
+        main_field_name: Имя основного поля модели (s_label, s_artist, s_style_name). Обязателен!
+        metadata_field_name: Имя поля метаданных (j_label_metadata, j_artist_metadata). Обязателен!
+
+    Returns:
+        list: Список найденных дубликатов (может быть пустой)
+        Каждый элемент: {'pk': int, 's_label': str, 'matched_value': str, 'match_type': str, ...}
+
+    Примеры использования:
+        # В админке
+        duplicates = validate_for_duplicates(
+            model_class=TbLabel,
+            instance_pk=self.instance.pk,
+            main_field_value=self.cleaned_data['s_label'],
+            metadata_dict=self.instance.j_label_metadata,
+            main_field_name='s_label',
+            metadata_field_name='j_label_metadata',
+        )
+        if duplicates:
+            raise ValidationError("Найдены дубликаты...")
+
+        # В парсере
+        duplicates = validate_for_duplicates(...)
+        if duplicates:
+            logger.warning(f"Дубликаты найдены: {duplicates}")
+            continue
+    """
+    # ===== ВАЛИДАЦИЯ ПАРАМЕТРОВ =====
+
+    # Проверяем, что model_class и имена полей переданы
+    if model_class is None:
+        raise TypeError("model_class is required and cannot be None")
+    if main_field_name is None:
+        raise TypeError(
+            "main_field_name is required and cannot be None.\nExample: 's_label', 's_artist', 's_style_name'"
+        )
+    if metadata_field_name is None:
+        raise TypeError(
+            "metadata_field_name is required and cannot be None.\nExample: 'j_label_metadata', 'j_artist_metadata'"
+        )
+
+    # Проверяем, что поля существуют в модели
+    for field_name in [main_field_name, metadata_field_name]:
+        if not hasattr(model_class, field_name):
+            raise AttributeError(
+                f"Model '{model_class.__name__}' has no field '{field_name}'"
+            )
+
+    # Проверяем main_field_value (не может быть пусто даже после нормализации)
+    if not main_field_value or not str(main_field_value).strip():
+        raise ValidationError("main_field_value cannot be empty or whitespace")
+
+    # Нормализуем основное поле (удаляем пробелы в начале/конце и дублирующие)
+    normalized_main_value = normalize_string(main_field_value)
+
+    # Проверяем, что после нормализации остался какой-то текст
+    if not normalized_main_value:
+        raise ValidationError("main_field_value becomes empty after normalization")
+
+    # Проверяем metadata_dict (если передан, должен быть dict или None)
+    if metadata_dict is not None and not isinstance(metadata_dict, dict):
+        raise TypeError(
+            f"metadata_dict must be dict or None, got {type(metadata_dict).__name__}"
+        )
+
+    # ===== ОСНОВНАЯ ЛОГИКА =====
+
+    duplicates_found = {VALIDATE_KEY__MODEL: model_class.__name__}
+
+    # ПРОВЕРКА 1: EXACT MATCH (точное совпадение основного поля)
+    # Ищем: есть ли другая запись с точно таким же main_field_value?
+    filter_kwargs = {f"{main_field_name}__exact": normalized_main_value}
+    exact_matches = model_class.objects.filter(**filter_kwargs)
+    if instance_pk is not None:
+        # При редактировании, чтобы не найти "самого себя" как дубликат, исключаем текущую запись из поиска
+        exact_matches = exact_matches.exclude(pk=instance_pk)
+    if exact_matches.exists():
+        duplicates_found.update({
+            VALIDATE_KEY__MATCH_TYPE: VALIDATE_VAL__IS_DUPLICATE,
+            VALIDATE_KEY__VALUE: exact_matches,
+        })
+        return duplicates_found
+    # for other_record in exact_matches:
+    #     other_main_value = str(getattr(other_record, main_field_name, ""))
+    #     duplicates_found[VALIDATE_KEY__VALUE].append({
+    #         MATCH__KEY_PK: other_record.pk,
+    #         's_label': other_main_value,
+    #         'matched_value': normalized_main_value,
+    #     })
+
+    # Когда все проверки прошли -- возвращаем пустой словарь
+    return duplicates_found

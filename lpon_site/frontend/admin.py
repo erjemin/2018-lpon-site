@@ -6,11 +6,18 @@ from django.db import models
 from django.forms import TextInput, Textarea, URLField
 from django.contrib import admin
 from django.utils.html import format_html, mark_safe
+from django.core.exceptions import ValidationError
+from django.urls import reverse
+from lpon_site.settings import (
+    VALIDATE_KEY__MATCH_TYPE, VALIDATE_KEY__MODEL, VALIDATE_KEY__VALUE,
+    VALIDATE_VAL__IS_DUPLICATE
+)
 from easy_thumbnails.files import get_thumbnailer
 from .models import (
     TbImage, TbArticle, TbArtist, TbItem, TbLabel, TbSeller,
     TbOffer, TbSource, TbOfferHistory, TbMusicStyle
 )
+from .utils import validate_for_duplicates
 
 # ============================================================================
 # АДМИНИСТРИРОВАНИЕ TbImage
@@ -457,6 +464,59 @@ class LabelAdminForm(forms.ModelForm):
             'class': 'codemirror-width-l codemirror-min-height-5',
             'data-language': 'json',
         })
+
+    def clean(self):
+        """
+        Валидируем форму: проверяем на дубликаты основного поля s_label
+        """
+        cleaned_data = super().clean()
+
+        # Получаем значения из очищенных данных
+        s_label = cleaned_data.get('s_label')
+        j_label_metadata = cleaned_data.get('j_label_metadata') or {}
+
+        if s_label:
+            # Вызываем валидатор для проверки дубликатов.
+            # Возвращает словарь: {VALIDATE_KEY__MATCH_TYPE: type, VALIDATE_KEY__VALUE: queryset, ...} или пустой словарь, если дубликатов нет
+            result = validate_for_duplicates(
+                model_class=TbLabel,
+                instance_pk=self.instance.pk,  # pk экземпляра (None для новых)
+                main_field_value=s_label,
+                metadata_dict=j_label_metadata,
+                main_field_name='s_label',
+                metadata_field_name='j_label_metadata',
+            )
+
+            # Если найдены дубликаты, обрабатываем по типу совпадения
+            if VALIDATE_KEY__MATCH_TYPE in result:
+                match_type = result[VALIDATE_KEY__MATCH_TYPE]
+                duplicates_queryset = result[VALIDATE_KEY__VALUE]
+
+                if match_type == VALIDATE_VAL__IS_DUPLICATE:
+                    # Точное совпадение основного поля — критическая ошибка
+                    # Строим ссылки на дубликаты для быстрого перехода в админке
+                    dup_links = []
+                    for dup in duplicates_queryset:
+                        # Получаем относительный URL для редактирования дубликата
+                        # reverse вернет абсолютный путь, берем часть после /admin/
+                        admin_url = reverse('admin:frontend_tblabel_change', args=[dup.pk])
+                        # Делаем ссылку относительной (убираем начальный слэш)
+                        rel_url = admin_url.lstrip('/')
+                        dup_links.append(
+                            f"<big><a href='{rel_url}'>#{dup.pk} '{dup.s_label}'</a></big>"
+                        )
+
+                    dup_list = ", ".join(dup_links)
+                    raise ValidationError(
+                        mark_safe(
+                            f"ОШИБКА: Найден точный дубликат лейбла! "
+                            f"Отредактируйте {dup_list} "
+                            f"или используйте синонимы из найденной записи."
+                        )
+                    )
+                # Другие типы дубликатов обработаны будут позже
+
+        return cleaned_data
 
 # Админ для лейбла (Label)
 class LabelAdmin(admin.ModelAdmin):
