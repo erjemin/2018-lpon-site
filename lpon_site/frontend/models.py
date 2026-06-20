@@ -239,12 +239,15 @@
 
 from django.db import models
 from django.db.models import F
-from django.utils.text import slugify
+from django.core.exceptions import ValidationError
 from filer.fields.image import FilerImageField
 from filer.fields.file import FilerFileField
-from frontend.utils import make_slug
+from frontend.utils import make_slug, validate_and_raise_for_duplicates
 from lpon_site.settings import KEY_SYNONYM
 import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -765,10 +768,16 @@ class TbLabel(models.Model):
         2. Если статья не привязана - создаём новую автоматически
         3. Генерируем технический заголовок и slug для статьи
         """
+        # ===== ВАЛИДАЦИЯ НА ДУБЛИКАТЫ =====
+        # Проверяем ДО работы с синонимами и метаданными!
+        # Страховка: защита от прямого вызова save() минуя админку или (в будущем) парсер
+        validate_and_raise_for_duplicates(instance=self, main_field_name='s_label',
+                                          metadata_field_name='j_label_metadata')
+
         # Определяем новый ли это лейбл или обновление существующего
         is_new = self.pk is None
 
-        # Получаем старое значение s_label из БД (для случая, если это редактирование, а не созданиее нового лейбла)
+        # Получаем старое значение s_label из БД (для случая, если это редактирование, а не создание нового лейбла)
         old_s_label = None
         if not is_new:
             try:

@@ -361,3 +361,83 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
                 # В будущем сюда можно добавить логирование неожиданных типов
                 pass
 
+
+def validate_and_raise_for_duplicates(
+    instance,
+    main_field_name: str,
+    metadata_field_name: str,
+) -> None:
+    """
+    Валидирует экземпляр модели на дубликаты и выбрасывает ValidationError если найдены.
+
+    Используется в переопределённых методах save() моделей для проверки дубликатов
+    перед сохранением. Получает все необходимые данные из экземпляра модели.
+
+    УНИВЕРСАЛЬНЫЙ ХЕЛПЕР — работает для любых моделей (TbLabel, TbArtist, TbMusicStyle и т.д.)
+
+    Args:
+        instance: Экземпляр модели (self из save методе). Обязателен!
+        main_field_name: Имя основного поля модели ('s_label', 's_artist', 's_style_name'). Обязателен!
+        metadata_field_name: Имя поля метаданных ('j_label_metadata', 'j_artist_metadata'). Обязателен!
+
+    Raises:
+        AttributeError: Если указанные поля не существуют в модели
+        ValidationError: Если найдены совпадения (дубликаты)
+
+    Пример использования в TbLabel.save():
+        def save(self, *args, **kwargs):
+            # Валидируем ДО работы с данными!
+            validate_and_raise_for_duplicates(self, 's_label', 'j_label_metadata')
+            # ... остальная логика save()
+            super().save(*args, **kwargs)
+
+    Пример использования в TbArtist.save():
+        def save(self, *args, **kwargs):
+            validate_and_raise_for_duplicates(self, 's_artist', 'j_artist_metadata')
+            # ... остальная логика save()
+            super().save(*args, **kwargs)
+    """
+    # Получаем класс модели из экземпляра
+    model_class = instance.__class__
+
+    # Проверяем, что указанные поля существуют в модели
+    for field_name in [main_field_name, metadata_field_name]:
+        if not hasattr(instance, field_name):
+            raise AttributeError(
+                f"{model_class.__name__} instance has no attribute '{field_name}'. "
+                f"Check that main_field_name and metadata_field_name are correct."
+            )
+
+    main_field_value = getattr(instance, main_field_name)
+
+    # Вызываем основной валидатор дубликатов
+    duplicates_result = validate_for_duplicates(
+        model_class=model_class,
+        instance_pk=instance.pk,  # None для новых записей
+        main_field_value=main_field_value,                     # ЗНАЧЕНИЕ основного поля модели
+        metadata_dict=getattr(instance, metadata_field_name),  # ЗНАЧЕНИЕ поля метаданных модели
+        main_field_name=main_field_name,            # ИМЯ основного поля модели
+        metadata_field_name=metadata_field_name,    # ИМЯ поля метаданных модели
+    )
+
+    # Обрабатываем результаты валидации через match-case
+    match duplicates_result.get(VALIDATE_KEY__MATCH_TYPE):
+        case ValidateMatchType.IS_DUPLICATE:
+            # Точный дубликат найден - это критическая ошибка!
+            model_name = model_class.__name__
+            dup_pks = [dup.pk for dup in duplicates_result[VALIDATE_KEY__VALUE]]
+            raise ValidationError(
+                f"{model_name}.save(): КРИТИЧЕСКАЯ ОШИБКА! Дубликат '{main_field_value}' уже существует. "
+                f"PK дубликатов: {dup_pks}. Сохранение отменено!"
+            )
+
+        case _:
+            # Неизвестный тип совпадения или дубликатов нет
+            # Это нормальная ситуация - логируем только если что-то странное
+            if VALIDATE_KEY__MATCH_TYPE in duplicates_result:
+                model_name = model_class.__name__
+                logger.warning(
+                    f"{model_name}.save(): Неизвестный тип совпадения: "
+                    f"{duplicates_result.get(VALIDATE_KEY__MATCH_TYPE)}"
+                )
+
