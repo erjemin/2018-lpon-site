@@ -328,6 +328,6 @@ VALIDATE_KEY__VALUE = 'MATCH_VALUE'
 class ValidateMatchType(IntEnum):
     """Типы совпадений при поиске дубликатов."""
     IS_DUPLICATE = 1      # Точное совпадение основного поля (s_label, s_artist и т.д.)
-    # PARTIAL_MATCH = 2   # Частичное совпадение
+    FIND_IN_SYNONYM = 2   # Частичное совпадение
     # SYNONYM_MATCH = 3   # Совпадение по синониму
 

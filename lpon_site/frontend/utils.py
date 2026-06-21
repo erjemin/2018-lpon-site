@@ -242,26 +242,55 @@ def validate_for_duplicates(
 
     duplicates_found = {VALIDATE_KEY__MODEL: model_class.__name__}
 
+    # ПОДГОТОВКА: Получаем базовый queryset (все записи кроме текущей, если редактируем)
+    # Это ленивый запрос - запрос выполнится, только когда мы применим фильтры
+    records_to_check = model_class.objects.all()
+    if instance_pk is not None:
+        # При редактировании исключаем текущую запись из поиска, чтобы не найти "самого себя"
+        records_to_check = records_to_check.exclude(pk=instance_pk)
+
     # ПРОВЕРКА 1: EXACT MATCH (точное совпадение основного поля)
     # Ищем: есть ли другая запись с точно таким же main_field_value?
     filter_kwargs = {f"{main_field_name}__exact": normalized_main_value}
-    exact_matches = model_class.objects.filter(**filter_kwargs)
-    if instance_pk is not None:
-        # При редактировании, чтобы не найти "самого себя" как дубликат, исключаем текущую запись из поиска
-        exact_matches = exact_matches.exclude(pk=instance_pk)
+    exact_matches = records_to_check.filter(**filter_kwargs)
     if exact_matches.exists():
         duplicates_found.update({
             VALIDATE_KEY__MATCH_TYPE: ValidateMatchType.IS_DUPLICATE,
             VALIDATE_KEY__VALUE: exact_matches,
         })
         return duplicates_found
-    # for other_record in exact_matches:
-    #     other_main_value = str(getattr(other_record, main_field_name, ""))
-    #     duplicates_found[VALIDATE_KEY__VALUE].append({
-    #         MATCH__KEY_PK: other_record.pk,
-    #         's_label': other_main_value,
-    #         'matched_value': normalized_main_value,
-    #     })
+
+    # ПРОВЕРКА 2: SYNONYM MATCH (совпадение с синонимами в метаданных других записей)
+    # Ищем: есть ли текущее значение main_field в синонимах других записей?
+    # Например, если у записи A синонимы=['Sony Music', 'SME Records'],
+    # а мы добавляем запись B с основным полем 'Sony Music', это совпадение!
+
+    # Используем RawSQL для работы с JSON функциями SQLite
+    # json_each(j_label_metadata, '$.SYNONYM') развертывает массив синонимов в отдельные строки
+    # Это необходимо т.к. Django ORM для SQLite не поддерживает __contains для JSON полей
+    from django.db.models.expressions import RawSQL
+
+    # Строим RawSQL запрос для поиска в JSON массиве синонимов
+    # json_each распарсивает массив и ищет совпадение со значением
+    synonym_matches = records_to_check.annotate(
+        has_synonym=RawSQL(
+            f"""
+            EXISTS (
+                SELECT 1 FROM json_each({metadata_field_name}, '$.{KEY_SYNONYM}')
+                WHERE json_each.value = %s
+            )
+            """,
+            (normalized_main_value,)
+        )
+    ).filter(has_synonym=True)
+
+    # Если найдены совпадения в синонимах - возвращаем все найденные записи
+    if synonym_matches.exists():
+        duplicates_found.update({
+            VALIDATE_KEY__MATCH_TYPE: ValidateMatchType.FIND_IN_SYNONYM,
+            VALIDATE_KEY__VALUE: synonym_matches,
+        })
+        return duplicates_found
 
     # Когда все проверки прошли -- возвращаем пустой словарь
     return duplicates_found
@@ -269,7 +298,8 @@ def validate_for_duplicates(
 
 def validate_entity_for_admin_form(form_instance, cleaned_data,
                                    main_field_name='s_label',
-                                   metadata_field_name='j_label_metadata'):
+                                   metadata_field_name='j_label_metadata',
+                                   request=None):
     """
     Универсальный валидатор для админских форм.
 
@@ -283,9 +313,10 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
         cleaned_data: Очищенные данные формы
         main_field_name: Имя основного поля ('s_label', 's_artist', 's_style_name')
         metadata_field_name: Имя поля метаданных ('j_label_metadata', 'j_artist_metadata')
+        request: HTTP request объект (опционально, используется для проверки GET параметра ignore_validate)
 
     Raises:
-        ValidationError: Если найдены совпадения (дубликаты)
+        ValidationError: Если найдены совпадения (дубликаты) и GET параметр не установлен
 
     Пример использования в LabelAdminForm:
         def clean(self):
@@ -294,11 +325,17 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
                 self,
                 cleaned_data,
                 main_field_name='s_label',
-                metadata_field_name='j_label_metadata'
+                metadata_field_name='j_label_metadata',
+                request=self.request if hasattr(self, 'request') else None,
             )
             return cleaned_data
     """
     from django.utils.html import mark_safe
+
+    # ПЕРЕД ВАЛИДАЦИЕЙ: проверяем, нажата ли submit-кнопка с измененным value='ignore_validate'
+    # Если пользователь нажал нашу кнопку подтверждения, она меняет value админских кнопок на 'ignore_validate'
+    if request and any(request.POST.get(btn) == 'ignore_validate' for btn in ['_save', '_addanother', '_continue']):
+        return
 
     # Получаем класс модели из метаинформации формы
     model_class = form_instance.Meta.model
@@ -326,15 +363,15 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
         match_type = result[VALIDATE_KEY__MATCH_TYPE]
         duplicates_queryset = result[VALIDATE_KEY__VALUE]
 
+        # В dup_links формируем ссылки на найденные дубликаты для быстрого перехода в админке
+        dup_links = []
+
         # Используем match-case для удобной обработки разных типов совпадений
         # С Enum вместо магических чисел код становится самодокументируемым
         # В будущем легко добавить новые типы: ValidateMatchType.PARTIAL_MATCH = 2 и т.д.
         match match_type:
             case ValidateMatchType.IS_DUPLICATE:
                 # ОБРАБОТКА ТОЧНЫХ ДУБЛИКАТОВ
-                # Строим ссылки на найденные дубликаты для быстрого перехода в админке
-                dup_links = []
-
                 for dup in duplicates_queryset:
                     # Относительная ссылка зависит от режима админки:
                     # При создании: /admin/app/model/add/ → ../456/change/
@@ -347,12 +384,73 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
                 # Объединяем все найденные дубликаты в один список
                 dup_list = ", ".join(dup_links)
 
-                # Выбрасываем ValidationError с HTML ссылками на дубликаты
+                # Для случая IS_DUPLICATE отключена проверка force_ignore_validate, т.к. это критическая ситуация
+                # и проверяемом поле часто unique=True на уровне модели.
                 raise ValidationError(
                     mark_safe(
-                        f"ОШИБКА: Найдено совпадение! "
-                        f"Отредактируйте {dup_list} "
+                        f"ОШИБКА: Найдено ПОЛНОЕ совпадение! "
+                        f"Измените название или отредактируйте {dup_list}."
+                    )
+                )
+
+            case ValidateMatchType.FIND_IN_SYNONYM:
+                # ОБРАБОТКА СОВПАДЕНИЙ В СИНОНИМАХ
+                for dup in duplicates_queryset:
+                    rel_url = f"../{dup.pk}/change/" if form_instance.instance.pk is None else f"../../{dup.pk}/change/"
+                    dup_value = getattr(dup, main_field_name, '?')
+                    dup_links.append(f"<big><a href='{rel_url}'>#{dup.pk} '{dup_value}'</a></big>")
+                dup_list = ", ".join(dup_links)
+
+                # Кнопка подтверждения создания несмотря на синонимы
+                # При клике меняет value всех submit-кнопок на 'ignore_validate' и отправляет форму
+                # Если пользователь потом меняет данные - вотчер вернет оригинальные значения
+                confirmation_button = '''
+                <br><br>
+                <button type="button" 
+                    onclick="
+                    // Меняем value у всех submit-кнопок на 'ignore_validate'
+                    document.querySelectorAll('input[type=submit]').forEach(function(btn) {
+                        btn.value = 'ignore_validate';
+                    });
+                    // Отправляем форму через первую найденную submit-кнопку
+                    document.querySelector('input[type=submit]').click();
+                    "
+                    style="padding: 10px 15px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                    Я уверен, создать несмотря на синонимы
+                </button>
+                <em style="display: block; margin-top: 8px; color: #666; font-size: 12px;">
+                    Форма будет переотправлена без проверки синонимов
+                </em>
+                
+                <script>
+                // Вотчер: если пользователь меняет данные в форме, отменяем флаг ignore_validate
+                document.addEventListener('DOMContentLoaded', function() {
+                    // Сохраняем оригинальные значения submit-кнопок
+                    let originalValues = {};
+                    document.querySelectorAll('input[type=submit]').forEach(function(btn) {
+                        originalValues[btn.name] = btn.value;
+                    });
+                    
+                    // Отслеживаем изменения всех input/textarea полей в форме
+                    let formInputs = document.querySelectorAll('input[type!=submit], textarea, select');
+                    formInputs.forEach(function(input) {
+                        input.addEventListener('change', function() {
+                            // Если пользователь изменил данные, восстанавливаем оригинальные значения кнопок
+                            document.querySelectorAll('input[type=submit]').forEach(function(btn) {
+                                btn.value = originalValues[btn.name];
+                            });
+                        });
+                    });
+                });
+                </script>
+                '''
+
+                raise ValidationError(
+                    mark_safe(
+                        f"ВНИМАНИЕ: Найдено совпадение в синонимах! "
+                        f"Проверьте {dup_list} "
                         f"или используйте синонимы из найденной записи."
+                        f"{confirmation_button}"
                     )
                 )
 
@@ -531,4 +629,9 @@ def update_synonyms_in_metadata(
     # (может случиться если пользователь вручную редактировал метаданные)
     if KEY_SYNONYM in metadata_dict and isinstance(metadata_dict[KEY_SYNONYM], list):
         metadata_dict[KEY_SYNONYM] = list(dict.fromkeys(metadata_dict[KEY_SYNONYM]))
+
+    # ===== СООБЩАЕМ DJANGO ЧТО ПОЛЕ ИЗМЕНИЛОСЬ =====
+    # Для JSONField нужно явно сообщить что мы изменили содержимое
+    # иначе Django может не сохранить изменения
+    setattr(instance, metadata_field_name, metadata_dict)
 

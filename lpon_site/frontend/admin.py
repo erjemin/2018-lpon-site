@@ -430,14 +430,19 @@ class LabelAdminForm(forms.ModelForm):
     Кастомная форма для админки лейблов (Label).
     Добавляет виджеты CodeMirror для текстовых полей
     """
+
     class Meta:
         model = TbLabel
         fields = ('s_label', 'k_label_to_article', 'j_label_metadata',)
 
     def __init__(self, *args, **kwargs):
         """
-        При инициализации формы подгружаем
+        При инициализации формы подгружаем CodeMirror.
+        Получаем request из kwargs, переданных из get_form_kwargs в AdminClass.
         """
+        # Извлекаем request из kwargs если он есть
+        self.request = kwargs.pop('request', None)
+
         # Атрибуты для активации CodeMirror редактора
         codemirror_attrs = {
             'data-codemirror-editor': '1',
@@ -445,6 +450,7 @@ class LabelAdminForm(forms.ModelForm):
         }
 
         super().__init__(*args, **kwargs)
+
 
         # Активируем CodeMirror и устанавливаем классы для реальных полей
         self.fields['s_label'].widget = Textarea(attrs={
@@ -458,19 +464,23 @@ class LabelAdminForm(forms.ModelForm):
             'data-language': 'json',
         })
 
+
     def clean(self):
         """
-        Валидируем форму: проверяем на совпадения (дубликаты) основного поля s_label
+        Валидируем форму: проверяем на совпадения (дубликаты) основного поля s_label.
+        Используем GET параметр ignore_validate для пропуска валидации при переотправке.
         """
         cleaned_data = super().clean()
 
         # Используем универсальный хелпер для проверки дубликатов
         # Модель берется автоматически из self.Meta.model
+        # Передаем request для проверки GET параметра ignore_validate
         validate_entity_for_admin_form(
             self,
             cleaned_data,
             main_field_name='s_label',
-            metadata_field_name='j_label_metadata'
+            metadata_field_name='j_label_metadata',
+            request=self.request,
         )
 
         return cleaned_data
@@ -489,6 +499,7 @@ class LabelAdmin(admin.ModelAdmin):
             'codemirror/editor.js',              # Основной CodeMirror
             'codemirror/codemirror-patch.js',    # Патч для управления высотой/шириной
         )
+
     list_display = ('id', 's_label', 't_label_created')
     list_display_links = ('id', 's_label',)
     search_fields = ('s_label',)
@@ -514,6 +525,28 @@ class LabelAdmin(admin.ModelAdmin):
             'classes': ('collapse',),
         }),
     )
+
+    def get_form(self, request, obj=None, **kwargs):
+        """
+        Переопределяем get_form чтобы передать request в форму.
+        Создаем оборачивающий класс который передаст request в __init__.
+        """
+        FormClass = super().get_form(request, obj, **kwargs)
+
+        # Сохраняем request в замыкании для доступа в классе
+        request_ref = request
+
+        class FormWithRequest(FormClass):
+            """Оборачивающий класс который передает request при инстанцировании"""
+            def __init__(form_instance, *args, **init_kwargs):
+                # Добавляем request в kwargs перед вызовом __init__ родителя
+                init_kwargs['request'] = request_ref
+                super().__init__(*args, **init_kwargs)
+
+        return FormWithRequest
+
+
+
 
 # ================
 # АДМИН-ПАНЕЛЬ ДЛЯ ПРОДАВЦА/SELLER
