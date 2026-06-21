@@ -1,0 +1,22 @@
+/**
+ * Стили для кнопок при обходе валидации
+ * Отображает пользователю что валидация была обойдена
+ */
+
+/* Кнопки в режиме обхода валидации (при появлении ошибки синонимов) */
+input[type=submit].force-ignore-validation {
+    background-color: #f39c12 !important;  /* Оранжевый/жёлтый цвет */
+    color: #fff;
+    border: 2px solid #e67e22;
+}
+
+input[type=submit].force-ignore-validation:hover {
+    background-color: #e67e22 !important;
+    cursor: pointer;
+}
+
+/* Скрываем красную кнопку подтверждения если она есть */
+.confirmation-button-container {
+    display: none;
+}
+

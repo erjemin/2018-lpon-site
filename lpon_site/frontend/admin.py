@@ -12,6 +12,40 @@ from .models import (
 )
 from .utils import validate_entity_for_admin_form
 
+
+# ============================================================================
+# МИКСИНЫ ДЛЯ АДМИНКИ
+# ============================================================================
+
+class RequestInFormMixin(admin.ModelAdmin):
+    """
+    Миксин для передачи request объекта в форму.
+
+    Используется когда форма нуждается в доступе к request для проверки POST параметров
+    или другой информации о текущем HTTP-запросе.
+
+    Переопределяет get_form() и передает request в __init__ формы через kwargs.
+    """
+
+    def get_form(self, request, obj=None, **kwargs):
+        """
+        Переопределяем get_form чтобы передать request в форму.
+        Создаем оборачивающий класс который передаст request в __init__.
+        """
+        FormClass = super().get_form(request, obj, **kwargs)
+
+        # Сохраняем request в замыкании для доступа в классе
+        request_ref = request
+
+        class FormWithRequest(FormClass):
+            """Оборачивающий класс который передает request при инстанцировании"""
+            def __init__(form_instance, *args, **init_kwargs):
+                # Добавляем request в kwargs перед вызовом __init__ родителя
+                init_kwargs['request'] = request_ref
+                super().__init__(*args, **init_kwargs)
+
+        return FormWithRequest
+
 # ============================================================================
 # АДМИНИСТРИРОВАНИЕ TbImage
 #
@@ -485,19 +519,23 @@ class LabelAdminForm(forms.ModelForm):
 
         return cleaned_data
 
-# Админ для лейбла (Label)
-class LabelAdmin(admin.ModelAdmin):
-    """Админ для лейблов"""
+# Админ для лейбла (Label) через миксин
+class LabelAdmin(RequestInFormMixin, admin.ModelAdmin):
+    """Админ для лейблов с поддержкой передачи request в форму"""
     form = LabelAdminForm  # Используем кастомную форму с виджетами CodeMirror
 
     # Подключаем JS через Media (правильный способ!)
     class Media:
         css = {
-            'all': ('codemirror/codemirror-styles.css',)  # Стили для CodeMirror
+            'all': (
+                'codemirror/codemirror-styles.css',        # Стили для CodeMirror
+                'css/validation-override.css',             # Стили для обхода валидации
+            )
         }
         js = (
             'codemirror/editor.js',              # Основной CodeMirror
             'codemirror/codemirror-patch.js',    # Патч для управления высотой/шириной
+            'js/form-field-watcher.js',          # Вотчер для отслеживания изменений полей формы
         )
 
     list_display = ('id', 's_label', 't_label_created')
@@ -525,26 +563,6 @@ class LabelAdmin(admin.ModelAdmin):
             'classes': ('collapse',),
         }),
     )
-
-    def get_form(self, request, obj=None, **kwargs):
-        """
-        Переопределяем get_form чтобы передать request в форму.
-        Создаем оборачивающий класс который передаст request в __init__.
-        """
-        FormClass = super().get_form(request, obj, **kwargs)
-
-        # Сохраняем request в замыкании для доступа в классе
-        request_ref = request
-
-        class FormWithRequest(FormClass):
-            """Оборачивающий класс который передает request при инстанцировании"""
-            def __init__(form_instance, *args, **init_kwargs):
-                # Добавляем request в kwargs перед вызовом __init__ родителя
-                init_kwargs['request'] = request_ref
-                super().__init__(*args, **init_kwargs)
-
-        return FormWithRequest
-
 
 
 

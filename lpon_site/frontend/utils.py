@@ -334,7 +334,16 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
 
     # ПЕРЕД ВАЛИДАЦИЕЙ: проверяем, нажата ли submit-кнопка с измененным value='ignore_validate'
     # Если пользователь нажал нашу кнопку подтверждения, она меняет value админских кнопок на 'ignore_validate'
+    print("DEBUG validate: request.POST keys =", list(request.POST.keys()) if request else "NO REQUEST")
+    if request:
+        print("DEBUG validate: _save =", repr(request.POST.get('_save')))
+        print("DEBUG validate: _addanother =", repr(request.POST.get('_addanother')))
+        print("DEBUG validate: _continue =", repr(request.POST.get('_continue')))
+        check = any(request.POST.get(btn) == 'ignore_validate' for btn in ['_save', '_addanother', '_continue'])
+        print("DEBUG validate: check result =", check)
+    
     if request and any(request.POST.get(btn) == 'ignore_validate' for btn in ['_save', '_addanother', '_continue']):
+        print("DEBUG validate: ПРОПУСКАЕМ ВАЛИДАЦИЮ")
         return
 
     # Получаем класс модели из метаинформации формы
@@ -402,47 +411,26 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
                 dup_list = ", ".join(dup_links)
 
                 # Кнопка подтверждения создания несмотря на синонимы
-                # При клике меняет value всех submit-кнопок на 'ignore_validate' и отправляет форму
-                # Если пользователь потом меняет данные - вотчер вернет оригинальные значения
+                # При клике добавляет класс force-ignore-validation ко всем submit-кнопкам
+                # Это активирует режим игнорирования валидации
+                # Затем пользователь должен нажать стандартную кнопку сохранения
                 confirmation_button = '''
-                <br><br>
-                <button type="button" 
-                    onclick="
-                    // Меняем value у всех submit-кнопок на 'ignore_validate'
-                    document.querySelectorAll('input[type=submit]').forEach(function(btn) {
-                        btn.value = 'ignore_validate';
-                    });
-                    // Отправляем форму через первую найденную submit-кнопку
-                    document.querySelector('input[type=submit]').click();
-                    "
-                    style="padding: 10px 15px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
-                    Я уверен, создать несмотря на синонимы
-                </button>
-                <em style="display: block; margin-top: 8px; color: #666; font-size: 12px;">
-                    Форма будет переотправлена без проверки синонимов
-                </em>
-                
-                <script>
-                // Вотчер: если пользователь меняет данные в форме, отменяем флаг ignore_validate
-                document.addEventListener('DOMContentLoaded', function() {
-                    // Сохраняем оригинальные значения submit-кнопок
-                    let originalValues = {};
-                    document.querySelectorAll('input[type=submit]').forEach(function(btn) {
-                        originalValues[btn.name] = btn.value;
-                    });
-                    
-                    // Отслеживаем изменения всех input/textarea полей в форме
-                    let formInputs = document.querySelectorAll('input[type!=submit], textarea, select');
-                    formInputs.forEach(function(input) {
-                        input.addEventListener('change', function() {
-                            // Если пользователь изменил данные, восстанавливаем оригинальные значения кнопок
-                            document.querySelectorAll('input[type=submit]').forEach(function(btn) {
-                                btn.value = originalValues[btn.name];
-                            });
+                <div class="confirmation-button-container" style="display: block; margin-top: 15px;">
+                    <br>
+                    <button type="button" 
+                        onclick="
+                        document.querySelectorAll('input[type=submit]').forEach(function(btn) {
+                            btn.value = 'ignore_validate';
+                            btn.classList.add('force-ignore-validation');
                         });
-                    });
-                });
-                </script>
+                        "
+                        style="padding: 10px 15px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                        Я уверен, создать несмотря на синонимы
+                    </button>
+                    <em style="display: block; margin-top: 8px; color: #666; font-size: 12px;">
+                        Теперь нажмите кнопку сохранения чтобы создать лейбл
+                    </em>
+                </div>
                 '''
 
                 raise ValidationError(
