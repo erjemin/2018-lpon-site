@@ -7,16 +7,46 @@
 input[type=submit].force-ignore-validation {
     background-color: #f39c12 !important;  /* Оранжевый/жёлтый цвет */
     color: #fff;
-    border: 2px solid #e67e22;
 }
 
 input[type=submit].force-ignore-validation:hover {
     background-color: #e67e22 !important;
     cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+input[type=submit].force-ignore-validation:not(:hover) {
+    transition: background-color 0.6s ease;
 }
 
-/* Скрываем красную кнопку подтверждения если она есть */
+
+/* Блок красной кнопки подтверждения игнорирования валидации */
 .confirmation-button-container {
-    display: none;
+    display: block;
+    padding-top: 15px;
+}
+
+.confirmation-button-container button {
+    padding: 10px 15px;
+    background: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.confirmation-button-container button:hover {
+    background: #c0392b;
+    transition: background-color 0.6s ease;
+}
+.confirmation-button-container button:not(:hover) {
+    transition: background-color 0.6s ease;
+}
+
+.confirmation-button-container em {
+    display: block;
+    margin-top: 8px;
+    color: #666;
+    font-size: 12px;
 }
 

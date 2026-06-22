@@ -402,24 +402,19 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
                 dup_list = ", ".join(dup_links)
 
                 # Кнопка подтверждения создания несмотря на синонимы
-                # При клике добавляет класс force-ignore-validation ко всем submit-кнопкам
+                # При клике вызывает функцию markSubmitButtonsToIgnoreValidation()
+                # которая добавляет класс force-ignore-validation ко всем submit-кнопкам.
                 # Вотчер видит этот класс и добавляет onclick обработчик к кнопкам
-                # Onclick обработчик вызывает addGetParam() перед отправкой формы
+                # для добавления GET параметра ignore_validate=1 перед отправкой формы.
+                # Весь JS код находится в form-field-watcher.js для чистоты и переиспользования.
                 confirmation_button = '''
-                <div class="confirmation-button-container" style="display: block; margin-top: 15px;">
-                    <br>
-                    <button type="button" onclick="
-                        // Добавляем класс force-ignore-validation ко всем submit-кнопкам
-                        document.querySelectorAll('input[type=submit]').forEach(function(btn) {
-                            btn.classList.add('force-ignore-validation');
-                        });
-                        "
-                        style="padding: 10px 15px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
-                        Я уверен! Создать несмотря на синонимы.
+                <div class="confirmation-button-container">
+                    <button type="button" onclick="markSubmitButtonsToIgnoreValidation();">
+                        <big>Я проверил и уверен!</big><br/>
+                        Сохранить, несмотря на синонимы.<br/>
+                        <i>Точно совпадения в синонимах других записей будут удалены.</i>
                     </button>
-                    <em style="display: block; margin-top: 8px; color: #666; font-size: 12px;">
-                        Теперь нажмите стандартные кнопки сохранения снизу, чтобы сохранить.
-                    </em>
+                    <em>Теперь нажмите стандартные кнопки сохранения снизу, чтобы сохранить.</em>
                 </div>
                 '''
 

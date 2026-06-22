@@ -31,6 +31,17 @@ function addGetParam(button, key, value) {
     button.formAction = baseAction + separator + key + '=' + value;
 }
 
+// Функция для добавления класса force-ignore-validation ко всем submit-кнопкам формы
+// Используется при клике на кнопку "Я проверил и уверен!"
+function markSubmitButtonsToIgnoreValidation() {
+    // Находим все submit-кнопки на странице и добавляем им класс
+    // form-field-watcher.js потом отследит добавление класса через MutationObserver
+    // и добавит соответствующие onclick обработчики
+    document.querySelectorAll('input[type=submit]').forEach(function(btn) {
+        btn.classList.add('force-ignore-validation');
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // Находим все submit-кнопки администратора
     let submitButtons = document.querySelectorAll('input[type=submit]');
@@ -124,4 +135,3 @@ document.addEventListener('DOMContentLoaded', function() {
         observer.observe(btn, { attributes: true, attributeFilter: ['class'] });
     });
 });
-
