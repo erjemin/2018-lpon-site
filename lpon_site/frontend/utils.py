@@ -332,18 +332,9 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
     """
     from django.utils.html import mark_safe
 
-    # ПЕРЕД ВАЛИДАЦИЕЙ: проверяем, нажата ли submit-кнопка с измененным value='ignore_validate'
-    # Если пользователь нажал нашу кнопку подтверждения, она меняет value админских кнопок на 'ignore_validate'
-    print("DEBUG validate: request.POST keys =", list(request.POST.keys()) if request else "NO REQUEST")
-    if request:
-        print("DEBUG validate: _save =", repr(request.POST.get('_save')))
-        print("DEBUG validate: _addanother =", repr(request.POST.get('_addanother')))
-        print("DEBUG validate: _continue =", repr(request.POST.get('_continue')))
-        check = any(request.POST.get(btn) == 'ignore_validate' for btn in ['_save', '_addanother', '_continue'])
-        print("DEBUG validate: check result =", check)
-    
-    if request and any(request.POST.get(btn) == 'ignore_validate' for btn in ['_save', '_addanother', '_continue']):
-        print("DEBUG validate: ПРОПУСКАЕМ ВАЛИДАЦИЮ")
+    # ПЕРЕД ВАЛИДАЦИЕЙ: проверяем GET параметр ignore_validate
+    # Если пользователь нажал красную кнопку, addGetParam добавит GET параметр к URL
+    if request and request.GET.get('ignore_validate') == '1':
         return
 
     # Получаем класс модели из метаинформации формы
@@ -412,23 +403,22 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
 
                 # Кнопка подтверждения создания несмотря на синонимы
                 # При клике добавляет класс force-ignore-validation ко всем submit-кнопкам
-                # Это активирует режим игнорирования валидации
-                # Затем пользователь должен нажать стандартную кнопку сохранения
+                # Вотчер видит этот класс и добавляет onclick обработчик к кнопкам
+                # Onclick обработчик вызывает addGetParam() перед отправкой формы
                 confirmation_button = '''
                 <div class="confirmation-button-container" style="display: block; margin-top: 15px;">
                     <br>
-                    <button type="button" 
-                        onclick="
+                    <button type="button" onclick="
+                        // Добавляем класс force-ignore-validation ко всем submit-кнопкам
                         document.querySelectorAll('input[type=submit]').forEach(function(btn) {
-                            btn.value = 'ignore_validate';
                             btn.classList.add('force-ignore-validation');
                         });
                         "
                         style="padding: 10px 15px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
-                        Я уверен, создать несмотря на синонимы
+                        Я уверен! Создать несмотря на синонимы.
                     </button>
                     <em style="display: block; margin-top: 8px; color: #666; font-size: 12px;">
-                        Теперь нажмите кнопку сохранения чтобы создать лейбл
+                        Теперь нажмите стандартные кнопки сохранения снизу, чтобы сохранить.
                     </em>
                 </div>
                 '''

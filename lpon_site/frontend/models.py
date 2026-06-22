@@ -774,10 +774,7 @@ class TbLabel(models.Model):
 
         # ===== УПРАВЛЕНИЕ СИНОНИМАМИ =====
         # Обновляем список синонимов в метаданных (универсальный хелпер для всех моделей)
-        print("DEBUG save: ДО update_synonyms_in_metadata")
-        print("DEBUG save: j_label_metadata ДО:", self.j_label_metadata)
         update_synonyms_in_metadata(self, 's_label', 'j_label_metadata')
-        print("DEBUG save: j_label_metadata ПОСЛЕ:", self.j_label_metadata)
 
         # ===== СОЗДАНИЕ СВЯЗАННОЙ СТАТЬИ =====
         # Если статья не привязана (но может быть пустой из-за blank=True)
