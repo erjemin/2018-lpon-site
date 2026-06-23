@@ -332,11 +332,6 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
     """
     from django.utils.html import mark_safe
 
-    # ПЕРЕД ВАЛИДАЦИЕЙ: проверяем GET параметр ignore_validate
-    # Если пользователь нажал красную кнопку, addGetParam добавит GET параметр к URL
-    if request and request.GET.get('ignore_validate') == '1':
-        return
-
     # Получаем класс модели из метаинформации формы
     model_class = form_instance.Meta.model
 
@@ -347,6 +342,9 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
     # Если основное поле не заполнено, пропускаем валидацию
     if not main_field_value:
         return
+
+    # Нормализуем основное значение для сравнения (как в validate_for_duplicates)
+    normalized_main_value = normalize_string(main_field_value)
 
     # Вызываем основной валидатор дубликатов
     result = validate_for_duplicates(
@@ -384,8 +382,8 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
                 # Объединяем все найденные дубликаты в один список
                 dup_list = ", ".join(dup_links)
 
-                # Для случая IS_DUPLICATE отключена проверка force_ignore_validate, т.к. это критическая ситуация
-                # и проверяемом поле часто unique=True на уровне модели.
+                # Для случая IS_DUPLICATE всегда выбрасываем ошибку, т.к. это критическая ситуация
+                # и поле часто имеет unique=True на уровне модели.
                 raise ValidationError(
                     mark_safe(
                         f"ОШИБКА: Найдено ПОЛНОЕ совпадение! "
@@ -395,37 +393,63 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
 
             case ValidateMatchType.FIND_IN_SYNONYM:
                 # ОБРАБОТКА СОВПАДЕНИЙ В СИНОНИМАХ
-                for dup in duplicates_queryset:
-                    rel_url = f"../{dup.pk}/change/" if form_instance.instance.pk is None else f"../../{dup.pk}/change/"
-                    dup_value = getattr(dup, main_field_name, '?')
-                    dup_links.append(f"<big><a href='{rel_url}'>#{dup.pk} '{dup_value}'</a></big>")
-                dup_list = ", ".join(dup_links)
+                # Проверяем: это запрос с подтверждением (ignore_validate=1) или первоначальная проверка?
+                if request and request.GET.get('ignore_validate') == '1':
+                    # РЕЖИМ: ОБХОД ВАЛИДАЦИИ (пользователь нажал красную кнопку и подтвердил "Я проверил и уверен!")
+                    # Тихо удаляем найденные совпадения из синонимов других записей
+                    for duplicate_record in duplicates_queryset:
+                        # Получаем текущие метаданные записи
+                        dup_metadata = getattr(duplicate_record, metadata_field_name) or {}
 
-                # Кнопка подтверждения создания несмотря на синонимы
-                # При клике вызывает функцию markSubmitButtonsToIgnoreValidation()
-                # которая добавляет класс force-ignore-validation ко всем submit-кнопкам.
-                # Вотчер видит этот класс и добавляет onclick обработчик к кнопкам
-                # для добавления GET параметра ignore_validate=1 перед отправкой формы.
-                # Весь JS код находится в form-field-watcher.js для чистоты и переиспользования.
-                confirmation_button = '''
-                <div class="confirmation-button-container">
-                    <button type="button" onclick="markSubmitButtonsToIgnoreValidation();">
+                        # Если в метаданных есть синонимы, удаляем из них текущее значение
+                        if KEY_SYNONYM in dup_metadata and isinstance(dup_metadata[KEY_SYNONYM], list):
+                            # Удаляем нормализованное значение из списка синонимов
+                            dup_metadata[KEY_SYNONYM] = [
+                                syn for syn in dup_metadata[KEY_SYNONYM]
+                                if normalize_string(syn) != normalized_main_value
+                            ]
+                            # Сохраняем обновленные метаданные
+                            setattr(duplicate_record, metadata_field_name, dup_metadata)
+                            # Сохраняем запись (обновляем только поле с метаданными)
+                            duplicate_record.save(update_fields=[metadata_field_name])
+                    # Выходим без ошибки в админку, т.к. пользователь "проверил и уверен!"
+                    # Синонимы из удалены, запись сохранится нормально
+                    return
+
+                else:
+                    # РЕЖИМ: ПЕРВОНАЧАЛЬНАЯ ПРОВЕРКА
+                    # Показываем пользователю красную кнопку подтверждения с информацией о совпадениях
+                    for dup in duplicates_queryset:
+                        rel_url = f"../{dup.pk}/change/" if form_instance.instance.pk is None else f"../../{dup.pk}/change/"
+                        dup_value = getattr(dup, main_field_name, '?')
+                        dup_links.append(f"<big><a href='{rel_url}'>#{dup.pk} '{dup_value}'</a></big>")
+                    dup_list = ", ".join(dup_links)
+
+                    # Кнопка подтверждения создания несмотря на синонимы
+                    # При клике вызывает функцию markSubmitButtonsToIgnoreValidation()
+                    # которая добавляет класс force-ignore-validation ко всем submit-кнопкам.
+                    # Вотчер видит этот класс и добавляет onclick обработчик к кнопкам
+                    # для добавления GET параметра ignore_validate=1 перед отправкой формы.
+                    # Весь JS код находится в form-field-watcher.js для чистоты и переиспользования.
+                    confirmation_button = '''
+                    <div class="confirmation-button-container">
+                      <button type="button" onclick="markSubmitButtonsToIgnoreValidation();">
                         <big>Я проверил и уверен!</big><br/>
                         Сохранить, несмотря на синонимы.<br/>
-                        <i>Точно совпадения в синонимах других записей будут удалены.</i>
-                    </button>
-                    <em>Теперь нажмите стандартные кнопки сохранения снизу, чтобы сохранить.</em>
-                </div>
-                '''
+                        <i>Точные совпадения в синонимах других записей будут удалены.</i>
+                      </button>
+                      <em>Теперь нажмите стандартные кнопки сохранения снизу, чтобы сохранить.</em>
+                    </div>
+                    '''
 
-                raise ValidationError(
-                    mark_safe(
-                        f"ВНИМАНИЕ: Найдено совпадение в синонимах! "
-                        f"Проверьте {dup_list} "
-                        f"или используйте синонимы из найденной записи."
-                        f"{confirmation_button}"
+                    raise ValidationError(
+                        mark_safe(
+                            f"ВНИМАНИЕ: Найдено совпадение в синонимах! "
+                            f"Проверьте {dup_list} "
+                            f"или используйте синонимы из найденной записи."
+                            f"{confirmation_button}"
+                        )
                     )
-                )
 
             case _:
                 # Неизвестный или не обработанный тип совпадения
