@@ -419,6 +419,7 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
                 else:
                     # РЕЖИМ: ПЕРВОНАЧАЛЬНАЯ ПРОВЕРКА
                     # Показываем пользователю красную кнопку подтверждения с информацией о совпадениях
+                    # Показываем пользователю красную кнопку подтверждения с информацией о совпадениях
                     for dup in duplicates_queryset:
                         rel_url = f"../{dup.pk}/change/" if form_instance.instance.pk is None else f"../../{dup.pk}/change/"
                         dup_value = getattr(dup, main_field_name, '?')
@@ -519,11 +520,32 @@ def validate_and_raise_for_duplicates(
     match duplicates_result.get(VALIDATE_KEY__MATCH_TYPE):
         case ValidateMatchType.IS_DUPLICATE:
             # Точный дубликат найден - это критическая ошибка!
+            # На уровне save() мы НИКОГДА не должны позволить точные дубликаты.
             model_name = model_class.__name__
             dup_pks = [dup.pk for dup in duplicates_result[VALIDATE_KEY__VALUE]]
             raise ValidationError(
                 f"{model_name}.save(): КРИТИЧЕСКАЯ ОШИБКА! Дубликат '{main_field_value}' уже существует. "
                 f"PK дубликатов: {dup_pks}. Сохранение отменено!"
+            )
+
+        case ValidateMatchType.FIND_IN_SYNONYM:
+            # Совпадение в синонимах найдено - консервативный подход: всегда блокируем
+            # Это вызвано вне админки (парсер, API, батник, bulk операции и т.д.)
+            # где нет пользовательского интерфейса для принятия решения.
+            #
+            # TODO: В будущем когда будет парсер/брокер очереди принятия решений:
+            # - Сохранить состояние экземпляра в очередь (сохранить в брокер)
+            # - Уведомить пользователя/модератора о конфликте
+            # - Ожидать решения пользователя (удалить из синонимов или объединить записи)
+            # - После решения пользователя: автоматически удалить синонимы и пересохранить
+            #
+            # На данный момент: просто блокируем и требуем ручного разрешения конфликта.
+            model_name = model_class.__name__
+            dup_pks = [dup.pk for dup in duplicates_result[VALIDATE_KEY__VALUE]]
+            raise ValidationError(
+                f"{model_name}.save(): Найдено совпадение в синонимах! "
+                f"Разрешите на уровне админки или подтвердите решение. "
+                f"PK конфликтующих записей: {dup_pks}"
             )
 
         case _:
