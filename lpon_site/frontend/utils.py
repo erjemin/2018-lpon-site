@@ -9,6 +9,9 @@ from bs4 import BeautifulSoup
 from html import unescape
 from etpgrf.config import HANGING_PUNCTUATION_SPACE_CHARS as SPACE_CHARS
 from django.core.exceptions import ValidationError
+from django.db.models import QuerySet
+from django.db.models.expressions import RawSQL
+from django.utils.html import mark_safe
 from lpon_site.settings import (
     SLUG_MAX_LENGTH, KEY_SYNONYM,
     VALIDATE_KEY__MATCH_TYPE, VALIDATE_KEY__MODEL, VALIDATE_KEY__VALUE,
@@ -268,7 +271,6 @@ def validate_for_duplicates(
     # Используем RawSQL для работы с JSON функциями SQLite
     # json_each(j_label_metadata, '$.SYNONYM') развертывает массив синонимов в отдельные строки
     # Это необходимо т.к. Django ORM для SQLite не поддерживает __contains для JSON полей
-    from django.db.models.expressions import RawSQL
 
     # Строим RawSQL запрос для поиска в JSON массиве синонимов
     # json_each распарсивает массив и ищет совпадение со значением
@@ -292,8 +294,100 @@ def validate_for_duplicates(
         })
         return duplicates_found
 
+    # ПРОВЕРКА 3: EXACT_SYNONYM_MATCH (точное совпадение синонимов текущей записи с синонимами других)
+    # Ищем: есть ли синонимы из текущей записи в синонимах других записей?
+    # Пользователь мог отредактировать список синонимов в форме, и мы не хотим дубликатов среди синонимов.
+    # Например, если текущая запись имеет синонимы=['Polydor Records', 'Vertigo France'],
+    # а запись A имеет синонимы=['Vertigo France', 'Swirl'], это совпадение!
+    # Пользователь подтверждает - удалим конфликтующие синонимы из других записей.
+
+    if KEY_SYNONYM in metadata_dict and isinstance(metadata_dict[KEY_SYNONYM], list):
+        # Собираем все синонимы текущей записи с нормализацией
+        current_synonyms = [
+            normalize_string(syn) for syn in metadata_dict[KEY_SYNONYM]
+        ]
+
+        # Если есть синонимы для проверки
+        if current_synonyms:
+            # Строим RawSQL условие для поиска любого из наших синонимов в JSON массиве других записей
+            # Используем один аннотированный queryset со всеми условиями OR для поиска всех конфликтов сразу
+            synonym_query_parts = []
+            query_params = []
+            for normalized_synonym in current_synonyms:
+                synonym_query_parts.append(
+                    f"EXISTS (SELECT 1 FROM json_each({metadata_field_name}, '$.{KEY_SYNONYM}') WHERE json_each.value = %s)"
+                )
+                query_params.append(normalized_synonym)
+
+            # Объединяем все условия через OR - это вернет записи, у которых есть хотя бы один из наших синонимов
+            synonym_in_others = records_to_check.annotate(
+                has_any_synonym=RawSQL(
+                    " OR ".join(synonym_query_parts),
+                    query_params
+                )
+            ).filter(has_any_synonym=True).distinct()
+
+            # Если найдены записи с совпадающими синонимами - возвращаем их все в одном queryset
+            if synonym_in_others.exists():
+                duplicates_found.update({
+                    VALIDATE_KEY__MATCH_TYPE: ValidateMatchType.EXACT_SYNONYM_MATCH,
+                    VALIDATE_KEY__VALUE: synonym_in_others,
+                })
+                return duplicates_found
+
     # Когда все проверки прошли -- возвращаем пустой словарь
     return duplicates_found
+
+
+def remove_conflicting_synonyms_from_duplicates(
+    duplicates_queryset: QuerySet,
+    metadata_field_name: str,
+    synonyms_to_remove: list[str],
+) -> None:
+    """
+    Удаляет из метаданных (поле с именем metadata_field_name) записей (QuerySet) синонимы, которые совпадают
+    со списком (synonyms_to_remove).
+
+    Универсальный хелпер для очистки синонимов при подтверждении пользователем обхода валидации.
+
+    Args:
+        duplicates_queryset: QuerySet записей, где нужно удалить синонимы
+        metadata_field_name: Имя поля метаданных ('j_label_metadata', 'j_artist_metadata' и т.д.)
+        synonyms_to_remove: Список синонимов для удаления (будут нормализованы перед сравнением)
+
+    Пример использования:
+        # Удаляем основное поле текущей записи из синонимов других (FIND_IN_SYNONYM)
+        remove_conflicting_synonyms_from_duplicates(
+            duplicates_queryset,
+            'j_label_metadata',
+            [main_field_value],
+        )
+
+        # Удаляем все синонимы текущей записи из синонимов других (EXACT_SYNONYM_MATCH)
+        remove_conflicting_synonyms_from_duplicates(
+            duplicates_queryset,
+            'j_label_metadata',
+            metadata_dict.get(KEY_SYNONYM) or [],
+        )
+    """
+    # Нормализуем синонимы для удаления один раз
+    normalized_to_remove = [normalize_string(syn) for syn in synonyms_to_remove]
+
+    for duplicate_record in duplicates_queryset:
+        # Получаем текущие метаданные записи
+        dup_metadata = getattr(duplicate_record, metadata_field_name) or {}
+
+        # Если в метаданных есть синонимы, удаляем те, которые совпадают с нашим списком
+        if KEY_SYNONYM in dup_metadata and isinstance(dup_metadata[KEY_SYNONYM], list):
+            # Удаляем синонимы, которые совпадают с переданным списком
+            dup_metadata[KEY_SYNONYM] = [
+                syn for syn in dup_metadata[KEY_SYNONYM]
+                if normalize_string(syn) not in normalized_to_remove
+            ]
+            # Сохраняем обновленные метаданные
+            setattr(duplicate_record, metadata_field_name, dup_metadata)
+            # Сохраняем запись (обновляем только поле с метаданными)
+            duplicate_record.save(update_fields=[metadata_field_name])
 
 
 def validate_entity_for_admin_form(form_instance, cleaned_data,
@@ -330,7 +424,6 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
             )
             return cleaned_data
     """
-    from django.utils.html import mark_safe
 
     # Получаем класс модели из метаинформации формы
     model_class = form_instance.Meta.model
@@ -392,33 +485,22 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
                 )
 
             case ValidateMatchType.FIND_IN_SYNONYM:
-                # ОБРАБОТКА СОВПАДЕНИЙ В СИНОНИМАХ
+                # ОБРАБОТКА СОВПАДЕНИЙ В СИНОНИМАХ (основное поле совпадает с синонимами других)
                 # Проверяем: это запрос с подтверждением (ignore_validate=1) или первоначальная проверка?
                 if request and request.GET.get('ignore_validate') == '1':
                     # РЕЖИМ: ОБХОД ВАЛИДАЦИИ (пользователь нажал красную кнопку и подтвердил "Я проверил и уверен!")
                     # Тихо удаляем найденные совпадения из синонимов других записей
-                    for duplicate_record in duplicates_queryset:
-                        # Получаем текущие метаданные записи
-                        dup_metadata = getattr(duplicate_record, metadata_field_name) or {}
-
-                        # Если в метаданных есть синонимы, удаляем из них текущее значение
-                        if KEY_SYNONYM in dup_metadata and isinstance(dup_metadata[KEY_SYNONYM], list):
-                            # Удаляем нормализованное значение из списка синонимов
-                            dup_metadata[KEY_SYNONYM] = [
-                                syn for syn in dup_metadata[KEY_SYNONYM]
-                                if normalize_string(syn) != normalized_main_value
-                            ]
-                            # Сохраняем обновленные метаданные
-                            setattr(duplicate_record, metadata_field_name, dup_metadata)
-                            # Сохраняем запись (обновляем только поле с метаданными)
-                            duplicate_record.save(update_fields=[metadata_field_name])
+                    remove_conflicting_synonyms_from_duplicates(
+                        duplicates_queryset,
+                        metadata_field_name,
+                        [normalized_main_value],  # Удаляем основное поле текущей записи
+                    )
                     # Выходим без ошибки в админку, т.к. пользователь "проверил и уверен!"
-                    # Синонимы из удалены, запись сохранится нормально
+                    # Конфликтующие синонимы удалены, запись сохранится нормально
                     return
 
                 else:
                     # РЕЖИМ: ПЕРВОНАЧАЛЬНАЯ ПРОВЕРКА
-                    # Показываем пользователю красную кнопку подтверждения с информацией о совпадениях
                     # Показываем пользователю красную кнопку подтверждения с информацией о совпадениях
                     for dup in duplicates_queryset:
                         rel_url = f"../{dup.pk}/change/" if form_instance.instance.pk is None else f"../../{dup.pk}/change/"
@@ -448,6 +530,90 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
                             f"ВНИМАНИЕ: Найдено совпадение в синонимах! "
                             f"Проверьте {dup_list} "
                             f"или используйте синонимы из найденной записи."
+                            f"{confirmation_button}"
+                        )
+                    )
+
+            case ValidateMatchType.EXACT_SYNONYM_MATCH:
+                # ОБРАБОТКА СОВПАДЕНИЙ СИНОНИМОВ (синонимы текущей записи совпадают с синонимами других)
+                # Проверяем: это запрос с подтверждением (ignore_validate=1) или первоначальная проверка?
+                if request and request.GET.get('ignore_validate') == '1':
+                    # РЕЖИМ: ОБХОД ВАЛИДАЦИИ (пользователь нажал красную кнопку и подтвердил "Я проверил и уверен!")
+                    # Тихо удаляем из других записей те синонимы, которые совпадают с синонимами текущей.
+                    remove_conflicting_synonyms_from_duplicates(
+                        duplicates_queryset,
+                        metadata_field_name,
+                        metadata_dict.get(KEY_SYNONYM) or [],  # Удаляем все синонимы текущей записи
+                    )
+                    # Выходим без ошибки в админку, т.к. пользователь "проверил и уверен!"
+                    # Конфликтующие синонимы удалены, запись сохранится нормально
+                    return
+
+                else:
+                    # РЕЖИМ: ПЕРВОНАЧАЛЬНАЯ ПРОВЕРКА
+                    # Обрабатываем на Python (без доп запросов к БД) - duplicates_queryset уже в памяти
+                    # Для каждого синонима текущей записи ищем, в каких записях он есть
+
+                    # Собираем текущие синонимы с нормализацией
+                    current_synonyms_list = metadata_dict.get(KEY_SYNONYM) or []
+
+                    # Строим словарь: {нормализованный синоним: {оригинальный синоним, запись1, запись2, ...}}
+                    synonym_to_records = {}
+                    for current_syn in current_synonyms_list:
+                        normalized_syn = normalize_string(current_syn)
+                        if normalized_syn not in synonym_to_records:
+                            synonym_to_records[normalized_syn] = {
+                                'original': current_syn,
+                                'records': []
+                            }
+
+                        # Ищем этот синоним в метаданных других записей
+                        for dup in duplicates_queryset:
+                            dup_metadata = getattr(dup, metadata_field_name) or {}
+                            dup_synonyms = dup_metadata.get(KEY_SYNONYM) or []
+
+                            # Проверяем: есть ли текущий синоним в синонимах этой записи
+                            for dup_syn in dup_synonyms:
+                                if normalize_string(dup_syn) == normalized_syn:
+                                    # Добавляем запись если ее еще нет в списке
+                                    rel_url = f"../{dup.pk}/change/" if form_instance.instance.pk is None else f"../../{dup.pk}/change/"
+                                    dup_value = getattr(dup, main_field_name, '?')
+                                    dup_link = f"<a href='{rel_url}'>#{dup.pk} '{dup_value}'</a>"
+
+                                    # Проверяем что эту запись еще не добавили для этого синонима
+                                    if dup_link not in synonym_to_records[normalized_syn]['records']:
+                                        synonym_to_records[normalized_syn]['records'].append(dup_link)
+                                    break
+
+                    # Строим текст с детализацией по каждому синониму
+                    synonym_details = []
+                    for normalized_syn, info in synonym_to_records.items():
+                        original_syn = info['original']
+                        records = info['records']
+                        if records:  # Только если этот синоним найден в других записях
+                            records_html = ", ".join(records)
+                            synonym_details.append(f"<b>'{original_syn}'</b> найден в: {records_html}")
+
+                    # Объединяем все детали в один список
+                    synonym_details_text = "<br/>".join(synonym_details) if synonym_details else "Синонимы не найдены"
+
+                    # Кнопка подтверждения создания несмотря на совпадение синонимов
+                    confirmation_button = '''
+                    <div class="confirmation-button-container">
+                      <button type="button" onclick="markSubmitButtonsToIgnoreValidation();">
+                        <big>Я проверил и уверен!</big><br/>
+                        Сохранить, несмотря на совпадение синонимов.<br/>
+                        <i>Совпадающие синонимы в других записях будут удалены.</i>
+                      </button>
+                      <em>Теперь нажмите стандартные кнопки сохранения снизу, чтобы сохранить.</em>
+                    </div>
+                    '''
+
+                    raise ValidationError(
+                        mark_safe(
+                            f"ВНИМАНИЕ: Найдено совпадение синонимов!<br/>"
+                            f"Синонимы совпадают:<br/>{synonym_details_text}<br/>"
+                            f"Проверьте и уточните синонимы если нужно."
                             f"{confirmation_button}"
                         )
                     )
@@ -545,6 +711,20 @@ def validate_and_raise_for_duplicates(
             raise ValidationError(
                 f"{model_name}.save(): Найдено совпадение в синонимах! "
                 f"Разрешите на уровне админки или подтвердите решение. "
+                f"PK конфликтующих записей: {dup_pks}"
+            )
+
+        case ValidateMatchType.EXACT_SYNONYM_MATCH:
+            # Совпадение синонимов найдено - синонимы в текущей записи совпадают с синонимами других записей
+            # Теритически, это может произойти вне админки (парсер, API, батник, bulk операции и т.д.)
+            # но синонимы определяются и редактируются только в админке (через интерфейс), парсеры их генерировать
+            # не должны (и не будут). Блокируем (может быть в будущем сохранить состояние в брокере, но вряд ли).
+            model_name = model_class.__name__
+            dup_pks = [dup.pk for dup in duplicates_result[VALIDATE_KEY__VALUE]]
+            raise ValidationError(
+                f"{model_name}.save(): Найдено совпадение синонимов! "
+                f"Синонимы текущей записи совпадают с синонимами других записей. "
+                f"Разрешите конфликт в админке. "
                 f"PK конфликтующих записей: {dup_pks}"
             )
 
