@@ -15,7 +15,7 @@ from django.utils.html import mark_safe
 from lpon_site.settings import (
     SLUG_MAX_LENGTH, KEY_SYNONYM,
     VALIDATE_KEY__MATCH_TYPE, VALIDATE_KEY__MODEL, VALIDATE_KEY__VALUE,
-    ValidateMatchType
+    ValidateMatchType, MIN_SYNONYM_WORD_LENGTH
 )
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 def normalize_string(s: str) -> str:
     """
     Нормализует строку: удаляет невидимые символы, начальные, конечные и дублирующие пробелы.
+    Также приводит к нижнему регистру для case-insensitive сравнения при поиске дублей.
 
     Работает со ВСЕМИ типами пробельных символов (не-breaking space, thin space и т.д.).
 
@@ -31,18 +32,24 @@ def normalize_string(s: str) -> str:
         s: Строка для нормализации
 
     Returns:
-        str: Нормализованная строка (или пустая если была пуста)
+        str: Нормализованная строка в нижнем регистре (или пустая если была пуста)
 
     Пример:
         >> normalize_string("  Sony   Music  ")
-        'Sony Music'
+        'sony music'
+        >> normalize_string("SONY MUSIC")
+        'sony music'
         >> normalize_string("Sony\u00a0\u202FMusic")  # с неразрывными пробелами
-        'Sony Music'
+        'sony music'
     """
     if not s:
         return ""
 
     result = str(s)
+
+    # Преобразуем в нижний регистр для case-insensitive сравнения
+    # (регистр не должен быть значимым при поиске дублей артистов/лейблов/стилей)
+    result = result.lower()
 
     # Удаляем невидимые символы (не заменять, а полностью удалять)
     result = result.translate({
@@ -68,6 +75,51 @@ def normalize_string(s: str) -> str:
     # Финальная подстраховка: regex для ВСЕХ unicode whitespace символов (даже неизвестных)
     result = re.sub(r'\s+', ' ', result).strip()
     return result
+
+
+def super_normalize_string(s: str) -> str:
+    """
+    Супер-нормализация строки для проверки частичного совпадения слов (PARTIAL_MATCH).
+
+    Выполняет глубокую нормализацию для сравнения словарных совпадений:
+    - Очищает HTML через safe_html_special_symbols() (которая вызывает normalize_string())
+    - Удаляет все символы кроме букв, цифр и пробелов
+    - Сохраняет буквы и цифры ВСЕХ языков (Unicode-safe)
+    - Приводит к нижнему регистру (через safe_html_special_symbols → normalize_string)
+    - Нормализует пробелы (множественные → одиночные)
+
+    Результат используется для поиска словарных совпадений:
+    "The Beatles" и "Beatles, The" оба станут: "the beatles"
+    Затем разбиваются на слова: ["the", "beatles"]
+
+    Args:
+        s: Строка для нормализации
+
+    Returns:
+        str: Строка со словами, разделенными пробелами (в нижнем регистре)
+
+    Пример:
+        >> super_normalize_string("The Beatles (Rock)")
+        'the beatles rock'
+        >> super_normalize_string("Beatles, The - Rock Band!")
+        'beatles the rock band'
+    """
+    if not s:
+        return ""
+
+    # Сначала очищаем HTML и спецсимволы через существующую функцию
+    # (safe_html_special_symbols вызывает normalize_string(), который уже приводит к нижнему регистру)
+    cleaned = safe_html_special_symbols(s)
+
+    # Удаляем все символы кроме букв, цифр и пробелов (Unicode-safe)
+    # \w в Python regex с флагом UNICODE включает: буквы всех языков, цифры и подчеркивание
+    # Используем [^\w\s] для удаления всего кроме слов и пробелов, затем исключаем подчеркивание
+    cleaned = re.sub(r'[^\w\s]|_', '', cleaned, flags=re.UNICODE)
+
+    # Нормализуем пробелы (множественные → одиночные)
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+
+    return cleaned
 
 
 def safe_html_special_symbols(s: str) -> str:
@@ -245,7 +297,13 @@ def validate_for_duplicates(
 
     duplicates_found = {VALIDATE_KEY__MODEL: model_class.__name__}
 
-    # ПОДГОТОВКА: Получаем базовый queryset (все записи кроме текущей, если редактируем)
+    # ПОДГОТОВКА 1: Инициализируем переменную для отслеживания минимальной длины синонимов
+    # Используется для адаптивной фильтрации при PARTIAL_MATCH на очень коротких названиях
+    # (например, "B'Z", "XL", которые после супер-нормализации становятся еще короче).
+    # Начинаем с MIN_SYNONYM_WORD_LENGTH, будет переопределяться по необходимости.
+    effective_min_word_len = MIN_SYNONYM_WORD_LENGTH
+
+    # ПОДГОТОВКА 2: Получаем базовый queryset (все записи кроме текущей, если редактируем)
     # Это ленивый запрос - запрос выполнится, только когда мы применим фильтры
     records_to_check = model_class.objects.all()
     if instance_pk is not None:
@@ -254,8 +312,14 @@ def validate_for_duplicates(
 
     # ПРОВЕРКА 1: EXACT MATCH (точное совпадение основного поля)
     # Ищем: есть ли другая запись с точно таким же main_field_value?
-    filter_kwargs = {f"{main_field_name}__exact": normalized_main_value}
-    exact_matches = records_to_check.filter(**filter_kwargs)
+    # Используем RawSQL с LOWER() для case-insensitive сравнения нормализованных значений
+    exact_matches = records_to_check.annotate(
+        has_exact_match=RawSQL(
+            f"LOWER({main_field_name}) = %s",
+            (normalized_main_value,)
+        )
+    ).filter(has_exact_match=True)
+
     if exact_matches.exists():
         duplicates_found.update({
             VALIDATE_KEY__MATCH_TYPE: ValidateMatchType.IS_DUPLICATE,
@@ -274,17 +338,18 @@ def validate_for_duplicates(
 
     # Строим RawSQL запрос для поиска в JSON массиве синонимов
     # json_each распарсивает массив и ищет совпадение со значением
+    # LOWER() используется т.к. в БД могут быть строки в любом регистре, но нормализованное значение в нижнем
     synonym_matches = records_to_check.annotate(
         has_synonym=RawSQL(
             f"""
             EXISTS (
                 SELECT 1 FROM json_each({metadata_field_name}, '$.{KEY_SYNONYM}')
-                WHERE json_each.value = %s
+                WHERE LOWER(json_each.value) = %s
             )
             """,
             (normalized_main_value,)
         )
-    ).filter(has_synonym=True)
+     ).filter(has_synonym=True)
 
     # Если найдены совпадения в синонимах - возвращаем все найденные записи
     if synonym_matches.exists():
@@ -294,28 +359,47 @@ def validate_for_duplicates(
         })
         return duplicates_found
 
+    # Подготавливаем единый список всех значений для анализа:
+    # основное поле + все синонимы из метаданных
+    # Этот список переиспользуется на этапах 3 и 4, избегая дублирования логики
+    raw_values_to_analyze = [main_field_value]
+    if KEY_SYNONYM in metadata_dict and isinstance(metadata_dict[KEY_SYNONYM], list):
+        raw_values_to_analyze.extend(metadata_dict[KEY_SYNONYM])
+
     # ПРОВЕРКА 3: EXACT_SYNONYM_MATCH (точное совпадение синонимов текущей записи с синонимами других)
     # Ищем: есть ли синонимы из текущей записи в синонимах других записей?
     # Пользователь мог отредактировать список синонимов в форме, и мы не хотим дубликатов среди синонимов.
     # Например, если текущая запись имеет синонимы=['Polydor Records', 'Vertigo France'],
     # а запись A имеет синонимы=['Vertigo France', 'Swirl'], это совпадение!
     # Пользователь подтверждает - удалим конфликтующие синонимы из других записей.
-
     if KEY_SYNONYM in metadata_dict and isinstance(metadata_dict[KEY_SYNONYM], list):
         # Собираем все синонимы текущей записи с нормализацией
         current_synonyms = [
             normalize_string(syn) for syn in metadata_dict[KEY_SYNONYM]
         ]
 
+        # Удаляем дубликаты синонимов, сохраняя порядок
+        # (может быть пользователь вручную добавил одно и то же несколько раз)
+        current_synonyms = list(dict.fromkeys(current_synonyms))
+
+        # Определяем минимальную длину синонимов из текущей записи
+        # (для адаптивной фильтрации при PARTIAL_MATCH на очень коротких названиях)
+        # Учитываем как синонимы, так и основное значение поля (normalized_main_value)
+        # которое может быть коротким и уже совпадало на этапе 2
+        all_values_to_check = current_synonyms + [normalized_main_value]
+        min_syn_len = min(len(val) for val in all_values_to_check if val)
+        effective_min_word_len = min(effective_min_word_len, min_syn_len)
+
         # Если есть синонимы для проверки
         if current_synonyms:
             # Строим RawSQL условие для поиска любого из наших синонимов в JSON массиве других записей
             # Используем один аннотированный queryset со всеми условиями OR для поиска всех конфликтов сразу
+            # LOWER() используется т.к. в БД могут быть строки в любом регистре, но нормализованные значения в нижнем
             synonym_query_parts = []
             query_params = []
             for normalized_synonym in current_synonyms:
                 synonym_query_parts.append(
-                    f"EXISTS (SELECT 1 FROM json_each({metadata_field_name}, '$.{KEY_SYNONYM}') WHERE json_each.value = %s)"
+                    f"EXISTS (SELECT 1 FROM json_each({metadata_field_name}, '$.{KEY_SYNONYM}') WHERE LOWER(json_each.value) = %s)"
                 )
                 query_params.append(normalized_synonym)
 
@@ -334,6 +418,82 @@ def validate_for_duplicates(
                     VALIDATE_KEY__VALUE: synonym_in_others,
                 })
                 return duplicates_found
+
+    # ПРОВЕРКА 4: PARTIAL_MATCH (частичное совпадение слов текущей записи с другими)
+    # Ищем: есть ли значимые слова (> MIN_SYNONYM_WORD_LENGTH) из текущей записи и синонимов
+    # в основных полях и синонимах других записей?
+    # Пример: "The Beatles" содержит слово "beatles" (5 букв > 3),
+    # "Beatles, The" тоже содержит "beatles", это схожесть (предупреждение, не блокировка)
+    #
+    # Собираем все слова из main_field_value и синонимов текущей записи
+    all_current_words = set()
+
+    # Переиспользуем raw_values_to_analyze (основное поле + синонимы из метаданных),
+    # которое уже подготовили на этапе 3, чтобы избежать дублирования логики.
+    # Обрабатываем каждое значение: супер-нормализуем и собираем слова
+    for value in raw_values_to_analyze:
+        # Используем супер-нормализатор для удаления пунктуации и спецсимволов
+        normalized_value = super_normalize_string(value)
+        value_words = re.split(r'\s+', normalized_value)
+        for word in value_words:
+            # Собираем ВСЕ слова (даже очень короткие) для отслеживания
+            if word:  # Только непустые
+                all_current_words.add(word)
+                # Отслеживаем минимальную длину встреченных слов (независимо от MIN_SYNONYM_WORD_LENGTH)
+                effective_min_word_len = min(effective_min_word_len, len(word))
+
+    # Если собрали значимые слова - ищем их в других записях
+    if all_current_words:
+        # Строим RawSQL условие для поиска любого из наших слов в main_field_name других записей
+        # или в синонимах других записей (как в main_field_name, так и в JSON)
+        word_search_conditions = []
+        word_search_params = []
+
+        # Условия поиска в основном поле (case-insensitive)
+        for word in all_current_words:
+            # Фильтруем слова по эффективной минимальной длине (может быть меньше MIN_SYNONYM_WORD_LENGTH
+            # если встречались короткие синонимы, например, "B'Z" → "B Z")
+            if len(word) >= effective_min_word_len:
+                # Ищем слово как подстроку в основном поле (окружено пунктуацией/пробелами или в начале/конце)
+                # Используем LIKE с wildcard
+                word_search_conditions.append(
+                    f"LOWER({main_field_name}) LIKE %s"
+                )
+                word_search_params.append(f"%{word}%")
+
+        # Условия поиска в синонимах (в JSON массиве)
+        for word in all_current_words:
+            # Фильтруем слова по эффективной минимальной длине
+            if len(word) >= effective_min_word_len:
+                word_search_conditions.append(
+                    f"""EXISTS (
+                        SELECT 1 FROM json_each({metadata_field_name}, '$.{KEY_SYNONYM}')
+                        WHERE LOWER(json_each.value) LIKE %s
+                    )"""
+                )
+                word_search_params.append(f"%{word}%")
+
+        # Объединяем условия через OR - ищем хотя бы одно совпадение по словам
+        partial_matches = records_to_check.annotate(
+            has_partial_match=RawSQL(
+                " OR ".join(word_search_conditions),
+                word_search_params
+            )
+        ).filter(has_partial_match=True).distinct()
+
+        # Если найдены записи с частичным совпадением - возвращаем их
+        if partial_matches.exists():
+            # Определяем тип совпадения: если были найдены очень короткие слова (< MIN_SYNONYM_WORD_LENGTH),
+            # помечаем это как PARTIAL_MATCH__RISK_SHORT_WORDS для специального обращения в админке
+            match_type = ValidateMatchType.PARTIAL_MATCH
+            if effective_min_word_len < MIN_SYNONYM_WORD_LENGTH:
+                match_type = ValidateMatchType.PARTIAL_MATCH__RISK_SHORT_WORDS
+
+            duplicates_found.update({
+                VALIDATE_KEY__MATCH_TYPE: match_type,
+                VALIDATE_KEY__VALUE: partial_matches,
+            })
+            return duplicates_found
 
     # Когда все проверки прошли -- возвращаем пустой словарь
     return duplicates_found
@@ -618,6 +778,87 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
                         )
                     )
 
+            case ValidateMatchType.PARTIAL_MATCH:
+                # ОБРАБОТКА ЧАСТИЧНЫХ СОВПАДЕНИЙ (слова совпадают)
+                # Это просто схожесть, не критично. Показываем предупреждение, но не блокируем сохранение.
+                # При подтверждении просто сохраняем без каких-либо изменений в других записях.
+                
+                if request and request.GET.get('ignore_validate') == '1':
+                    # РЕЖИМ: ОБХОД ВАЛИДАЦИИ (пользователь подтвердил что ознакомлен)
+                    # Тихо сохраняем запись, ничего не меняя в других записях
+                    return
+
+                else:
+                    # РЕЖИМ: ПЕРВОНАЧАЛЬНАЯ ПРОВЕРКА
+                    # Показываем пользователю информативное предупреждение о схожести
+                    for dup in duplicates_queryset:
+                        rel_url = f"../{dup.pk}/change/" if form_instance.instance.pk is None else f"../../{dup.pk}/change/"
+                        dup_value = getattr(dup, main_field_name, '?')
+                        dup_links.append(f"<big><a href='{rel_url}'>#{dup.pk} '{dup_value}'</a></big>")
+                    dup_list = ", ".join(dup_links)
+
+                    # Кнопка для игнорирования предупреждения (без критичности)
+                    confirmation_button = '''
+                    <div class="confirmation-button-container">
+                      <button type="button" onclick="markSubmitButtonsToIgnoreValidation();">
+                        <big>OK, Я ПРОВЕРИЛ. ПРОБЛЕМ НЕ БУДЕТ</big><br/>
+                        Сохранить запись<br/>
+                        <i>Я уверен в своих действиях.</i>
+                      </button>
+                      <em>Теперь нажмите стандартные кнопки сохранения снизу, чтобы сохранить.</em>
+                    </div>
+                    '''
+
+                    raise ValidationError(
+                        mark_safe(
+                            f"ИНФОРМАЦИЯ: Найдены похожие записи со схожими словами! "
+                            f"Проверьте: {dup_list} "
+                            f"Это просто информация, не ошибка. Но неточности на сайте могут рассмешить"
+                            f" (или огорчить) пользователей. {confirmation_button}"
+                        )
+                    )
+
+            case ValidateMatchType.PARTIAL_MATCH__RISK_SHORT_WORDS:
+                # ОБРАБОТКА ЧАСТИЧНЫХ СОВПАДЕНИЙ С ВЫСОКИМ РИСКОМ (очень короткие слова/синонимы)
+                # Найдены совпадения, но среди слов есть очень короткие (< MIN_SYNONYM_WORD_LENGTH)
+                # Это может быть как вероятное совпадение (B'Z, XL) так и ложное срабатывание (А, И)
+                # Показываем ещё более серьезное предупреждение о необходимости проверки
+
+                if request and request.GET.get('ignore_validate') == '1':
+                    # РЕЖИМ: ОБХОД ВАЛИДАЦИИ (пользователь подтвердил что ознакомлен с рисками)
+                    # Тихо сохраняем запись, ничего не меняя в других записях
+                    return
+
+                else:
+                    # РЕЖИМ: ПЕРВОНАЧАЛЬНАЯ ПРОВЕРКА
+                    # Показываем пользователю СЕРЬЕЗНОЕ предупреждение о высоком риске ошибки
+                    for dup in duplicates_queryset:
+                        rel_url = f"../{dup.pk}/change/" if form_instance.instance.pk is None else f"../../{dup.pk}/change/"
+                        dup_value = getattr(dup, main_field_name, '?')
+                        dup_links.append(f"<big><a href='{rel_url}'>#{dup.pk} '{dup_value}'</a></big>")
+                    dup_list = ", ".join(dup_links)
+
+                    # Кнопка для подтверждения с указанием на риск
+                    confirmation_button = '''
+                    <div class="confirmation-button-container">
+                      <button type="button" onclick="markSubmitButtonsToIgnoreValidation();">
+                        <big>ВНИМАНИЕ: ВЫСОКИЙ РИСК!</big><br/>
+                        Я уверен в своих действиях<br/>
+                        <i>Найдены очень короткие слова (< 4 символов), высокий риск ошибки!</i>
+                      </button>
+                      <em>Теперь нажмите стандартные кнопки сохранения снизу, чтобы сохранить.</em>
+                    </div>
+                    '''
+
+                    raise ValidationError(
+                        mark_safe(
+                            f"ВНИМАНИЕ: ВЫСОКИЙ РИСК ОШИБКИ! Найдены похожие записи с ОЧЕНЬ КОРОТКИМИ словами! "
+                            f"Проверьте ОЧЕНЬ ВНИМАТЕЛЬНО: {dup_list} "
+                            f"Совпадения могут быть с однобуквенными или двухбуквенными словами (например: 'B'Z' → 'B Z'). "
+                            f"Велик риск ложных срабатываний! {confirmation_button}"
+                        )
+                    )
+
             case _:
                 # Неизвестный или не обработанный тип совпадения
                 # В будущем сюда можно добавить логирование неожиданных типов
@@ -715,7 +956,7 @@ def validate_and_raise_for_duplicates(
             )
 
         case ValidateMatchType.EXACT_SYNONYM_MATCH:
-            # Совпадение синонимов найдено - синонимы в текущей записи совпадают с синонимами других записей
+            # Совпадение синонимов найдено - синонимы текущей записи совпадают с синонимами других записей
             # Теритически, это может произойти вне админки (парсер, API, батник, bulk операции и т.д.)
             # но синонимы определяются и редактируются только в админке (через интерфейс), парсеры их генерировать
             # не должны (и не будут). Блокируем (может быть в будущем сохранить состояние в брокере, но вряд ли).
@@ -726,6 +967,30 @@ def validate_and_raise_for_duplicates(
                 f"Синонимы текущей записи совпадают с синонимами других записей. "
                 f"Разрешите конфликт в админке. "
                 f"PK конфликтующих записей: {dup_pks}"
+            )
+
+        case ValidateMatchType.PARTIAL_MATCH:
+            # Частичное совпадение по словам найдено - это просто предупреждение (warning)
+            # Не блокируем, просто логируем для информации
+            # Парсеры/батники могут работать с такими данными без ограничений
+            model_name = model_class.__name__
+            dup_pks = [dup.pk for dup in duplicates_result[VALIDATE_KEY__VALUE]]
+            logger.info(
+                f"{model_name}.save(): Найдено частичное совпадение по словам. "
+                f"PK записей с похожими названиями: {dup_pks}"
+            )
+
+        case ValidateMatchType.PARTIAL_MATCH__RISK_SHORT_WORDS:
+            # Частичное совпадение, но с очень короткими словами (< MIN_SYNONYM_WORD_LENGTH)
+            # Повышенный риск ложных срабатываний, но все равно это предупреждение (warning)
+            # Не блокируем, просто логируем с более высоким приоритетом
+            # Администраторы могут обратить внимание на такие случаи
+            model_name = model_class.__name__
+            dup_pks = [dup.pk for dup in duplicates_result[VALIDATE_KEY__VALUE]]
+            logger.warning(
+                f"{model_name}.save(): Найдено частичное совпадение по словам с ВЫСОКИМ РИСКОМ ошибки! "
+                f"Обнаружены очень короткие слова/синонимы (< {MIN_SYNONYM_WORD_LENGTH} символов). "
+                f"Проверьте вручную! PK записей с похожими названиями: {dup_pks}"
             )
 
         case _:
