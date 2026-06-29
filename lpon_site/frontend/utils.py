@@ -12,6 +12,7 @@ from django.core.exceptions import ValidationError
 from django.db.models import QuerySet
 from django.db.models.expressions import RawSQL
 from django.utils.html import mark_safe
+from django.contrib import messages
 from lpon_site.settings import (
     SLUG_MAX_LENGTH, KEY_SYNONYM,
     VALIDATE_KEY__MATCH_TYPE, VALIDATE_KEY__MODEL, VALIDATE_KEY__VALUE,
@@ -1222,3 +1223,113 @@ def update_synonyms_in_metadata(
     # иначе Django может не сохранить изменения
     setattr(instance, metadata_field_name, metadata_dict)
 
+
+def generate_admin_save_message(request, obj, is_new, related_article,
+                               obj_field_name='s_label',
+                               article_title_field='s_article_title'):
+    """
+    Генерирует и отправляет информативное сообщение об сохранении объекта в админке.
+    
+    Функция анализирует тип операции (создание/редактирование/переименование) и 
+    отправляет соответствующее сообщение с ссылкой на связанную статью.
+    
+    Использует Django messages framework для отправки (success/warning в зависимости от ситуации).
+    Ссылка на статью открывается в новой вкладке для удобства админа.
+    
+    Параметры:
+    -----------
+    request : HttpRequest
+        Объект HTTP-запроса для отправки сообщений через Django messages framework
+    
+    obj : django.db.models.Model
+        Сохраненный объект модели (уже сохранен в БД).
+        Из этого объекта автоматически извлекается verbose_name модели через obj._meta.verbose_name
+        Также используется для получения старого значения при редактировании.
+    
+    is_new : bool
+        True если создается новая запись, False если редактируется существующая.
+        Определяет тип сообщения (green success для нового или warning для переименования).
+    
+    related_article : django.db.models.Model или None
+        Связанная статья (если есть). Если None, ссылка не добавляется в сообщение.
+        Обычно это поле вида k_model_to_article из модели.
+        При редактировании может содержать информацию о типе и содержимом статьи.
+    
+    obj_field_name : str, опционально
+        Имя основного поля объекта для получения текущего значения.
+        По умолчанию 's_label' (для TbLabel).
+        Примеры: 's_artist' (для TbArtist), 's_style_name' (для TbMusicStyle)
+    
+    article_title_field : str, опционально
+        Имя поля статьи для получения названия статьи.
+        По умолчанию 's_article_title' (для TbArticle).
+        Обычно это поле одинаково у всех моделей статей.
+    
+    Отправляемые сообщения:
+    -----------------------
+    Новая запись (is_new=True):
+        - GREEN SUCCESS: "Лейбл «NAME» создан успешно. Статья создана автоматически."
+        - С ссылкой: "Проверить/Отредактировать статью →"
+    
+    Переименование (is_new=False, имя изменилось):
+        - YELLOW WARNING: "Лейбл «OLD» переименован на «NEW». ПРОВЕРЬТЕ СВЯЗАННУЮ СТАТЬЮ."
+        - С ссылкой: "Проверить/Отредактировать статью →"
+    
+    Обновление (is_new=False, имя не изменилось):
+        - GREEN SUCCESS: "Лейбл «NAME» обновлен. Связанная статья: «ARTICLE_TITLE»."
+        - С ссылкой: "Проверить/Отредактировать статью →"
+    
+    Пример использования в admin.py (максимально чистый и поджарый код):
+    -----------------------------------------------------------------------
+    class LabelAdmin(admin.ModelAdmin):
+        def save_model(self, request, obj, form, change):
+            # Основной механизм сохранения Django (создает статью если нужно)
+            super().save_model(request, obj, form, change)
+            
+            # Отправляем информативное сообщение админу
+            # verbose_name берется автоматически из obj._meta.verbose_name
+            # старое значение получается из БД при необходимости
+            generate_admin_save_message(
+                request=request,
+                obj=obj,
+                is_new=not change,  # Django: change=False для новых, True для существующих
+                related_article=obj.k_label_to_article,
+                obj_field_name='s_label',
+            )
+    """
+    # Получаем текущее значение основного поля
+    current_field_value = getattr(obj, obj_field_name, '')
+    
+    # Инициализируем для использования в сообщениях (если related_article есть, перезапишем)
+    article_title = ''
+    article_link = ''
+    article_info = ''
+
+    # Формируем ссылку на редактирование статьи и собираем информацию о ней
+    if related_article:
+        article_title = getattr(related_article, article_title_field, 'Статья')
+        article_link = (f' <a href=\'../../../tbarticle/{related_article.pk}/change/\''
+                        f' target=\'_blank\'>Проверить/Отредактировать статью →</a>')
+        
+        # Собираем информацию о статье для более подробного сообщения
+        article_info = (f' [{getattr(related_article, 'l_article_type', '???')}]'
+                        f' ({getattr(related_article, 's_article_title_html', '<i>???</i>')})')
+
+    # Генерируем сообщение в зависимости от типа операции
+    if is_new:
+        # СОЗДАНИЕ НОВОЙ ЗАПИСИ - показываем зеленый успех
+        msg = f'[OK] {obj._meta.verbose_name} «{current_field_value}» создан успешно.'
+        if related_article:
+            msg += (f' Связанная статья «{article_title}» создана автоматически. >>'
+                    f' {article_info} {article_link}')
+        else:
+            msg += ' [ОЙ-ОЙ-ОЙ] СТАТЬЯ НЕ БЫЛА СОЗДАНА. ЭТО НЕ ДОЛЖНО БЫЛО СЛУЧИТЬСЯ!'
+        messages.success(request, mark_safe(msg))
+    
+    else:
+        # РЕДАКТИРОВАНИЕ СУЩЕСТВУЮЩЕЙ ЗАПИСИ
+        # Название изменилось или нет - показываем информацию о текущем состоянии и связанной статье
+        msg = f'[OK] {obj._meta.verbose_name} «{current_field_value}» обновлен.'
+        if related_article:
+            msg += f' Связанная статья: «{article_title}» >> {article_info} {article_link}'
+        messages.success(request, mark_safe(msg))

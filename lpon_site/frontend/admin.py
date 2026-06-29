@@ -10,7 +10,7 @@ from .models import (
     TbImage, TbArticle, TbArtist, TbItem, TbLabel, TbSeller,
     TbOffer, TbSource, TbOfferHistory, TbMusicStyle
 )
-from .utils import validate_entity_for_admin_form
+from .utils import validate_entity_for_admin_form, generate_admin_save_message
 
 
 # ============================================================================
@@ -353,6 +353,7 @@ class MusicStyleAdmin(admin.ModelAdmin):
     list_display_links = ('id', 's_style_name',)
     search_fields = ('s_style_name', 'j_style_synonyms',)
     readonly_fields = ('t_style_created', 't_style_updated',)
+
     fieldsets = (
         ('Основные данные о музыкальном стиле', {
             'fields': ('s_style_name', 'j_style_synonyms',),
@@ -542,6 +543,30 @@ class LabelAdmin(RequestInFormMixin, admin.ModelAdmin):
     list_display_links = ('id', 's_label',)
     search_fields = ('s_label',)
     readonly_fields = ('t_label_created', 't_label_updated')
+
+    def save_model(self, request, obj, form, change):
+        """
+        Переопределяем save_model для добавления информативных сообщений в админку.
+        
+        Максимально поджарый код - все сложности с получением старого значения
+        и определением типа операции делает хелпер generate_admin_save_message().
+        """
+        # Стандартное сохранение записи через Django
+        # (в т.ч. автоматическое создание связанной статьи в методе save модели TbLabel)
+        super().save_model(request, obj, form, change)
+        
+        # Генерируем и отправляем информативное сообщение об сохранении
+        # Хелпер сам:
+        # - определяет тип операции (create vs update)
+        # - формирует нужное сообщение (success vs warning)
+        generate_admin_save_message(
+            request=request,
+            obj=obj,
+            is_new=not change,  # Django: change=False для новых, True для существующих
+            related_article=obj.k_label_to_article,
+            obj_field_name='s_label',
+        )
+
     fieldsets = (
         ('Основные данные о лейбле/издателе', {
             'fields': ('s_label', 'j_label_metadata',),
