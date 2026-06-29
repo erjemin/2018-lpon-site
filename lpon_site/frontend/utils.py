@@ -550,27 +550,54 @@ def remove_conflicting_synonyms_from_duplicates(
             duplicate_record.save(update_fields=[metadata_field_name])
 
 
-def build_duplicates_report(duplicates_queryset, search_words, metadata_field_name, main_field_name):
+def build_search_report(cleaned_data, main_field_name, metadata_dict,
+                        duplicates_queryset, metadata_field_name):
     """
-    Формирует красивый отчет о найденных совпадениях слов в дубликатах для админки.
+    Собирает поисковые слова из основного поля и синонимов текущей записи,
+    затем формирует красивый отчет о совпадениях этих слов в дубликатах.
 
-    Для каждого поискового слова показывает в каких записях и в каких полях/синонимах оно найдено,
-    с выделением найденного слова в оригинальном тексте.
+    Универсальная функция, используется для кейсов:
+    - IS_DUPLICATE: для поиска совпадений слов в других записях
+    - FIND_IN_SYNONYM: основное поле совпадает с синонимами других записей
+    - PARTIAL_MATCH: слова совпадают (частичное совпадение)
+    - PARTIAL_MATCH__RISK_SHORT_WORDS: частичное совпадение с короткими словами
 
     Args:
+        cleaned_data: Очищенные данные формы
+        main_field_name: Имя основного поля ('s_label', 's_artist', 's_style_name')
+        metadata_dict: Словарь с метаданными текущей записи
         duplicates_queryset: QuerySet записей, в которых нашли совпадения
-        search_words: Set/List слов для поиска (нормализованные слова)
-        metadata_field_name: Имя поля метаданных ('j_label_metadata' и т.д.)
-        main_field_name: Имя основного поля ('s_label' и т.д.)
+        metadata_field_name: Имя поля метаданных ('j_label_metadata', 'j_artist_metadata')
 
     Returns:
-        str: HTML строка с отчетом о совпадениях, например:
-            "beatles: встречается в #123 'The Beatles' → основное поле: 'The <u>Beatles</u>'
-             atlantic: встречается в #456 'Atlantic Records' → основное поле: '<u>Atlantic</u> Records'"
+        str: HTML строка с отчетом о совпадениях со ссылками и выделением слов
     """
+    # Инициализируем набор поисковых слов
+    search_words = set()
+
+    # Собираем слова из основного поля
+    # Применяем супер-нормализацию (удаление пунктуации, спецсимволов)
+    main_value_normalized = super_normalize_string(cleaned_data.get(main_field_name, ''))
+    # Разбиваем на слова по пробельным символам
+    search_words.update(re.split(r'\s+', main_value_normalized))
+
+    # Собираем слова из синонимов метаданных
+    metadata_synonyms = metadata_dict.get(KEY_SYNONYM) or []
+    for synonym in metadata_synonyms:
+        # Применяем супер-нормализацию к каждому синониму
+        syn_normalized = super_normalize_string(synonym)
+        # Добавляем все слова этого синонима в набор
+        search_words.update(re.split(r'\s+', syn_normalized))
+
+    # Удаляем пустые строки из набора слов
+    # (они могут появиться при разбиении на пробелы)
+    search_words.discard('')
+
+    # ===== ФОРМИРОВАНИЕ ОТЧЕТА О СОВПАДЕНИЯХ =====
+    # Собираем HTML отчет со списком найденных совпадений
     report_lines = []
 
-    # Для каждого поискового слова
+    # Для каждого поискового слова (в алфавитном порядке)
     for search_word in sorted(search_words):
         matches_for_word = []
 
@@ -583,18 +610,19 @@ def build_duplicates_report(duplicates_queryset, search_words, metadata_field_na
             dup_metadata = getattr(dup, metadata_field_name) or {}
             dup_synonyms = dup_metadata.get(KEY_SYNONYM) or []
 
-            # Список всех значений для поиска (основное поле + синонимы)
-            all_values = [main_field_value] + dup_synonyms
-
             # Ищем слово в основном поле и синонимах (case-insensitive)
             found_locations = []
+            found_synonyms = []  # Собираем все найденные синонимы отдельно
 
             # Проверяем основное поле
             if main_field_value:
-                # Используем регулярное выражение для case-insensitive поиска и выделения
+                # Ищем подстроку (LIKE поиск как в SQL) - case-insensitive
+                # lambda функция выделяет найденное слово в ВЕРХНЕМ регистре для лучшей акцентуации
+                # m.group(0) содержит найденный текст, .upper() переводит его в верхний регистр
+                # Используем простой regex без \b границ для поиска подстрок (как LIKE в SQL)
                 highlighted_main = re.sub(
-                    rf'\b{re.escape(search_word)}\b',
-                    f'<u>{search_word}</u>',
+                    re.escape(search_word),
+                    lambda m: f'<u>{m.group(0).upper()}</u>',  # Выделяем в верхнем регистре
                     main_field_value,
                     flags=re.IGNORECASE
                 )
@@ -604,15 +632,23 @@ def build_duplicates_report(duplicates_queryset, search_words, metadata_field_na
             # Проверяем синонимы
             for synonym in dup_synonyms:
                 if synonym:
-                    # Ищем слово в синониме (case-insensitive)
+                    # Ищем подстроку в синониме (LIKE поиск как в SQL) - case-insensitive
+                    # lambda функция выделяет найденное слово в ВЕРХНЕМ регистре для лучшей акцентуации
+                    # Используем простой regex без \b границ для поиска подстрок (как LIKE в SQL)
                     highlighted_syn = re.sub(
-                        rf'\b{re.escape(search_word)}\b',
-                        f'<u>{search_word}</u>',
+                        re.escape(search_word),
+                        lambda m: f'<u>{m.group(0).upper()}</u>',  # Выделяем в верхнем регистре
                         synonym,
                         flags=re.IGNORECASE
                     )
                     if highlighted_syn != synonym:  # Совпадение найдено
-                        found_locations.append(f"синоним: &quot;{highlighted_syn}&quot;")
+                        # Собираем синонимы в отдельный список вместо добавления по одному
+                        found_synonyms.append(f"&quot;{highlighted_syn}&quot;")
+
+            # Если найдены синонимы с совпадениями - добавляем их одной строкой
+            if found_synonyms:
+                synonyms_html = ", ".join(found_synonyms)
+                found_locations.append(f"синонимы: {synonyms_html}")
 
             # Если слово найдено в этой записи - добавляем в отчет
             if found_locations:
@@ -625,12 +661,20 @@ def build_duplicates_report(duplicates_queryset, search_words, metadata_field_na
 
         # Если слово найдено хотя бы в одной записи - добавляем строку в отчет
         if matches_for_word:
-            matches_html = "<br/>  ".join(matches_for_word)
-            report_lines.append(f"<b>{search_word}:</b> встречается в<br/>  {matches_html}")
+            # Формируем вложенный список для каждого найденного дубликата
+            matches_items = "".join(
+                f"<li>{match}</li>"
+                for match in matches_for_word
+            )
+            report_lines.append(
+                f"<li><b>{search_word}:</b> встречается в<br/>"
+                f"  <ul>{matches_items}</ul>"
+                f"</li>"
+            )
 
-    # Объединяем все строки в один HTML отчет
+    # Объединяем все строки в один HTML отчет с использованием списка
     if report_lines:
-        return "<br/>".join(report_lines)
+        return f"<ul>{''.join(report_lines)}</ul>"
     else:
         return "Совпадения не найдены"
 
@@ -701,33 +745,28 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
     match_type = result[VALIDATE_KEY__MATCH_TYPE]
     duplicates_queryset = result[VALIDATE_KEY__VALUE]
 
-    # В dup_links формируем ссылки на найденные дубликаты для быстрого перехода в админке
-    dup_links = []
-
     # Используем match-case для удобной обработки разных типов совпадений
     # С Enum вместо магических чисел код становится самодокументируемым
     # В будущем легко добавить новые типы: ValidateMatchType.PARTIAL_MATCH = 2 и т.д.
     match match_type:
         case ValidateMatchType.IS_DUPLICATE:
             # ОБРАБОТКА ТОЧНЫХ ДУБЛИКАТОВ
-            for dup in duplicates_queryset:
-                # Относительная ссылка зависит от режима админки:
-                # При создании: /admin/app/model/add/ → ../456/change/
-                # При редактировании: /admin/app/model/123/change/ → ../..456/change/
-                rel_url = f"../{dup.pk}/change/" if form_instance.instance.pk is None else f"../../{dup.pk}/change/"
-                # Получаем значение основного поля из дубликата для вывода в ссылке
-                dup_value = getattr(dup, main_field_name, '?')
-                dup_links.append(f"<big><a href='{rel_url}'>#{dup.pk} '{dup_value}'</a></big>")
-
-            # Объединяем все найденные дубликаты в один список
-            dup_list = ", ".join(dup_links)
+            # Формируем красивый отчет с выделением совпадений
+            report_html = build_search_report(
+                cleaned_data,
+                main_field_name,
+                metadata_dict,
+                duplicates_queryset,
+                metadata_field_name
+            )
 
             # Для случая IS_DUPLICATE всегда выбрасываем ошибку, т.к. это критическая ситуация
             # и поле часто имеет unique=True на уровне модели.
             raise ValidationError(
                 mark_safe(
-                    f"ОШИБКА: Найдено ПОЛНОЕ совпадение! "
-                    f"Измените название или отредактируйте {dup_list}."
+                    f"ОШИБКА: Найдено ПОЛНОЕ совпадение!<br/>"
+                    f"{report_html}<br/>"
+                    f"Измените название или отредактируйте найденную запись."
                 )
             )
 
@@ -749,11 +788,14 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
             else:
                 # РЕЖИМ: ПЕРВОНАЧАЛЬНАЯ ПРОВЕРКА
                 # Показываем пользователю красную кнопку подтверждения с информацией о совпадениях
-                for dup in duplicates_queryset:
-                    rel_url = f"../{dup.pk}/change/" if form_instance.instance.pk is None else f"../../{dup.pk}/change/"
-                    dup_value = getattr(dup, main_field_name, '?')
-                    dup_links.append(f"<big><a href='{rel_url}'>#{dup.pk} '{dup_value}'</a></big>")
-                dup_list = ", ".join(dup_links)
+                # Формируем красивый отчет с выделением совпадений
+                report_html = build_search_report(
+                    cleaned_data,
+                    main_field_name,
+                    metadata_dict,
+                    duplicates_queryset,
+                    metadata_field_name
+                )
 
                 # Кнопка подтверждения создания несмотря на синонимы
                 # При клике вызывает функцию markSubmitButtonsToIgnoreValidation()
@@ -764,8 +806,8 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
                 raise ValidationError(
                     mark_safe(
                         f"ВНИМАНИЕ: Найдено совпадение в синонимах! "
-                        f"Проверьте {dup_list} "
-                        f"или используйте синонимы из найденной записи."
+                        f"{report_html}<br/>"
+                        f"Проверьте и уточните синонимы если нужно."
                         f"<div class=\"confirmation-button-container\">"
                         f"  <button type=\"button\" onclick=\"markSubmitButtonsToIgnoreValidation();\">"
                         f"    <big>Я проверил и уверен!</big><br/>"
@@ -870,28 +912,13 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
             else:
                 # РЕЖИМ: ПЕРВОНАЧАЛЬНАЯ ПРОВЕРКА
                 # Показываем пользователю информативное предупреждение о схожести
-                # Собираем поисковые слова для отчета (используются для выделения в отчете)
-                search_words = set()
-
-                # Обрабатываем main_field_value - делим его на слова и собираем их
-                main_value_normalized = super_normalize_string(cleaned_data.get(main_field_name, ''))
-                search_words.update(re.split(r'\s+', main_value_normalized))
-
-                # Обрабатываем синонимы из метаданных
-                metadata_synonyms = metadata_dict.get(KEY_SYNONYM) or []
-                for synonym in metadata_synonyms:
-                    syn_normalized = super_normalize_string(synonym)
-                    search_words.update(re.split(r'\s+', syn_normalized))
-
-                # Удаляем пустые строки из набора слов
-                search_words.discard('')
-
-                # Формируем красивый отчет о совпадениях с выделением слов
-                report_html = build_duplicates_report(
+                # Используем вспомогательную функцию для сбора слов и формирования отчета
+                report_html = build_search_report(
+                    cleaned_data,
+                    main_field_name,
+                    metadata_dict,
                     duplicates_queryset,
-                    search_words,
-                    metadata_field_name,
-                    main_field_name
+                    metadata_field_name
                 )
 
                 # Кнопка для игнорирования предупреждения (без критичности)
@@ -926,27 +953,13 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
             else:
                 # РЕЖИМ: ПЕРВОНАЧАЛЬНАЯ ПРОВЕРКА
                 # Собираем поисковые слова для отчета (используются для выделения в отчете)
-                search_words = set()
-
-                # Обрабатываем main_field_value - делим его на слова и собираем их
-                main_value_normalized = super_normalize_string(cleaned_data.get(main_field_name, ''))
-                search_words.update(re.split(r'\s+', main_value_normalized))
-
-                # Обрабатываем синонимы из метаданных
-                metadata_synonyms = metadata_dict.get(KEY_SYNONYM) or []
-                for synonym in metadata_synonyms:
-                    syn_normalized = super_normalize_string(synonym)
-                    search_words.update(re.split(r'\s+', syn_normalized))
-
-                # Удаляем пустые строки из набора слов
-                search_words.discard('')
-
-                # Формируем красивый отчет о совпадениях с выделением слов
-                report_html = build_duplicates_report(
+                # Используем вспомогательную функцию для сбора слов и формирования отчета
+                report_html = build_search_report(
+                    cleaned_data,
+                    main_field_name,
+                    metadata_dict,
                     duplicates_queryset,
-                    search_words,
-                    metadata_field_name,
-                    main_field_name
+                    metadata_field_name
                 )
 
                 # Кнопка для подтверждения с указанием на риск
