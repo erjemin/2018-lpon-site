@@ -727,7 +727,8 @@ class TbLabel(models.Model):
         blank=False,
         unique=True,
         verbose_name='Лейбл',
-        help_text='Техническое название лейбла. Например: "Sony Records" или "Мелодия"',
+        help_text='Название лейбла. Например: "Sony Records" или "Мелодия"... Представление на самом сайте, с версткой,'
+                  ' будет определиться через статью, связанную с лейблом (TbArticle).'
     )
     k_label_to_article = models.OneToOneField(
         TbArticle,
