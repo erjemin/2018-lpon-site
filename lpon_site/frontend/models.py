@@ -241,8 +241,7 @@ from django.db import models
 from django.db.models import F
 from filer.fields.image import FilerImageField
 from filer.fields.file import FilerFileField
-from frontend.utils import make_slug, validate_and_raise_for_duplicates, update_synonyms_in_metadata
-from lpon_site.settings import KEY_SYNONYM
+from frontend.utils import make_slug, validate_and_raise_for_duplicates, update_synonyms_in_metadata, create_or_get_related_article
 import datetime
 import logging
 
@@ -777,44 +776,17 @@ class TbLabel(models.Model):
         # Обновляем список синонимов в метаданных (универсальный хелпер для всех моделей)
         update_synonyms_in_metadata(self, 's_label', 'j_label_metadata')
 
-        # ===== СОЗДАНИЕ СВЯЗАННОЙ СТАТЬИ =====
-        # Если статья не привязана (но может быть пустой из-за blank=True)
-        if not self.k_label_to_article:
-            # Генерируем техническое название для статьи (для админа)
-            # Формат: "[label] {название лейбла} (auto-make)"
-            article_title = f"[label] {self.s_label} (auto-make)"
-
-            # Пытаемся найти существующую статью с таким же названием
-            # (может быть ситуация, когда статья уже создана отдельно)
-            try:
-                article = TbArticle.objects.get(s_article_title=article_title)
-            except TbArticle.DoesNotExist:
-                # Если статьи нет - создаём новую
-                # Собираем все синонимы для SEO ключевых слов
-                # (на этом этапе в SYNONYM уже есть текущий s_label и все, что добавил пользователь)
-                synonyms_list = self.j_label_metadata.get(KEY_SYNONYM, [])
-
-                # Исключаем текущий s_label из списка (он будет добавлен первым в SEO)
-                other_synonyms = [s for s in synonyms_list if str(s) != self.s_label]
-
-                # Собираем все синонимы с текущим s_label первым (для приоритета в поиске)
-                all_synonyms = [self.s_label] + other_synonyms if other_synonyms else [self.s_label]
-                synonyms_str = ", ".join(str(s) for s in all_synonyms)
-
-                article = TbArticle(
-                    s_article_title=article_title,
-                    s_article_title_html=self.s_label,
-                    seo_title=self.s_label,
-                    seo_keywords=f"{synonyms_str}, лейбл, производитель",
-                    seo_description=f"Информация о лейбле {self.s_label}.",
-                    l_article_type=TbArticle.ArticleType.LABEL,
-                    b_article_published=True,
-                    slug=make_slug(slug_it=self.s_label, slug_default='label'),
-                )
-                article.save()
-
-            # Привязываем статью к лейблу
-            self.k_label_to_article = article
+        # ===== СОЗДАНИЕ ИЛИ ПОЛУЧЕНИЕ СВЯЗАННОЙ СТАТЬИ =====
+        # Используем универсальный хелпер для создания/поиска статьи
+        # Хелпер сам проверит через обратный FK, не дублирует статьи даже если админ переименовал
+        article = create_or_get_related_article(
+            self,
+            TbArticle.ArticleType.LABEL,
+            's_label',
+            'j_label_metadata',
+            'k_label_to_article'  # ← Явно передаем имя FK поля (избегаем "магии")
+        )
+        self.k_label_to_article = article
 
         # Вызываем оригинальный save родительского класса
         super().save(*args, **kwargs)
