@@ -404,4 +404,16 @@ def create_or_get_related_article(
     # Сохраняем статью
     article.save()
 
+    # TODO: Отправить уведомление в Redis о созданной статье
+    # Это нужно для парсера и автоматического добавления лейблов/артистов/стилей
+    # Уведомление должно содержать: article.pk, article.s_article_title_html, model_type, article_type
+    # Админ должен получить очередь задач "Созданные статьи требуют проверки/редактирования"
+    # Пример: redis.lpush('parser:created_articles', json.dumps({
+    #     'pk': article.pk,
+    #     'title': article.s_article_title_html,
+    #     'article_type': str(article.l_article_type),
+    #     'model': instance.__class__.__name__,
+    #     'created_at': datetime.now().isoformat()
+    # }))
+
     return article
