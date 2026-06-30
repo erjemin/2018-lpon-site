@@ -241,7 +241,8 @@ from django.db import models
 from django.db.models import F
 from filer.fields.image import FilerImageField
 from filer.fields.file import FilerFileField
-from frontend.utils import make_slug, validate_and_raise_for_duplicates, update_synonyms_in_metadata, create_or_get_related_article
+from frontend.utils import make_slug, update_synonyms_in_metadata, create_or_get_related_article
+from frontend.utils_validators import validate_and_raise_for_duplicates
 import datetime
 import logging
 

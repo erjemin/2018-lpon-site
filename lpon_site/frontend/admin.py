@@ -10,7 +10,7 @@ from .models import (
     TbImage, TbArticle, TbArtist, TbItem, TbLabel, TbSeller,
     TbOffer, TbSource, TbOfferHistory, TbMusicStyle
 )
-from .utils import validate_entity_for_admin_form, generate_admin_save_message
+from .utils_validators import validate_entity_for_admin_form, generate_admin_save_message
 
 
 # ============================================================================
