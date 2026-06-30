@@ -5,6 +5,7 @@ import re
 import pytils
 import random
 import logging
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from bs4 import BeautifulSoup
 from html import unescape
 from etpgrf.config import HANGING_PUNCTUATION_SPACE_CHARS as SPACE_CHARS
@@ -13,11 +14,17 @@ from django.db.models import QuerySet
 from django.db.models.expressions import RawSQL
 from django.utils.html import mark_safe
 from django.contrib import messages
+from django.http import HttpRequest
+from django.forms import ModelForm
 from lpon_site.settings import (
     SLUG_MAX_LENGTH, KEY_SYNONYM,
     VALIDATE_KEY__MATCH_TYPE, VALIDATE_KEY__MODEL, VALIDATE_KEY__VALUE,
     ValidateMatchType, MIN_SYNONYM_WORD_LENGTH
 )
+
+if TYPE_CHECKING:
+    # Импорты типов используются только во время проверки типов, не во время выполнения
+    from django.db.models import Model
 
 
 logger = logging.getLogger(__name__)
@@ -213,13 +220,13 @@ def make_slug(slug_it: str, max_length: int | None = None, slug_default: str = "
 
 
 def validate_for_duplicates(
-    model_class,
+    model_class: type['Model'],
     instance_pk: int | None,
     main_field_value: str,
     metadata_dict: dict | None,
     main_field_name: str | None = None,
     metadata_field_name: str | None = None,
-) -> dict:
+) -> Dict[str, Any]:
     """
     Универсальный валидатор для проверки дубликатов в моделях БД.
 
@@ -355,7 +362,7 @@ def validate_for_duplicates(
 
     # Если найдены совпадения в синонимах - возвращаем все найденные записи
     if synonym_matches.exists():
-        duplicates_found.update({
+        duplicates_found.update({  # type: ignore
             VALIDATE_KEY__MATCH_TYPE: ValidateMatchType.FIND_IN_SYNONYM,
             VALIDATE_KEY__VALUE: synonym_matches,
         })
@@ -415,7 +422,7 @@ def validate_for_duplicates(
 
             # Если найдены записи с совпадающими синонимами - возвращаем их все в одном queryset
             if synonym_in_others.exists():
-                duplicates_found.update({
+                duplicates_found.update({  # type: ignore
                     VALIDATE_KEY__MATCH_TYPE: ValidateMatchType.EXACT_SYNONYM_MATCH,
                     VALIDATE_KEY__VALUE: synonym_in_others,
                 })
@@ -491,7 +498,7 @@ def validate_for_duplicates(
             if effective_min_word_len < MIN_SYNONYM_WORD_LENGTH:
                 match_type = ValidateMatchType.PARTIAL_MATCH__RISK_SHORT_WORDS
 
-            duplicates_found.update({
+            duplicates_found.update({  # type: ignore
                 VALIDATE_KEY__MATCH_TYPE: match_type,
                 VALIDATE_KEY__VALUE: partial_matches,
             })
@@ -552,8 +559,13 @@ def remove_conflicting_synonyms_from_duplicates(
             duplicate_record.save(update_fields=[metadata_field_name])
 
 
-def build_search_report(cleaned_data, main_field_name, metadata_dict,
-                        duplicates_queryset, metadata_field_name):
+def build_search_report(
+    cleaned_data: dict,
+    main_field_name: str,
+    metadata_dict: dict,
+    duplicates_queryset: QuerySet,
+    metadata_field_name: str,
+) -> str:
     """
     Собирает поисковые слова из основного поля и синонимов текущей записи,
     затем формирует красивый отчет о совпадениях этих слов в дубликатах.
@@ -681,10 +693,13 @@ def build_search_report(cleaned_data, main_field_name, metadata_dict,
         return "Совпадения не найдены"
 
 
-def validate_entity_for_admin_form(form_instance, cleaned_data,
-                                   main_field_name='s_label',
-                                   metadata_field_name='j_label_metadata',
-                                   request=None):
+def validate_entity_for_admin_form(
+    form_instance: ModelForm,
+    cleaned_data: dict,
+    main_field_name: str = 's_label',
+    metadata_field_name: str = 'j_label_metadata',
+    request: HttpRequest | None = None,
+) -> None:
     """
     Универсальный валидатор для админских форм.
 
@@ -717,7 +732,7 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
     """
 
     # Получаем класс модели из метаинформации формы
-    model_class = form_instance.Meta.model
+    model_class = form_instance.Meta.model  # type: ignore
 
     # Получаем значения из формы
     main_field_value = cleaned_data.get(main_field_name)
@@ -734,7 +749,7 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
     result = validate_for_duplicates(
         model_class=model_class,
         instance_pk=form_instance.instance.pk,
-        main_field_value=main_field_value,
+        main_field_value=str(main_field_value),  # type: ignore  # Преобразуем в строку (после проверки выше)
         metadata_dict=metadata_dict,
         main_field_name=main_field_name,
         metadata_field_name=metadata_field_name,
@@ -991,7 +1006,7 @@ def validate_entity_for_admin_form(form_instance, cleaned_data,
 
 
 def validate_and_raise_for_duplicates(
-    instance,
+    instance: 'Model',
     main_field_name: str,
     metadata_field_name: str,
 ) -> None:
@@ -1130,7 +1145,7 @@ def validate_and_raise_for_duplicates(
 
 
 def update_synonyms_in_metadata(
-    instance,
+    instance: 'Model',
     main_field_name: str,
     metadata_field_name: str,
 ) -> None:
@@ -1225,7 +1240,13 @@ def update_synonyms_in_metadata(
     setattr(instance, metadata_field_name, metadata_dict)
 
 
-def create_or_get_related_article(instance, article_type, main_field_name, metadata_field_name, related_fk_field_name):
+def create_or_get_related_article(
+    instance: 'Model',
+    article_type: str,
+    main_field_name: str,
+    metadata_field_name: str,
+    related_fk_field_name: str,
+) -> 'Model':
     """
     Создает или получает связанную статью для сущности модели.
     
@@ -1319,9 +1340,14 @@ def create_or_get_related_article(instance, article_type, main_field_name, metad
     return article
 
 
-def generate_admin_save_message(request, obj, is_new, related_article,
-                               obj_field_name='s_label',
-                               article_title_field='s_article_title'):
+def generate_admin_save_message(
+    request: HttpRequest,
+    obj: 'Model',
+    is_new: bool,
+    related_article: 'Model | None',
+    obj_field_name: str = 's_label',
+    article_title_field: str = 's_article_title',
+) -> None:
     """
     Генерирует и отправляет информативное сообщение об сохранении объекта в админке.
     
