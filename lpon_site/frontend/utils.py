@@ -161,7 +161,10 @@ def safe_html_special_symbols(s: str) -> str:
     return normalize_string(result)
 
 
-def make_slug(slug_it: str, max_length: int | None = None, slug_default: str = "content") -> str:
+def make_slug(
+        slug_it: str,
+        max_length: int = SLUG_MAX_LENGTH,
+        slug_default: str = "content") -> str:
     """Готовит чистый slug из HTML/Unicode текста (включая русский текст).
 
     Преобразует текст в URL-friendly slug:
@@ -187,8 +190,6 @@ def make_slug(slug_it: str, max_length: int | None = None, slug_default: str = "
     """
     if not slug_it:
         return f"{slug_default}-{random.randint(1, 4095):03x}"
-
-    max_length = max_length or SLUG_MAX_LENGTH
 
     # Вычисляем минимальную длину fallback'а: "slug_default-xyz"
     min_fallback_length = len(slug_default) + 1 + 3  # "-" и 3 hex-символа

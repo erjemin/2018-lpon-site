@@ -583,6 +583,7 @@ class LabelAdmin(RequestInFormMixin, admin.ModelAdmin):
             is_new=not change,  # Django: change=False для новых, True для существующих
             related_article=obj.k_label_to_article,
             obj_field_name='s_label',
+            article_title_field='s_article_title',
         )
 
     fieldsets = (

@@ -503,8 +503,8 @@ def build_search_report(
 def validate_entity_for_admin_form(
     form_instance: ModelForm,
     cleaned_data: dict,
-    main_field_name: str = 's_label',
-    metadata_field_name: str = 'j_label_metadata',
+    main_field_name: str,
+    metadata_field_name: str,
     request: HttpRequest | None = None,
 ) -> None:
     """
@@ -516,13 +516,18 @@ def validate_entity_for_admin_form(
     Используется во всех админских forms: LabelAdminForm, ArtistAdminForm, MusicStyleAdminForm и т.д.
 
     Args:
-        form_instance: Экземпляр формы (self из clean методе)
-        cleaned_data: Очищенные данные формы
-        main_field_name: Имя основного поля ('s_label', 's_artist', 's_style_name')
-        metadata_field_name: Имя поля метаданных ('j_label_metadata', 'j_artist_metadata')
+        form_instance: Экземпляр формы (self из clean методе). Обязателен!
+        cleaned_data: Очищенные данные формы. Обязателен!
+        main_field_name: Имя основного поля модели. ОБЯЗАТЕЛЕН!
+            Примеры: 's_label' (для TbLabel), 's_artist' (для TbArtist), 's_style_name' (для TbMusicStyle)
+            Если поле не существует в модели, будет выброшено AttributeError.
+        metadata_field_name: Имя поля метаданных модели. ОБЯЗАТЕЛЕН!
+            Примеры: 'j_label_metadata', 'j_artist_metadata', 'j_style_synonyms'
+            Если поле не существует в модели, будет выброшено AttributeError.
         request: HTTP request объект (опционально, используется для проверки GET параметра ignore_validate)
 
     Raises:
+        AttributeError: Если main_field_name или metadata_field_name не существуют в модели
         ValidationError: Если найдены совпадения (дубликаты) и GET параметр не установлен
 
     Пример использования в LabelAdminForm:
@@ -531,8 +536,8 @@ def validate_entity_for_admin_form(
             validate_entity_for_admin_form(
                 self,
                 cleaned_data,
-                main_field_name='s_label',
-                metadata_field_name='j_label_metadata',
+                main_field_name='s_label',  # ОБЯЗАТЕЛЕН!
+                metadata_field_name='j_label_metadata',  # ОБЯЗАТЕЛЕН!
                 request=self.request if hasattr(self, 'request') else None,
             )
             return cleaned_data
@@ -540,6 +545,16 @@ def validate_entity_for_admin_form(
 
     # Получаем класс модели из метаинформации формы
     model_class = form_instance.Meta.model  # type: ignore
+
+    # === ВАЛИДАЦИЯ ПАРАМЕТРОВ ===
+
+    # Проверяем, что поля существуют в модели
+    for field_name in [main_field_name, metadata_field_name]:
+        if not hasattr(model_class, field_name):
+            raise AttributeError(
+                f"Model '{model_class.__name__}' has no field '{field_name}'. "
+                f"Please provide valid field names from the model."
+            )
 
     # Получаем значения из формы
     main_field_value = cleaned_data.get(main_field_name)
@@ -956,60 +971,74 @@ def generate_admin_save_message(
         obj: Model,
         is_new: bool,
         related_article: Model | None,
-        obj_field_name: str = 's_label',
-        article_title_field: str = 's_article_title',
+        obj_field_name: str,
+        article_title_field: str,
 ) -> None:
     """
     Генерирует и отправляет информативное сообщение об сохранении объекта в админке.
 
-    Функция анализирует тип операции (создание/редактирование/переименование) и
-    отправляет соответствующее сообщение с ссылкой на связанную статью.
+    Функция анализирует тип операции (создание/редактирование) и статус связанной статьи,
+    отправляя соответствующее сообщение (success или warning) с ссылкой на статью.
 
-    Использует Django messages framework для отправки (success/warning в зависимости от ситуации).
+    Использует Django messages framework для отправки сообщений:
+    - GREEN SUCCESS: при успешном создании/обновлении
+    - YELLOW WARNING: при создании без связанной статьи (ошибка!)
+
     Ссылка на статью открывается в новой вкладке для удобства админа.
 
     Параметры:
     -----------
     request : HttpRequest
-        Объект HTTP-запроса для отправки сообщений через Django messages framework
+        Объект HTTP-запроса для отправки сообщений через Django messages framework.
+        Обязателен!
 
     obj : django.db.models.Model
-        Сохраненный объект модели (уже сохранен в БД).
+        Сохраненный объект модели (уже сохранен в БД). Обязателен!
         Из этого объекта автоматически извлекается verbose_name модели через obj._meta.verbose_name
         Также используется для получения старого значения при редактировании.
 
     is_new : bool
-        True если создается новая запись, False если редактируется существующая.
-        Определяет тип сообщения (green success для нового или warning для переименования).
+        True если создается новая запись, False если редактируется существующая. Обязателен!
+        При создании (is_new=True): отправляет success или warning в зависимости от наличия статьи.
+        При обновлении (is_new=False): отправляет success с информацией о текущем состоянии.
 
     related_article : django.db.models.Model или None
-        Связанная статья (если есть). Если None, ссылка не добавляется в сообщение.
+        Связанная статья для нового объекта или при редактировании.
+        При создании (is_new=True):
+            - Если present: отправляет GREEN SUCCESS и ссылку на статью
+            - Если None: отправляет YELLOW WARNING (это ошибка!)
+        При редактировании (is_new=False):
+            - Если present: отправляет SUCCESS со ссылкой на статью
+            - Если None: просто SUCCESS без ссылки
         Обычно это поле вида k_model_to_article из модели.
-        При редактировании может содержать информацию о типе и содержимом статьи.
 
-    obj_field_name : str, опционально
-        Имя основного поля объекта для получения текущего значения.
-        По умолчанию 's_label' (для TbLabel).
-        Примеры: 's_artist' (для TbArtist), 's_style_name' (для TbMusicStyle)
+    obj_field_name : str
+        Имя основного поля объекта для получения текущего значения. ОБЯЗАТЕЛЕН!
+        Примеры: 's_label' (для TbLabel), 's_artist' (для TbArtist), 's_style_name' (для TbMusicStyle)
+        Если поле не существует в модели, будет выброшено AttributeError.
 
-    article_title_field : str, опционально
-        Имя поля статьи для получения названия статьи.
-        По умолчанию 's_article_title' (для TbArticle).
-        Обычно это поле одинаково у всех моделей статей.
+    article_title_field : str
+        Имя поля статьи для получения названия статьи. ОБЯЗАТЕЛЕН!
+        Обычно это 's_article_title' для всех моделей статей.
+        Если поле не существует в связанной статье, будет выброшено AttributeError.
+
+    Raises:
+        AttributeError: Если obj_field_name не существует в модели obj
+        AttributeError: Если article_title_field не существует в related_article (если он не None)
 
     Отправляемые сообщения:
     -----------------------
-    Новая запись (is_new=True):
-        - GREEN SUCCESS: "Лейбл «NAME» создан успешно. Статья создана автоматически."
+    Новая запись с статьей (is_new=True, related_article существует):
+        - GREEN SUCCESS: "Лейбл «NAME» создан успешно. Связанная статья «TITLE» создана автоматически."
         - С ссылкой: "Проверить/Отредактировать статью →"
 
-    Переименование (is_new=False, имя изменилось):
-        - YELLOW WARNING: "Лейбл «OLD» переименован на «NEW». ПРОВЕРЬТЕ СВЯЗАННУЮ СТАТЬЮ."
-        - С ссылкой: "Проверить/Отредактировать статью →"
+    Новая запись БЕЗ статьи (is_new=True, related_article=None):
+        - YELLOW WARNING: "Лейбл «NAME» создан успешно. [ОЙ-ОЙ-ОЙ] СТАТЬЯ НЕ БЫЛА СОЗДАНА. ЭТО НЕ ДОЛЖНО БЫЛО СЛУЧИТЬСЯ!"
+        - Сигнализирует об ошибке в процессе создания связанной статьи
 
-    Обновление (is_new=False, имя не изменилось):
+    Обновление (is_new=False):
         - GREEN SUCCESS: "Лейбл «NAME» обновлен. Связанная статья: «ARTICLE_TITLE»."
-        - С ссылкой: "Проверить/Отредактировать статью →"
+        - С ссылкой: "Проверить/Отредактировать статью →" (если статья существует)
 
     Пример использования в admin.py (максимально чистый и поджарый код):
     -----------------------------------------------------------------------
@@ -1018,19 +1047,34 @@ def generate_admin_save_message(
             # Основной механизм сохранения Django (создает статью если нужно)
             super().save_model(request, obj, form, change)
 
-            # Отправляем информативное сообщение админу
-            # verbose_name берется автоматически из obj._meta.verbose_name
-            # старое значение получается из БД при необходимости
+            # Отправляем информативное сообщение админу с явным указанием полей
             generate_admin_save_message(
                 request=request,
                 obj=obj,
                 is_new=not change,  # Django: change=False для новых, True для существующих
                 related_article=obj.k_label_to_article,
-                obj_field_name='s_label',
+                obj_field_name='s_label',  # ОБЯЗАТЕЛЕН! Имя поля для основного названия
+                article_title_field='s_article_title',  # ОБЯЗАТЕЛЕН! Имя поля для названия статьи
             )
     """
+    # === ВАЛИДАЦИЯ ПАРАМЕТРОВ ===
+
+    # Проверяем, что obj_field_name существует в объекте модели
+    if not hasattr(obj, obj_field_name):
+        raise AttributeError(
+            f"Model '{obj.__class__.__name__}' has no field '{obj_field_name}'. "
+            f"Please provide a valid field name from the model."
+        )
+
+    # Если есть связанная статья, проверяем что article_title_field в ней существует
+    if related_article and not hasattr(related_article, article_title_field):
+        raise AttributeError(
+            f"Related article model '{related_article.__class__.__name__}' has no field '{article_title_field}'. "
+            f"Please provide a valid field name for the article title."
+        )
+
     # Получаем текущее значение основного поля
-    current_field_value = getattr(obj, obj_field_name, '')
+    current_field_value = getattr(obj, obj_field_name)
 
     # Инициализируем для использования в сообщениях (если related_article есть, перезапишем)
     article_title = ''
@@ -1039,7 +1083,7 @@ def generate_admin_save_message(
 
     # Формируем ссылку на редактирование статьи и собираем информацию о ней
     if related_article:
-        article_title = getattr(related_article, article_title_field, 'Статья')
+        article_title = getattr(related_article, article_title_field)
         article_link = (f' <a href=\'../../../tbarticle/{related_article.pk}/change/\''
                         f' target=\'_blank\'>Проверить/Отредактировать статью →</a>')
 
@@ -1054,9 +1098,10 @@ def generate_admin_save_message(
         if related_article:
             msg += (f' Связанная статья «{article_title}» создана автоматически. >>'
                     f' {article_info} {article_link}')
+            messages.success(request, mark_safe(msg))
         else:
             msg += ' [ОЙ-ОЙ-ОЙ] СТАТЬЯ НЕ БЫЛА СОЗДАНА. ЭТО НЕ ДОЛЖНО БЫЛО СЛУЧИТЬСЯ!'
-        messages.success(request, mark_safe(msg))
+            messages.warning(request, mark_safe(msg))
 
     else:
         # РЕДАКТИРОВАНИЕ СУЩЕСТВУЮЩЕЙ ЗАПИСИ
