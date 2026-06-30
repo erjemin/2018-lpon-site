@@ -78,6 +78,71 @@ class RequestInFormMixin(admin.ModelAdmin):
 
         return FormWithRequest
 
+
+class CodeMirrorFormMixin(forms.ModelForm):
+    """
+    Миксин для форм с поддержкой CodeMirror редактора.
+
+    Предоставляет:
+    - Готовый Media класс с CSS и JS для CodeMirror
+    - Helper метод setup_codemirror_field() для конфигурации полей
+    - Базовые атрибуты для активации CodeMirror
+
+    Использование:
+        class MyForm(CodeMirrorFormMixin):
+            class Meta:
+                model = MyModel
+                fields = (...)
+
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.setup_codemirror_field('field_name', 'json', 'codemirror-width-l')
+    """
+
+    # ===== MEDIA КЛАСС ДЛЯ CODEMIRROR =====
+    class Media:
+        """Подключаем CSS и JS для CodeMirror редактора"""
+        css = {
+            'all': ('codemirror/codemirror-styles.css',)  # Стили для CodeMirror
+        }
+        js = (
+            'codemirror/editor.js',              # Основной CodeMirror
+            'codemirror/codemirror-patch.js',    # Патч для управления высотой/шириной
+        )
+
+    # ===== БАЗОВЫЕ АТРИБУТЫ CODEMIRROR =====
+    CODEMIRROR_ATTRS_BASE = {
+        'data-codemirror-editor': '1',
+        'data-width': '100%',  # Ширина для патча (100% займет полную ширину)
+    }
+
+    def setup_codemirror_field(self, field_name: str, language: str = 'text', css_class: str = 'codemirror-width-l'):
+        """
+        Конфигурирует поле для использования CodeMirror редактором.
+
+        Применяет Textarea виджет с нужными атрибутами и CSS классами для CodeMirror.
+
+        Args:
+            field_name: Имя поля в форме (например, 's_label')
+            language: Язык для подсветки синтаксиса (text, json, html, url и т.д.)
+            css_class: CSS класс для управления размерами (codemirror-width-s, codemirror-width-l и т.д.)
+
+        Пример:
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.setup_codemirror_field('s_label', 'text', 'codemirror-width-xl codemirror-no-lines')
+                self.setup_codemirror_field('j_metadata', 'json', 'codemirror-width-l')
+        """
+        # Собираем атрибуты для поля
+        attrs = {
+            **self.CODEMIRROR_ATTRS_BASE,
+            'data-language': language,
+            'class': css_class,
+        }
+
+        # Применяем Textarea виджет с атрибутами
+        self.fields[field_name].widget = Textarea(attrs=attrs)
+
 # ============================================================================
 # АДМИНИСТРИРОВАНИЕ TbImage
 #
@@ -333,7 +398,7 @@ class ImageAdmin(admin.ModelAdmin):
 # АДМИНКА для музыкальных стилей, таблица TbMusicStyle
 #
 # Кастомная форма для MusicStyleAdmin
-class MusicStyleAdminForm(forms.ModelForm):
+class MusicStyleAdminForm(CodeMirrorFormMixin):
     """
     Кастомная форма для админки музыкальных стилей.
     Добавляет виджеты CodeMirror для текстовых полей
@@ -344,42 +409,21 @@ class MusicStyleAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         """
-        При инициализации формы подгружаем
+        При инициализации формы подгружаем CodeMirror редактор
         """
-        # Атрибуты для активации CodeMirror редактора
-        codemirror_attrs = {
-            'data-codemirror-editor': '1',
-            'data-width': '100%',  # Ширина для патча (100% займет полную ширину)
-        }
-
         super().__init__(*args, **kwargs)
 
-        # Активируем CodeMirror и устанавливаем классы для реальных полей
-        self.fields['s_style_name'].widget = Textarea(attrs={
-            **codemirror_attrs,
-            'data-codemirror-mode': 'text',
-            'class': 'codemirror-width-xl codemirror-no-lines',
-        })
-        self.fields['j_style_synonyms'].widget = Textarea(attrs={
-            **codemirror_attrs,
-            'data-language': 'json',
-            'class': 'codemirror-width-l codemirror-min-height-5',
-        })
+        # Конфигурируем поля для CodeMirror
+        self.setup_codemirror_field('s_style_name', language='text', css_class='codemirror-width-xl codemirror-no-lines')
+        self.setup_codemirror_field('j_style_synonyms', language='json', css_class='codemirror-width-l codemirror-min-height-5')
 
 # Админка для TbMusicStyle с кастомной формой MusicStyleAdminForm
 class MusicStyleAdmin(admin.ModelAdmin):
     """Админ для музыкальных стилей"""
     form = MusicStyleAdminForm
 
-    # Подключаем JS через Media (правильный способ!)
-    class Media:
-        css = {
-            'all': ('codemirror/codemirror-styles.css',)  # Стили для CodeMirror
-        }
-        js = (
-            'codemirror/editor.js',              # Основной CodeMirror
-            'codemirror/codemirror-patch.js',    # Патч для управления высотой/шириной
-        )
+    # Media наследуется автоматически из CodeMirrorFormMixin
+    # ...(no custom Media needed)
 
     list_display = ('id', 's_style_name', 'j_style_synonyms', 't_style_created', 't_style_updated',)
     list_display_links = ('id', 's_style_name',)
@@ -406,9 +450,9 @@ class MusicStyleAdmin(admin.ModelAdmin):
 # АДМИНКА для Исполнителей/Групп/Артистов, таблица TbArtist
 #
 # Кастомная форма для ArtistAdmin
-class ArtistAdminForm(forms.ModelForm):
+class ArtistAdminForm(CodeMirrorFormMixin):
     """
-    Кастомная форма для админки продавца (Seller).
+    Кастомная форма для админки артистов.
     Добавляет виджеты CodeMirror для текстовых полей
     """
     class Meta:
@@ -417,42 +461,18 @@ class ArtistAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         """
-        При инициализации формы подгружаем
+        При инициализации формы подгружаем CodeMirror редактор
         """
-        # Атрибуты для активации CodeMirror редактора
-        codemirror_attrs = {
-            'data-codemirror-editor': '1',
-            'data-width': '100%',    # Ширина для патча (100% займет полную ширину)
-        }
-
         super().__init__(*args, **kwargs)
 
-        # Активируем CodeMirror и устанавливаем классы для реальных полей
-        self.fields['s_artist'].widget = Textarea(attrs={
-            **codemirror_attrs,
-            'data-codemirror-mode': 'text',
-            'class': 'codemirror-width-xl codemirror-no-lines',
-        })
-        self.fields['j_artist_metadata'].widget = Textarea(attrs={
-            **codemirror_attrs,
-            'data-language': 'json',
-            'class': 'codemirror-width-l codemirror-min-height-5',
-        })
+        # Конфигурируем поля для CodeMirror
+        self.setup_codemirror_field('s_artist', language='text', css_class='codemirror-width-xl codemirror-no-lines')
+        self.setup_codemirror_field('j_artist_metadata', language='json', css_class='codemirror-width-l codemirror-min-height-5')
 
 # Админка для TbArtist с кастомной формой ArtistAdminForm
 class ArtistAdmin(admin.ModelAdmin):
     """Админ для артистов"""
-    form = ArtistAdminForm  # Используем кастомную форму с виртуальными полями
-
-    # Подключаем JS через Media (правильный способ!)
-    class Media:
-        css = {
-            'all': ('codemirror/codemirror-styles.css',)  # Стили для CodeMirror
-        }
-        js = (
-            'codemirror/editor.js',              # Основной CodeMirror
-            'codemirror/codemirror-patch.js',    # Патч для управления высотой/шириной
-        )
+    form = ArtistAdminForm  # Используем кастомную форму с CodeMirror
 
     list_display = ('id', 's_artist', 't_artist_created')
     list_display_links = ('id', 's_artist',)
@@ -478,7 +498,7 @@ class ArtistAdmin(admin.ModelAdmin):
 # АДМИН-ПАНЕЛЬ ДЛЯ ЛЕЙБЛОВ/ИЗДАТЕЛЕЙ
 #
 # Кастомная форма
-class LabelAdminForm(forms.ModelForm):
+class LabelAdminForm(CodeMirrorFormMixin):
     """
     Кастомная форма для админки лейблов (Label).
     Добавляет виджеты CodeMirror для текстовых полей
@@ -490,33 +510,17 @@ class LabelAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         """
-        При инициализации формы подгружаем CodeMirror.
+        При инициализации формы подгружаем CodeMirror редактор.
         Получаем request из kwargs, переданных из get_form_kwargs в AdminClass.
         """
         # Извлекаем request из kwargs если он есть
         self.request = kwargs.pop('request', None)
 
-        # Атрибуты для активации CodeMirror редактора
-        codemirror_attrs = {
-            'data-codemirror-editor': '1',
-            'data-width': '100%',    # Ширина для патча (100% займет полную ширину)
-        }
-
         super().__init__(*args, **kwargs)
 
-
-        # Активируем CodeMirror и устанавливаем классы для реальных полей
-        self.fields['s_label'].widget = Textarea(attrs={
-            **codemirror_attrs,
-            'class': 'codemirror-width-xl codemirror-no-lines',
-            'data-language': 'text',
-        })
-        self.fields['j_label_metadata'].widget = Textarea(attrs={
-            **codemirror_attrs,
-            'class': 'codemirror-width-l codemirror-min-height-5',
-            'data-language': 'json',
-        })
-
+        # Конфигурируем поля для CodeMirror
+        self.setup_codemirror_field('s_label', language='text', css_class='codemirror-width-xl codemirror-no-lines')
+        self.setup_codemirror_field('j_label_metadata', language='json', css_class='codemirror-width-l codemirror-min-height-5')
 
     def clean(self):
         """
@@ -541,19 +545,16 @@ class LabelAdminForm(forms.ModelForm):
 # Админ для лейбла (Label) через миксин
 class LabelAdmin(RequestInFormMixin, admin.ModelAdmin):
     """Админ для лейблов с поддержкой передачи request в форму"""
-    form = LabelAdminForm  # Используем кастомную форму с виджетами CodeMirror
+    form = LabelAdminForm  # Используем кастомную форму с CodeMirror
 
-    # Подключаем JS через Media (правильный способ!)
+    # Дополнительный CSS для валидации и вотчер для отслеживания изменений
     class Media:
         css = {
             'all': (
-                'codemirror/codemirror-styles.css',        # Стили для CodeMirror
                 'css/validation-override.css',             # Стили для обхода валидации
             )
         }
         js = (
-            'codemirror/editor.js',              # Основной CodeMirror
-            'codemirror/codemirror-patch.js',    # Патч для управления высотой/шириной
             'js/form-field-watcher.js',          # Вотчер для отслеживания изменений полей формы
         )
 
@@ -607,10 +608,10 @@ class LabelAdmin(RequestInFormMixin, admin.ModelAdmin):
 # АДМИН-ПАНЕЛЬ ДЛЯ ПРОДАВЦА/SELLER
 #
 # Кастомная форма
-class SellerAdminForm(forms.ModelForm):
+class SellerAdminForm(CodeMirrorFormMixin):
     """
     Кастомная форма для админки продавца (Seller).
-    Добавлaет виджеты CodeMirror для текстовых полей
+    Добавляет виджеты CodeMirror для текстовых полей
     """
     class Meta:
         model = TbSeller
@@ -619,42 +620,19 @@ class SellerAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         """
-        При инициализации формы подгружаем
+        При инициализации формы подгружаем CodeMirror редактор
         """
-        # Атрибуты для активации CodeMirror редактора
-        codemirror_attrs = {
-            'data-codemirror-editor': '1',
-            'data-width': '100%',    # Ширина для патча (100% займет полную ширину)
-        }
-
         super().__init__(*args, **kwargs)
 
-        # Активируем CodeMirror и устанавливаем классы для реальных полей
-        self.fields['s_seller'].widget = Textarea(attrs={
-            **codemirror_attrs,
-            'class': 'codemirror-width-l codemirror-no-lines',
-            'data-language': 'text',
-        })
-        self.fields['j_seller_metadata'].widget = Textarea(attrs={
-            **codemirror_attrs,
-            'class': 'codemirror-width-xl codemirror-min-height-5',
-            'data-language': 'json',
-        })
+        # Конфигурируем поля для CodeMirror
+        self.setup_codemirror_field('s_seller', language='text', css_class='codemirror-width-l codemirror-no-lines')
+        self.setup_codemirror_field('j_seller_metadata', language='json', css_class='codemirror-width-xl codemirror-min-height-5')
 
 # Админ для продавца (Seller)
 class SellerAdmin(admin.ModelAdmin):
     """Админ для продавцов"""
-    form = SellerAdminForm  # Используем кастомную форму с виртуальными полями
+    form = SellerAdminForm  # Используем кастомную форму с CodeMirror
 
-    # Подключаем JS через Media (правильный способ!)
-    class Media:
-        css = {
-            'all': ('codemirror/codemirror-styles.css',)  # Стили для CodeMirror
-        }
-        js = (
-            'codemirror/editor.js',              # Основной CodeMirror
-            'codemirror/codemirror-patch.js',    # Патч для управления высотой/шириной
-        )
     list_display = ('id', 's_seller', 'l_seller_type', 'l_seller_currency', 't_seller_created',)
     list_display_links = ('id', 's_seller',)
     list_filter = ('l_seller_type', 'l_seller_currency',)
@@ -688,7 +666,7 @@ class SellerAdmin(admin.ModelAdmin):
 # АДМИНКА ИСТОЧНИКОВ ДАННЫХ
 #
 # Кастомная форма
-class SourceAdminForm(forms.ModelForm):
+class SourceAdminForm(CodeMirrorFormMixin):
     """
     Кастомная форма для админки источников данных (TbSource).
     Добавляет виджеты CodeMirror для текстовых полей
@@ -700,47 +678,20 @@ class SourceAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         """
-        При инициализации формы подгружаем
+        При инициализации формы подгружаем CodeMirror редактор
         """
-        # Атрибуты для активации CodeMirror редактора
-        codemirror_attrs = {
-            'data-codemirror-editor': '1',
-            'data-width': '100%',    # Ширина для патча (100% займет полную ширину)
-        }
-
         super().__init__(*args, **kwargs)
 
-        # Активируем CodeMirror и устанавливаем классы для реальных полей
-        self.fields['s_source_name'].widget = Textarea(attrs={
-            **codemirror_attrs,
-            'class': 'codemirror-width-l codemirror-no-lines',
-            'data-language': 'text',
-        })
-        self.fields['s_source_url'].widget = Textarea(attrs={
-            **codemirror_attrs,
-            'class': 'codemirror-width-xl codemirror-no-lines',
-            'data-language': 'url',
-        })
-        self.fields['j_source_metadata'].widget = Textarea(attrs={
-            **codemirror_attrs,
-            'class': 'codemirror-width-l codemirror-min-height-5',
-            'data-language': 'json',
-        })
+        # Конфигурируем поля для CodeMirror
+        self.setup_codemirror_field('s_source_name', language='text', css_class='codemirror-width-l codemirror-no-lines')
+        self.setup_codemirror_field('s_source_url', language='url', css_class='codemirror-width-xl codemirror-no-lines')
+        self.setup_codemirror_field('j_source_metadata', language='json', css_class='codemirror-width-l codemirror-min-height-5')
 
 #
 class SourceAdmin(admin.ModelAdmin):
     """Админ для источников"""
-    form = SourceAdminForm  # Используем кастомную форму с виртуальными полями
+    form = SourceAdminForm  # Используем кастомную форму с CodeMirror
 
-    # Подключаем JS через Media (правильный способ!)
-    class Media:
-        css = {
-            'all': ('codemirror/codemirror-styles.css',)  # Стили для CodeMirror
-        }
-        js = (
-            'codemirror/editor.js',              # Основной CodeMirror
-            'codemirror/codemirror-patch.js',    # Патч для управления высотой/шириной
-        )
     list_display = ('id', 's_source_name', 'k_source_to_seller', 'l_source_type', 't_source_data')
     list_display_links = ('id', 's_source_name',)
     list_filter = ('l_source_type', 't_source_data')
