@@ -19,6 +19,7 @@ from lpon_site.settings import (
     ValidateMatchType, MIN_SYNONYM_WORD_LENGTH
 )
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -1224,6 +1225,100 @@ def update_synonyms_in_metadata(
     setattr(instance, metadata_field_name, metadata_dict)
 
 
+def create_or_get_related_article(instance, article_type, main_field_name, metadata_field_name, related_fk_field_name):
+    """
+    Создает или получает связанную статью для сущности модели.
+    
+    Универсальный хелпер для создания статей при сохранении лейблов, артистов и т.д.
+    
+    Алгоритм:
+    1. Получает значение FK поля напрямую через getattr() (никаких запросов в БД)
+    2. Если статья найдена → возвращает её
+    3. Если FK поле пусто → создает новую статью с автоматическими SEO параметрами
+
+    Параметры:
+    -----------
+    instance : django.db.models.Model
+        Экземпляр модели (TbLabel, TbArtist, TbMusicStyle и т.д.)
+        Должен иметь поле k_{type}_to_article для привязки статьи
+    
+    article_type : TbArticle.ArticleType
+        Тип статьи (например, TbArticle.ArticleType.LABEL)
+    
+    main_field_name : str
+        Имя основного поля сущности (например, 's_label' для TbLabel)
+    
+    metadata_field_name : str
+        Имя поля метаданных со словарем синонимов (например, 'j_label_metadata')
+    
+    related_fk_field_name : str
+        Имя FK поля в модели instance (например, 'k_label_to_article')
+        Передается явно из save() модели
+
+    Returns:
+        TbArticle: Созданная или найденная статья
+    
+    Пример использования в TbLabel.save():
+        article = create_or_get_related_article(
+            self,
+            TbArticle.ArticleType.LABEL,
+            's_label',
+            'j_label_metadata',
+            'k_label_to_article'
+        )
+        self.k_label_to_article = article
+    """
+    from .models import TbArticle
+
+    # Получаем verbose_name модели для универсальности
+    verbose_name = instance._meta.verbose_name  # "Лейбл", "Артист" и т.д.
+
+    # Генерируем slug используя verbose_name (более гибко чем хардкод)
+    # "Лейбл" → "label", "Артист" → "artist"
+    article_slug_default = make_slug(slug_it=verbose_name)
+    
+    # Получаем значение основного поля (например, "Sony Records")
+    main_field_value = getattr(instance, main_field_name, '')
+    
+    # ===== ПОПЫТКА НАЙТИ СУЩЕСТВУЮЩУЮ СТАТЬЮ =====
+    # Получаем статью через FK поле напрямую (никаких запросов в БД)
+    try:
+        article = getattr(instance, related_fk_field_name)
+        if article:
+            # FK поле содержит статью - возвращаем её
+            return article
+    except:
+        # FK поле не существует или пусто, создаем новую
+        pass
+
+    # ===== СТАТЬЯ НЕ ПРИВЯЗАНА. СОЗДАËМ НОВУЮ СТАТЬЮ =====
+
+    # Собираем синонимы из метаданных для SEO ключевых слов и исключаем текущее значение поля
+    # из списка (оно будет добавлено первым для приоритета)
+    other_synonyms = [s for s in instance.__dict__.get(metadata_field_name, {}).get(KEY_SYNONYM, []) if str(s) != main_field_value]
+
+    # Собираем все синонимы с текущим значением первым
+    all_synonyms = [main_field_value] + other_synonyms if other_synonyms else [main_field_value]
+    synonyms_str = ", ".join(str(s) for s in all_synonyms)
+
+    # Создаем объект статьи
+    article = TbArticle(
+        s_article_title=f"[{verbose_name}] {main_field_value} (auto-make)",     # Техническое название для админки
+        s_article_title_html=main_field_value,
+        seo_title=main_field_value,
+        seo_keywords=f"{synonyms_str}, {verbose_name}, {article_slug_default}",
+        seo_description=f"{main_field_value} ({verbose_name}): информация.",
+        l_article_type=article_type,
+        b_article_published=True,
+        slug=make_slug(slug_it=main_field_value, slug_default=article_slug_default),
+    )
+
+    # Сохраняем статью
+    article.save()
+
+    return article
+
+
 def generate_admin_save_message(request, obj, is_new, related_article,
                                obj_field_name='s_label',
                                article_title_field='s_article_title'):
@@ -1333,3 +1428,4 @@ def generate_admin_save_message(request, obj, is_new, related_article,
         if related_article:
             msg += f' Связанная статья: «{article_title}» >> {article_info} {article_link}'
         messages.success(request, mark_safe(msg))
+
