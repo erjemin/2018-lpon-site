@@ -50,6 +50,9 @@ def get_related_article_description(model_class):
             f' со&nbsp;всеми SEO-атрибутами и&nbsp;slag, но&nbsp;автоматика несовершенна.<br />&nbsp;')
 
 
+# ============================================================================
+# МИКСИНЫ ДЛЯ АДМИНКИ
+# ============================================================================
 class RequestInFormMixin(admin.ModelAdmin):
     """
     Миксин для передачи request объекта в форму.
@@ -144,15 +147,18 @@ class CodeMirrorFormMixin(forms.ModelForm):
         # Применяем Textarea виджет с атрибутами
         self.fields[field_name].widget = Textarea(attrs=attrs)
 
+
 # ============================================================================
 # АДМИНИСТРИРОВАНИЕ TbImage
 #
 # Кастомня форма для админки TbImage
-class TbImageAdminForm(forms.ModelForm):
+class TbImageAdminForm(CodeMirrorFormMixin):
     """
     Кастомная форма для TbImage в админке.
     Добавляет виртуальные поля для редактирования метаданных filer_image
-    (default_alt_text и default_caption), которые не хранятся в TbImage, но есть в filer_image
+    (default_alt_text и default_caption), которые не хранятся в TbImage, но есть в filer_image.
+    
+    Наследует от CodeMirrorFormMixin для поддержки редактора CodeMirror.
     """
     # Виртуальные поля для заполнения метаданных filer_image
     alt_text = forms.CharField(
@@ -192,13 +198,8 @@ class TbImageAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         """
         При инициализации формы подгружаем текущие значения alt/caption из filer_image.
+        Настраиваем поля для работы с CodeMirror редактором.
         """
-        # Атрибуты для активации CodeMirror редактора
-        codemirror_attrs = {
-            'data-codemirror-editor': '1',
-            'data-width': '100%',    # Ширина для патча (100% займет полную ширину)
-        }
-
         super().__init__(*args, **kwargs)
 
         # Если редактируем существующую запись, получаем текущие значения из filer
@@ -212,37 +213,26 @@ class TbImageAdminForm(forms.ModelForm):
                 self.fields['title_text'].initial = filer_image.default_caption or ''
                 self.fields['copyright_text'].initial = filer_image.author or ''
 
-                # Активируем CodeMirror и устанавливаем CSS-классы для виртуальных полей
-                self.fields['alt_text'].widget = Textarea(attrs={
-                    **codemirror_attrs,
-                    'class': 'codemirror-width-m',
-                })
-                self.fields['title_text'].widget = Textarea(attrs={
-                    **codemirror_attrs,
-                    'class': 'codemirror-width-l',
-                })
-                self.fields['copyright_text'].widget = Textarea(attrs={
-                    **codemirror_attrs,
-                    'class': 'codemirror-width-m',
-                })
             except Exception:
                 # Если ошибка при получении filer_image, просто оставляем пустые значения
                 pass
 
-        # Активируем CodeMirror и устанавливаем классы для реальных полей
-        self.fields['s_img_src_url'].widget = Textarea(attrs={
-            **codemirror_attrs,
-            'data-language': 'url',
-            'class': 'codemirror-width-xl',
-        })
-        self.fields['i_img_sort'].widget = Textarea(attrs={
-            **codemirror_attrs,
-            'class': 'codemirror-width-s codemirror-no-lines',
-        })
-        self.fields['f_img_confidence_score'].widget = Textarea(attrs={
-            **codemirror_attrs,
-            'class': 'codemirror-width-s codemirror-no-lines',
-        })
+        # Активируем CodeMirror для виртуальных полей
+        self.setup_codemirror_field('alt_text', language='text',
+                                    css_class='codemirror-width-m codemirror-no-lines')
+        self.setup_codemirror_field('title_text', language='text',
+                                    css_class='codemirror-width-l codemirror-no-lines')
+        self.setup_codemirror_field('copyright_text', language='text',
+                                    css_class='codemirror-width-m codemirror-no-lines')
+
+        # Активируем CodeMirror для реальных полей
+        self.setup_codemirror_field('s_img_src_url', language='url',
+                                    css_class='codemirror-width-xl codemirror-no-lines')
+        self.setup_codemirror_field('i_img_sort', language='text',
+                                    css_class='codemirror-width-s codemirror-no-lines')
+        self.setup_codemirror_field('f_img_confidence_score', language='text',
+                                    css_class='codemirror-width-s codemirror-no-lines')
+
 
 # Админка для TbImage с кастомной формой
 class ImageAdmin(admin.ModelAdmin):
@@ -251,18 +241,10 @@ class ImageAdmin(admin.ModelAdmin):
 
     Позволяет пользователю заполнить default_alt_text и default_caption для картинки в filer
     прямо в админке TbImage, без необходимости отдельного редактирования filer.
+    
+    Использует TbImageAdminForm с наследованием от CodeMirrorFormMixin для поддержки CodeMirror.
     """
-    form = TbImageAdminForm  # Используем кастомную форму с виртуальными полями
-
-    # Подключаем JS через Media (правильный способ!)
-    class Media:
-        css = {
-            'all': ('codemirror/codemirror-styles.css',)  # Стили для CodeMirror
-        }
-        js = (
-            'codemirror/editor.js',              # Основной CodeMirror
-            'codemirror/codemirror-patch.js',    # Патч для управления высотой/шириной
-        )
+    form = TbImageAdminForm  # Используем кастомную форму с виртуальными полями (Media подключится через миксин)
 
     list_display = ('id', 'image_thumbnail', 'image', '_display_alt_text', 'i_img_sort', 't_img_created')
     list_display_links = ('id', 'image_thumbnail', 'image')
@@ -415,8 +397,10 @@ class MusicStyleAdminForm(CodeMirrorFormMixin):
         super().__init__(*args, **kwargs)
 
         # Конфигурируем поля для CodeMirror
-        self.setup_codemirror_field('s_style_name', language='text', css_class='codemirror-width-xl codemirror-no-lines')
-        self.setup_codemirror_field('j_style_synonyms', language='json', css_class='codemirror-width-l codemirror-min-height-5')
+        self.setup_codemirror_field('s_style_name', language='text',
+                                    css_class='codemirror-width-xl codemirror-no-lines')
+        self.setup_codemirror_field('j_style_synonyms', language='json',
+                                    css_class='codemirror-width-l codemirror-min-height-5')
 
 # Админка для TbMusicStyle с кастомной формой MusicStyleAdminForm
 class MusicStyleAdmin(admin.ModelAdmin):
@@ -467,8 +451,10 @@ class ArtistAdminForm(CodeMirrorFormMixin):
         super().__init__(*args, **kwargs)
 
         # Конфигурируем поля для CodeMirror
-        self.setup_codemirror_field('s_artist', language='text', css_class='codemirror-width-xl codemirror-no-lines')
-        self.setup_codemirror_field('j_artist_metadata', language='json', css_class='codemirror-width-l codemirror-min-height-5')
+        self.setup_codemirror_field('s_artist', language='text',
+                                    css_class='codemirror-width-xl codemirror-no-lines')
+        self.setup_codemirror_field('j_artist_metadata', language='json',
+                                    css_class='codemirror-width-l codemirror-min-height-5')
 
 # Админка для TbArtist с кастомной формой ArtistAdminForm
 class ArtistAdmin(admin.ModelAdmin):
@@ -520,8 +506,10 @@ class LabelAdminForm(CodeMirrorFormMixin):
         super().__init__(*args, **kwargs)
 
         # Конфигурируем поля для CodeMirror
-        self.setup_codemirror_field('s_label', language='text', css_class='codemirror-width-xl codemirror-no-lines')
-        self.setup_codemirror_field('j_label_metadata', language='json', css_class='codemirror-width-l codemirror-min-height-5')
+        self.setup_codemirror_field('s_label', language='text',
+                                    css_class='codemirror-width-xl codemirror-no-lines')
+        self.setup_codemirror_field('j_label_metadata', language='json',
+                                    css_class='codemirror-width-l codemirror-min-height-5')
 
     def clean(self):
         """
@@ -634,8 +622,10 @@ class SellerAdminForm(CodeMirrorFormMixin):
         super().__init__(*args, **kwargs)
 
         # Конфигурируем поля для CodeMirror
-        self.setup_codemirror_field('s_seller', language='text', css_class='codemirror-width-l codemirror-no-lines')
-        self.setup_codemirror_field('j_seller_metadata', language='json', css_class='codemirror-width-xl codemirror-min-height-5')
+        self.setup_codemirror_field('s_seller', language='text',
+                                    css_class='codemirror-width-l codemirror-no-lines')
+        self.setup_codemirror_field('j_seller_metadata', language='json',
+                                    css_class='codemirror-width-xl codemirror-min-height-5')
 
 # Админ для продавца (Seller)
 class SellerAdmin(admin.ModelAdmin):
@@ -654,14 +644,7 @@ class SellerAdmin(admin.ModelAdmin):
         }),
         ('Связанная публикация', {
             'fields': ('k_seller_to_article', ),
-            'description': 'Прикреп&shy;ленная статья (если есть) будет отображаться на&nbsp;странице продавца'
-                           ' на&nbsp;сайте. Также позволяет получать список всех предложений продавца, управлять'
-                           ' SEO-атрибутами для&nbsp;улучшения видимости поисковых систем, иметь красивый'
-                           ' slag для&nbsp;URL-странички, подсчитывать число просмотров и&nbsp;добавлений'
-                           ' в&nbsp;избранные. <b style=\'color: green;\'>ОЧЕНЬ РЕКОМЕН&shy;ДУЕТСЯ СОЗДАВАТЬ'
-                           ' И&nbsp;ПРИВЯЗЫВАТЬ СТАТЬЮ ВРУЧНУЮ</b>. Если публикация не&nbsp;создана вручную,'
-                           ' то&nbsp;она будет создана автоматически (пустая) при&nbsp;сохранении продавца,'
-                           ' со&nbsp;всеми SEO-атрибутами и&nbsp;slag, но&nbsp;автоматика несовершенна.<br />&nbsp;',
+            'description': get_related_article_description(TbSeller),
             # 'classes': ('collapse',),
         }),
         ('Служебная информация', {
@@ -692,9 +675,12 @@ class SourceAdminForm(CodeMirrorFormMixin):
         super().__init__(*args, **kwargs)
 
         # Конфигурируем поля для CodeMirror
-        self.setup_codemirror_field('s_source_name', language='text', css_class='codemirror-width-l codemirror-no-lines')
-        self.setup_codemirror_field('s_source_url', language='url', css_class='codemirror-width-xl codemirror-no-lines')
-        self.setup_codemirror_field('j_source_metadata', language='json', css_class='codemirror-width-l codemirror-min-height-5')
+        self.setup_codemirror_field('s_source_name', language='text',
+                                    css_class='codemirror-width-l codemirror-no-lines')
+        self.setup_codemirror_field('s_source_url', language='url',
+                                    css_class='codemirror-width-xl codemirror-no-lines')
+        self.setup_codemirror_field('j_source_metadata', language='json',
+                                    css_class='codemirror-width-l codemirror-min-height-5')
 
 #
 class SourceAdmin(admin.ModelAdmin):
@@ -767,6 +753,5 @@ admin.site.register(TbOfferHistory, OfferHistoryAdmin)
 # ============================================================================
 # Кастомизация админ-сайта через ready() в apps.py (переименование через verbose_name)
 # ============================================================================
-
 
 
