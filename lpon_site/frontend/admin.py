@@ -1,6 +1,7 @@
 # Кастомная конфигурация Django Admin для LPON сайта.
 # Регистрируем модели с удобным интерфейсом.
 
+from typing import Any
 from django import forms
 from django.forms import Textarea
 from django.contrib import admin
@@ -527,7 +528,15 @@ class LabelAdminForm(CodeMirrorFormMixin):
         Валидируем форму: проверяем на совпадения (дубликаты) основного поля s_label.
         Используем GET параметр ignore_validate для пропуска валидации при переотправке.
         """
-        cleaned_data = super().clean()
+        # Получаем очищенные данные формы (может быть None, но обычно это dict)
+        cleaned_data: dict[str, Any] | None = super().clean()
+
+        # Если clean() вернул None, возвращаем пустой dict (для совместимости)
+        if cleaned_data is None:
+            cleaned_data = {}
+
+        # После проверки выше, очищены данные гарантированно dict[str, Any]
+        assert isinstance(cleaned_data, dict), "cleaned_data должен быть словарём"
 
         # Используем универсальный хелпер для проверки дубликатов
         # Модель берется автоматически из self.Meta.model
