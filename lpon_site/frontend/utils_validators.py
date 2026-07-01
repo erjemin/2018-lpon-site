@@ -522,7 +522,7 @@ def validate_entity_for_admin_form(
             Примеры: 's_label' (для TbLabel), 's_artist' (для TbArtist), 's_style_name' (для TbMusicStyle)
             Если поле не существует в модели, будет выброшено AttributeError.
         metadata_field_name: Имя поля метаданных модели. ОБЯЗАТЕЛЕН!
-            Примеры: 'j_label_metadata', 'j_artist_metadata', 'j_style_synonyms'
+            Примеры: 'j_label_metadata', 'j_artist_metadata', 'j_style_metadata'
             Если поле не существует в модели, будет выброшено AttributeError.
         request: HTTP request объект (опционально, используется для проверки GET параметра ignore_validate)
 

@@ -84,7 +84,7 @@
 # │ PK: id           │  SmallAutoField
 # │ s_style_name     │  Название (Rock, Jazz, Classical...)
 # │ k_style_to_article│ 1:1 OneToOne FK → TbArticle (для SEO, слага, контента)
-# │ j_style_synonyms │  JSON синонимы из Discogs для матчинга при импорте
+# │ j_style_metadata │  JSON синонимы из Discogs для матчинга при импорте
 # │ t_style_created  │  Timestamp
 # │ t_style_updated  │  Timestamp
 # │                  │  ⬆ Индексы: id (+), related_name→article_to_style
@@ -141,6 +141,8 @@
 #                │ k_offer_to_source              │  FK → TbSource [indexed]
 #                │ k_offer_to_article             │  FK → TbArticle (опционально)
 #                │ k_offer_to_image               │  M2M → TbImage (несколько фото)
+#                │ b_offer_is_preorder            │  Предзаказ (bool, indexed)
+#                │ d_offer_date_release           │  Дата релиза/ожидаемого выхода по предзаказу [indexed]
 #                │ l_offer_condition_media        │  Состояние (s, m, nm, vg, g, f, p)
 #                │ l_offer_condition_sleeve       │  Состояние (s, m, nm, vg, g, f, p)
 #                │ f_offer_price                  │  Цена [indexed для сортировки]
@@ -151,7 +153,7 @@
 #                │ i_offer_favorites              │  Счетчик в избранном
 #                │ t_offer_created                │  Timestamp
 #                │ t_offer_updated                │  Timestamp
-#                │                                │  ⬆ Индексы: (item, price↓), (item, quantity), (source, discount)
+#                │                                │  ⬆ Индексы: (item, price↓), (item, quantity), (source, discount), (is_preorder), (date_release)
 #                │                                │  ⬆ Constraint UNIQUE: (item, source, format)
 #                └────────────────────┬───────────┘
 #                                     │
@@ -191,7 +193,8 @@
 # │ k_item_to_artist    │  M2M → TbArtist (для коллабораций)
 # │ k_item_to_style     │  M2M → TbMusicStyle (жанры альбома)
 # │ k_item_to_article   │  1:1 FK → TbArticle (content, SEO, slug)
-# │ t_item_date         │  Дата релиза
+# │ s_item_date         │  Дата релиза (строка, неполная/текстовая) [indexed]
+# │ t_item_date         │  Базовая дата релиза товара/альбома [indexed]
 # │ i_discogs_master_id │  ID мастер-релиза на Discogs
 # │ t_item_created      │  Timestamp
 # │ t_item_updated      │  Timestamp
@@ -549,12 +552,12 @@ class TbMusicStyle(models.Model):
                   ' через статью может быть получена картинка, seo атрибуты, слаг (обязательно) и т.п.)<br />'
                   '<b>ОБЯЗАТЕЛЬНО УКАЗЫВАТЬ</b> т.к. через статью получаем слаг для URL музыкального стиля.'
     )
-    j_style_synonyms = models.JSONField(
-        default=list,
+    j_style_metadata = models.JSONField(
+        default=dict,
         blank=True,
-        verbose_name='Синонимы из источников',
-        help_text='Список вариантов названия из Discogs, MusicBrainz и т.д. для матчинга.'
-                  ' Пример: ["rock", "Rock Music", "Rock & Roll", "Hard Rock"]',
+        verbose_name='Метаданные',
+        help_text='В основном список синонимов/вариантов названия из Discogs, MusicBrainz и т.д. для матчинга.'
+                  ' Пример: <tt>{"SYNONYM": ["rock", "Rock Music", "Rock & Roll", "Hard Rock"]}</tt>.',
     )
     t_style_created = models.DateTimeField(auto_now_add=True, editable=False, verbose_name="Дата создания")
     t_style_updated = models.DateTimeField(auto_now=True, editable=False, verbose_name="Дата обновления")
@@ -597,12 +600,12 @@ class TbArtist(models.Model):
                   '<b>ОБЯЗАТЕЛЬНО УКАЗЫВАТЬ</b> т.к. через статью получаем слаг для URL артиста.'
     )
     j_artist_metadata = models.JSONField(
-        default=list,
+        default=dict,
         blank=True,
         null=True,
         verbose_name='Метаданные JSON',
-        help_text='Включая варианты написания в источниках Список вариантов: ["The Beatles", "Beatles",'
-                  ' "Beatles, The"]',
+        help_text='В основном список синонимов/вариантов названия из Discogs, MusicBrainz и т.д. для матчинга.'
+                  ' Пример: <tt>{"SYNONYM": ["The Beatles", "Beatles", "Beatles, The"]}</tt>.',
     )
     t_artist_created = models.DateTimeField(auto_now_add=True, editable=False, verbose_name="Дата создания",)
     t_artist_updated = models.DateTimeField(auto_now=True, editable=False, verbose_name="Дата обновления",
@@ -671,6 +674,7 @@ class TbItem(models.Model):
         max_length=10,
         blank=True,
         null=True,
+        db_index=True,
         default='XXXX-XX-XX',
         verbose_name='Дата релиза (str)',
         help_text='Например: 1969-05-25, или 1969-05-XX (если день неизвестен), или 1969-XX-XX (если известен только'
@@ -681,6 +685,7 @@ class TbItem(models.Model):
     t_item_date = models.DateField(
         blank=True,
         null=True,
+        db_index=True,
         verbose_name='Дата релиза',
         help_text='Полная дата если известна, например: 1969-09-26. Если точно известен.',
     )
@@ -748,7 +753,9 @@ class TbLabel(models.Model):
         blank=True,
         null=True,
         verbose_name='Метаданные',
-        help_text='JSON: страна лейбла, официальный сайт и т.д.',
+        help_text='JSON: страна лейбла, официальный сайт и т.д. Включая список синонимов/вариантов названия для матчинга.'
+                  ' Пример: <tt>{"SYNONYM": ["Island", "Island Records", "Vertigo France"]}</tt>.'
+        ,
     )
     t_label_created = models.DateTimeField(auto_now_add=True, editable=False, verbose_name="Дата создания",)
     t_label_updated = models.DateTimeField(auto_now=True, editable=False, verbose_name="Дата обновления",)
@@ -992,12 +999,19 @@ class TbOffer(models.Model):
         verbose_name='Каталожный номер / Barcode',
         help_text='Например: "SD 16023" или "5099923452355"',
     )
+    b_offer_is_preorder = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name='Предзаказ',
+        help_text='Если товар доступен только для предзаказа',
+    )
     d_offer_date_release = models.DateField(
-        blank=True,
+        blank=False,
         null=True,
         default=None,
+        db_index=True,
         verbose_name='Дата релиза',
-        help_text='Дата релиза, если она известна (например, дата выпуска переиздания)',
+        help_text='Дата релиза (например, дата выпуска переиздания) или выхода по предзаказу, если она известна',
     )
     i_offer_discogs_id = models.IntegerField(
         blank=True,
@@ -1250,4 +1264,3 @@ class TbOfferHistory(models.Model):
             # Составной индекс: найти историю оффера, отсортированную по времени (для хронологии изменений цены)
             models.Index(fields=['k_history_to_offer', '-t_history_created'], name='idx_history_by_offer_date'),
         ]
-

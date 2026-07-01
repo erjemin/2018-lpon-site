@@ -388,7 +388,7 @@ class MusicStyleAdminForm(CodeMirrorFormMixin):
     """
     class Meta:
         model = TbMusicStyle
-        fields = ('s_style_name', 'j_style_synonyms', 'k_style_to_article',)
+        fields = ('s_style_name', 'j_style_metadata', 'k_style_to_article',)
 
     def __init__(self, *args, **kwargs):
         """
@@ -399,7 +399,7 @@ class MusicStyleAdminForm(CodeMirrorFormMixin):
         # Конфигурируем поля для CodeMirror
         self.setup_codemirror_field('s_style_name', language='text',
                                     css_class='codemirror-width-xl codemirror-no-lines')
-        self.setup_codemirror_field('j_style_synonyms', language='json',
+        self.setup_codemirror_field('j_style_metadata', language='json',
                                     css_class='codemirror-width-l codemirror-min-height-5')
 
 # Админка для TbMusicStyle с кастомной формой MusicStyleAdminForm
@@ -410,14 +410,14 @@ class MusicStyleAdmin(admin.ModelAdmin):
     # Media наследуется автоматически из CodeMirrorFormMixin
     # ...(no custom Media needed)
 
-    list_display = ('id', 's_style_name', 'j_style_synonyms', 't_style_created', 't_style_updated',)
+    list_display = ('id', 's_style_name', 'j_style_metadata', 't_style_created', 't_style_updated',)
     list_display_links = ('id', 's_style_name',)
-    search_fields = ('s_style_name', 'j_style_synonyms',)
+    search_fields = ('s_style_name', 'j_style_metadata',)
     readonly_fields = ('t_style_created', 't_style_updated',)
 
     fieldsets = (
         ('Основные данные о музыкальном стиле', {
-            'fields': ('s_style_name', 'j_style_synonyms',),
+            'fields': ('s_style_name', 'j_style_metadata',),
         }),
         ('Связанная публикация', {
             'fields': ('k_style_to_article',),
