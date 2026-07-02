@@ -16,7 +16,7 @@ from django.utils.html import mark_safe
 from django.http import HttpRequest
 from django.db.models import Model
 from lpon_site.settings import (
-    SLUG_MAX_LENGTH, KEY_SYNONYM,
+    SLUG_MAX_LENGTH, KEY_SYNONYM_EN,
 )
 
 
@@ -223,10 +223,10 @@ def update_synonyms_in_metadata(
     Универсальный хелпер для управления синонимами во всех моделях (TbLabel, TbArtist, TbMusicStyle и т.д.)
 
     Логика:
-    - При создании новой записи: добавляет текущее значение поля в SYNONYM
-    - При редактировании: если значение поля изменилось, добавляет ОБА (старое и новое) в SYNONYM
+    - При создании новой записи: добавляет текущее значение поля в SYN_EN
+    - При редактировании: если значение поля изменилось, добавляет ОБА (старое и новое) в SYN_EN
     - Очищает дубликаты в списке синонимов, сохраняя порядок
-    - Использует KEY_SYNONYM из settings как ключ в metadata словаре
+    - Использует KEY_SYN_EN из settings как ключ в metadata словаре
 
     Args:
         instance: Экземпляр модели (self из save методе). Обязателен!
@@ -282,25 +282,25 @@ def update_synonyms_in_metadata(
         setattr(instance, metadata_field_name, metadata_dict)
 
     # Убеждаемся, что ключ 'SYNONYM' существует и это список
-    if KEY_SYNONYM not in metadata_dict or not isinstance(metadata_dict[KEY_SYNONYM], list):
-        metadata_dict[KEY_SYNONYM] = []
+    if KEY_SYNONYM_EN not in metadata_dict or not isinstance(metadata_dict[KEY_SYNONYM_EN], list):
+        metadata_dict[KEY_SYNONYM_EN] = []
 
     # ===== ДОБАВЛЯЕМ СИНОНИМЫ =====
     # Добавляем синонимы при создании ИЛИ если значение поля изменилось
     if is_new or old_field_value != current_field_value:
         # Если поле было обновлено и значение изменилось - добавляем старое значение
-        if old_field_value and old_field_value not in metadata_dict[KEY_SYNONYM]:
-            metadata_dict[KEY_SYNONYM].append(old_field_value)
+        if old_field_value and old_field_value not in metadata_dict[KEY_SYNONYM_EN]:
+            metadata_dict[KEY_SYNONYM_EN].append(old_field_value)
 
         # Добавляем текущее значение если его еще нет в синонимах
-        if current_field_value not in metadata_dict[KEY_SYNONYM]:
-            metadata_dict[KEY_SYNONYM].append(current_field_value)
+        if current_field_value not in metadata_dict[KEY_SYNONYM_EN]:
+            metadata_dict[KEY_SYNONYM_EN].append(current_field_value)
 
     # ===== ОЧИЩАЕМ ДУБЛИКАТЫ =====
     # Удаляем дубликаты в списке синонимов, сохраняя порядок
     # (может случиться если пользователь вручную редактировал метаданные)
-    if KEY_SYNONYM in metadata_dict and isinstance(metadata_dict[KEY_SYNONYM], list):
-        metadata_dict[KEY_SYNONYM] = list(dict.fromkeys(metadata_dict[KEY_SYNONYM]))
+    if KEY_SYNONYM_EN in metadata_dict and isinstance(metadata_dict[KEY_SYNONYM_EN], list):
+        metadata_dict[KEY_SYNONYM_EN] = list(dict.fromkeys(metadata_dict[KEY_SYNONYM_EN]))
 
     # ===== СООБЩАЕМ DJANGO ЧТО ПОЛЕ ИЗМЕНИЛОСЬ =====
     # Для JSONField нужно явно сообщить что мы изменили содержимое
@@ -383,7 +383,7 @@ def create_or_get_related_article(
 
     # Собираем синонимы из метаданных для SEO ключевых слов и исключаем текущее значение поля
     # из списка (оно будет добавлено первым для приоритета)
-    other_synonyms = [s for s in instance.__dict__.get(metadata_field_name, {}).get(KEY_SYNONYM, []) if str(s) != main_field_value]
+    other_synonyms = [s for s in instance.__dict__.get(metadata_field_name, {}).get(KEY_SYNONYM_EN, []) if str(s) != main_field_value]
 
     # Собираем все синонимы с текущим значением первым
     all_synonyms = [main_field_value] + other_synonyms if other_synonyms else [main_field_value]

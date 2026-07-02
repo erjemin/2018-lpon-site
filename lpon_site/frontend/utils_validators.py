@@ -14,7 +14,7 @@ from django.http import HttpRequest
 from django.forms import ModelForm
 from django.contrib import messages
 from lpon_site.settings import (
-    KEY_SYNONYM,
+    KEY_SYNONYM_EN,
     VALIDATE_KEY__MATCH_TYPE, VALIDATE_KEY__MODEL, VALIDATE_KEY__VALUE,
     ValidateMatchType, MIN_SYNONYM_WORD_LENGTH
 )
@@ -143,7 +143,7 @@ def validate_for_duplicates(
         })
         return duplicates_found
 
-    # ПРОВЕРКА 2: SYNONYM MATCH (совпадение с синонимами в метаданных других записей)
+    # ПРОВЕРКА 2:SYN_ENMATCH (совпадение с синонимами в метаданных других записей)
     # Ищем: есть ли текущее значение main_field в синонимах других записей?
     # Например, если у записи A синонимы=['Sony Music', 'SME Records'],
     # а мы добавляем запись B с основным полем 'Sony Music', это совпадение!
@@ -159,7 +159,7 @@ def validate_for_duplicates(
         has_synonym=RawSQL(
             f"""
             EXISTS (
-                SELECT 1 FROM json_each({metadata_field_name}, '$.{KEY_SYNONYM}')
+                SELECT 1 FROM json_each({metadata_field_name}, '$.{KEY_SYNONYM_EN}')
                 WHERE LOWER(json_each.value) = %s
             )
             """,
@@ -179,8 +179,8 @@ def validate_for_duplicates(
     # основное поле + все синонимы из метаданных
     # Этот список переиспользуется на этапах 3 и 4, избегая дублирования логики
     raw_values_to_analyze = [main_field_value]
-    if KEY_SYNONYM in metadata_dict and isinstance(metadata_dict[KEY_SYNONYM], list):
-        raw_values_to_analyze.extend(metadata_dict[KEY_SYNONYM])
+    if KEY_SYNONYM_EN in metadata_dict and isinstance(metadata_dict[KEY_SYNONYM_EN], list):
+        raw_values_to_analyze.extend(metadata_dict[KEY_SYNONYM_EN])
 
     # ПРОВЕРКА 3: EXACT_SYNONYM_MATCH (точное совпадение синонимов текущей записи с синонимами других)
     # Ищем: есть ли синонимы из текущей записи в синонимах других записей?
@@ -188,10 +188,10 @@ def validate_for_duplicates(
     # Например, если текущая запись имеет синонимы=['Polydor Records', 'Vertigo France'],
     # а запись A имеет синонимы=['Vertigo France', 'Swirl'], это совпадение!
     # Пользователь подтверждает - удалим конфликтующие синонимы из других записей.
-    if KEY_SYNONYM in metadata_dict and isinstance(metadata_dict[KEY_SYNONYM], list):
+    if KEY_SYNONYM_EN in metadata_dict and isinstance(metadata_dict[KEY_SYNONYM_EN], list):
         # Собираем все синонимы текущей записи с нормализацией
         current_synonyms = [
-            normalize_string(syn) for syn in metadata_dict[KEY_SYNONYM]
+            normalize_string(syn) for syn in metadata_dict[KEY_SYNONYM_EN]
         ]
 
         # Удаляем дубликаты синонимов, сохраняя порядок
@@ -215,7 +215,7 @@ def validate_for_duplicates(
             query_params = []
             for normalized_synonym in current_synonyms:
                 synonym_query_parts.append(
-                    f"EXISTS (SELECT 1 FROM json_each({metadata_field_name}, '$.{KEY_SYNONYM}') WHERE LOWER(json_each.value) = %s)"
+                    f"EXISTS (SELECT 1 FROM json_each({metadata_field_name}, '$.{KEY_SYNONYM_EN}') WHERE LOWER(json_each.value) = %s)"
                 )
                 query_params.append(normalized_synonym)
 
@@ -283,7 +283,7 @@ def validate_for_duplicates(
             if len(word) >= effective_min_word_len:
                 word_search_conditions.append(
                     f"""EXISTS (
-                        SELECT 1 FROM json_each({metadata_field_name}, '$.{KEY_SYNONYM}')
+                        SELECT 1 FROM json_each({metadata_field_name}, '$.{KEY_SYNONYM_EN}')
                         WHERE LOWER(json_each.value) LIKE %s
                     )"""
                 )
@@ -343,7 +343,7 @@ def remove_conflicting_synonyms_from_duplicates(
         remove_conflicting_synonyms_from_duplicates(
             duplicates_queryset,
             'j_label_metadata',
-            metadata_dict.get(KEY_SYNONYM) or [],
+            metadata_dict.get(KEY_SYNONYM_EN) or [],
         )
     """
     # Нормализуем синонимы для удаления один раз
@@ -354,10 +354,10 @@ def remove_conflicting_synonyms_from_duplicates(
         dup_metadata = getattr(duplicate_record, metadata_field_name) or {}
 
         # Если в метаданных есть синонимы, удаляем те, которые совпадают с нашим списком
-        if KEY_SYNONYM in dup_metadata and isinstance(dup_metadata[KEY_SYNONYM], list):
+        if KEY_SYNONYM_EN in dup_metadata and isinstance(dup_metadata[KEY_SYNONYM_EN], list):
             # Удаляем синонимы, которые совпадают с переданным списком
-            dup_metadata[KEY_SYNONYM] = [
-                syn for syn in dup_metadata[KEY_SYNONYM]
+            dup_metadata[KEY_SYNONYM_EN] = [
+                syn for syn in dup_metadata[KEY_SYNONYM_EN]
                 if normalize_string(syn) not in normalized_to_remove
             ]
             # Сохраняем обновленные метаданные
@@ -403,7 +403,7 @@ def build_search_report(
     search_words.update(re.split(r'\s+', main_value_normalized))
 
     # Собираем слова из синонимов метаданных
-    metadata_synonyms = metadata_dict.get(KEY_SYNONYM) or []
+    metadata_synonyms = metadata_dict.get(KEY_SYNONYM_EN) or []
     for synonym in metadata_synonyms:
         # Применяем супер-нормализацию к каждому синониму
         syn_normalized = super_normalize_string(synonym)
@@ -429,7 +429,7 @@ def build_search_report(
 
             # Получаем метаданные и синонимы
             dup_metadata = getattr(dup, metadata_field_name) or {}
-            dup_synonyms = dup_metadata.get(KEY_SYNONYM) or []
+            dup_synonyms = dup_metadata.get(KEY_SYNONYM_EN) or []
 
             # Ищем слово в основном поле и синонимах (case-insensitive)
             found_locations = []
@@ -667,7 +667,7 @@ def validate_entity_for_admin_form(
                 remove_conflicting_synonyms_from_duplicates(
                     duplicates_queryset,
                     metadata_field_name,
-                    metadata_dict.get(KEY_SYNONYM) or [],  # Удаляем все синонимы текущей записи
+                    metadata_dict.get(KEY_SYNONYM_EN) or [],  # Удаляем все синонимы текущей записи
                 )
                 # Выходим без ошибки в админку, т.к. пользователь "проверил и уверен!"
                 # Конфликтующие синонимы удалены, запись сохранится нормально
@@ -679,7 +679,7 @@ def validate_entity_for_admin_form(
                 # Для каждого синонима текущей записи ищем, в каких записях он есть
 
                 # Собираем текущие синонимы с нормализацией
-                current_synonyms_list = metadata_dict.get(KEY_SYNONYM) or []
+                current_synonyms_list = metadata_dict.get(KEY_SYNONYM_EN) or []
 
                 # Строим словарь: {нормализованный синоним: {оригинальный синоним, запись1, запись2, ...}}
                 synonym_to_records = {}
@@ -694,7 +694,7 @@ def validate_entity_for_admin_form(
                     # Ищем этот синоним в метаданных других записей
                     for dup in duplicates_queryset:
                         dup_metadata = getattr(dup, metadata_field_name) or {}
-                        dup_synonyms = dup_metadata.get(KEY_SYNONYM) or []
+                        dup_synonyms = dup_metadata.get(KEY_SYNONYM_EN) or []
 
                         # Проверяем: есть ли текущий синоним в синонимах этой записи
                         for dup_syn in dup_synonyms:

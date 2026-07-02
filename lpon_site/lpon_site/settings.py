@@ -317,7 +317,8 @@ LOGGING = {
 SLUG_MAX_LENGTH = 60
 
 # Ключи для типовых параметров в мета-полях (для TbLabel, TbSeller, TbArtist, TbMusicStyle и т.д.)
-KEY_SYNONYM = 'SYNONYM'
+KEY_SYNONYM_EN = 'SYN_EN'  # Ключ для хранения синонимов на английском языке (для поиска по синонимам) и ДЛЯ ПАРСЕРОВ
+KEY_SYNONYM_RU = 'SYN_RU'  # Ключ для хранения синонимов на русском языке (для представления на фронтенд)
 
 # ДЛЯ ВАЛИДАЦИИ (поиска похожих исполнителей, стилей и т.д. (используется в TbLabel.matching_type, TbSeller.matching_type и т.д.)
 VALIDATE_KEY__MATCH_TYPE = 'MATCH_TYPE'
