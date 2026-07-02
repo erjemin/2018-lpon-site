@@ -401,6 +401,9 @@ class MusicStyleAdminForm(CodeMirrorFormMixin):
         """
         При инициализации формы подгружаем CodeMirror редактор
         """
+        # Извлекаем request из kwargs если он есть
+        self.request = kwargs.pop('request', None)
+
         super().__init__(*args, **kwargs)
 
         # Конфигурируем поля для CodeMirror
@@ -409,8 +412,36 @@ class MusicStyleAdminForm(CodeMirrorFormMixin):
         self.setup_codemirror_field('j_style_metadata', language='json',
                                     css_class='codemirror-width-l codemirror-min-height-5')
 
+    def clean(self):
+        """
+        Валидируем форму: проверяем на совпадения (дубликаты) основного поля s_style_name.
+        Используем GET параметр ignore_validate для пропуска валидации при переотправке.
+        """
+        # Получаем очищенные данные формы (может быть None, но обычно это dict)
+        cleaned_data: dict[str, Any] | None = super().clean()
+
+        # Если clean() вернул None, возвращаем пустой dict (для совместимости)
+        if cleaned_data is None:
+            cleaned_data = {}
+
+        # После проверки выше, очищены данные гарантированно dict[str, Any]
+        assert isinstance(cleaned_data, dict), "cleaned_data должен быть словарём"
+
+        # Используем универсальный хелпер для проверки дубликатов
+        # Модель берется автоматически из self.Meta.model
+        # Передаем request для проверки GET параметра ignore_validate
+        validate_entity_for_admin_form(
+            self,
+            cleaned_data,
+            main_field_name='s_style_name',
+            metadata_field_name='j_style_metadata',
+            request=self.request,
+        )
+
+        return cleaned_data
+
 # Админка для TbMusicStyle с кастомной формой MusicStyleAdminForm
-class MusicStyleAdmin(admin.ModelAdmin):
+class MusicStyleAdmin(RequestInFormMixin, admin.ModelAdmin):
     """Админ для музыкальных стилей"""
     form = MusicStyleAdminForm
 
@@ -436,6 +467,41 @@ class MusicStyleAdmin(admin.ModelAdmin):
             'classes': ('collapse',),
         }),
     )
+
+    # Дополнительный CSS для валидации и вотчер для отслеживания изменений
+    class Media:
+        css = {'all': ('css/validation-override.css', )}        # Стили для обхода валидации
+        js = ('js/form-field-watcher.js', )                     # Вотчер для отслеживания изменений полей формы
+
+    def save_model(
+        self,
+        request: HttpRequest,
+        obj: TbMusicStyle,
+        form: forms.ModelForm,
+        change: bool,
+    ) -> None:
+        """
+        Переопределяем save_model для добавления информативных сообщений в админку.
+
+        Максимально поджарый код - все сложности с получением старого значения
+        и определением типа операции делает хелпер generate_admin_save_message().
+        """
+        # Стандартное сохранение записи через Django
+        # (в т.ч. автоматическое создание связанной статьи в методе save модели TbMusicStyle)
+        super().save_model(request, obj, form, change)
+
+        # Генерируем и отправляем информативное сообщение о сохранении
+        # Хелпер сам:
+        # - определяет тип операции (create vs update)
+        # - формирует нужное сообщение (success vs warning)
+        generate_admin_save_message(
+            request=request,
+            obj=obj,
+            is_new=not change,  # Django: change=False для новых, True для существующих
+            related_article=obj.k_style_to_article,
+            obj_field_name='s_style_name',
+            article_title_field='s_article_title',
+        )
 
 
 # ============================================================================
@@ -537,10 +603,10 @@ class ArtistAdmin(RequestInFormMixin, admin.ModelAdmin):
         и определением типа операции делает хелпер generate_admin_save_message().
         """
         # Стандартное сохранение записи через Django
-        # (в т.ч. автоматическое создание связанной статьи в методе save модели TbLabel)
+        # (в т.ч. автоматическое создание связанной статьи в методе save модели TbArtist)
         super().save_model(request, obj, form, change)
 
-        # Генерируем и отправляем информативное сообщение об сохранении
+        # Генерируем и отправляем информативное сообщение о сохранении
         # Хелпер сам:
         # - определяет тип операции (create vs update)
         # - формирует нужное сообщение (success vs warning)
@@ -659,7 +725,7 @@ class LabelAdmin(RequestInFormMixin, admin.ModelAdmin):
         # (в т.ч. автоматическое создание связанной статьи в методе save модели TbLabel)
         super().save_model(request, obj, form, change)
 
-        # Генерируем и отправляем информативное сообщение об сохранении
+        # Генерируем и отправляем информативное сообщение о сохранении
         # Хелпер сам:
         # - определяет тип операции (create vs update)
         # - формирует нужное сообщение (success vs warning)
