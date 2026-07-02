@@ -797,6 +797,38 @@ class SellerAdmin(admin.ModelAdmin):
         }),
     )
 
+    # ВАЖНО. Так как продавцам не нужны синонимы, то CSS и JS для админки обогащать не нужно.
+    def save_model(
+        self,
+        request: HttpRequest,
+        obj: TbSeller,
+        form: forms.ModelForm,
+        change: bool,
+    ) -> None:
+        """
+        Переопределяем save_model для добавления информативных сообщений в админку.
+
+        Максимально поджарый код - все сложности с получением старого значения
+        и определением типа операции делает хелпер generate_admin_save_message().
+        """
+        # Стандартное сохранение записи через Django
+        # (в т.ч. автоматическое создание связанной статьи в методе save модели TbSeller)
+        super().save_model(request, obj, form, change)
+
+        # Генерируем и отправляем информативное сообщение о сохранении
+        # Хелпер сам:
+        # - определяет тип операции (create vs update)
+        # - формирует нужное сообщение (success vs warning)
+        generate_admin_save_message(
+            request=request,
+            obj=obj,
+            is_new=not change,  # Django: change=False для новых, True для существующих
+            related_article=obj.k_seller_to_article,
+            obj_field_name='s_seller',
+            article_title_field='s_article_title',
+        )
+
+
 
 # ============================================================================
 # АДМИНКА ИСТОЧНИКОВ ДАННЫХ

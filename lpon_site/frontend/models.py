@@ -952,6 +952,29 @@ class TbSeller(models.Model):
     def __str__(self):
         return f"seller: {self.id:0>2}: {self.s_seller}"
 
+    def save(self, *args, **kwargs):
+        """
+        Переопределяем save для привязки связанной статьи о продавце.
+
+        0. ВАЖНО: Продавцам не нужны синонимы (хотя технически возможно), потому синонимы не проверяем и не обновляем
+        1. Если статья не привязана - создаём новую статью исполнителя автоматически
+        2. Генерируем технический заголовок и slug для статьи
+        """
+        # ===== СОЗДАНИЕ ИЛИ ПОЛУЧЕНИЕ СВЯЗАННОЙ СТАТЬИ =====
+        # Используем универсальный хелпер для создания/поиска статьи
+        # Хелпер сам проверит через обратный FK, не дублирует статьи даже если админ переименовал
+        article = create_or_get_related_article(
+            self,
+            TbArticle.ArticleType.SELLER,
+            's_seller',
+            'j_seller_metadata',
+            'k_seller_to_article'  # ← Явно передаем имя FK поля (избегаем "магии")
+        )
+        self.k_seller_to_article = article
+
+        # Вызываем оригинальный save родительского класса
+        super().save(*args, **kwargs)
+
     class Meta:
         verbose_name = 'Продавец'
         verbose_name_plural = 'Продавцы'
