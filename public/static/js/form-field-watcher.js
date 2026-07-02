@@ -14,6 +14,10 @@
  * 4. Визуально показывает пользователю статус обхода валидации цветом кнопок
  *
  * Универсальное решение: работает для любых форм в админке, не только для лейблов.
+ *
+ * ВАЖНО: Этот скрипт работает независимо от порядка загрузки и инициализации CodeMirror.
+ * Используется стратегия проверки readyState и MutationObserver для динамического отслеживания
+ * появления новых элементов, включая CodeMirror div.codemirror.
  */
 
 // Функция для добавления GET параметра к form action кнопки
@@ -42,7 +46,8 @@ function markSubmitButtonsToIgnoreValidation() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', function () {
+// ===== ОСНОВНАЯ ФУНКЦИЯ ИНИЦИАЛИЗАЦИИ ВОТЧЕРА =====
+function initFormWatcher() {
   // Находим все submit-кнопки администратора
   let submitButtons = document.querySelectorAll('input[type=submit]');
 
@@ -80,39 +85,51 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // Отслеживаем изменения всех типов полей в форме
-  let formInputs = document.querySelectorAll('input:not([type=submit]), textarea, select, .codemirror, [contenteditable]');
+  // ВАЖНО: Используем MutationObserver для динамического отслеживания появления CodeMirror элементов
+  let watchedInputs = new WeakSet();
 
-  // Функция которая срабатывает при любом изменении
-  function handleChange() {
-    // При изменении любого поля:
-    // 1. Удаляем класс force-ignore-validation (кнопки вернут нормальный цвет)
-    // 2. Удаляем onclick обработчик
-    // 3. Восстанавливаем оригинальный action формы
-    submitButtons.forEach(function (btn) {
-      if (btn.classList.contains('force-ignore-validation')) {
-        btn.classList.remove('force-ignore-validation');
-        removeOnclickHandler(btn);
+  function attachWatchersToInputs() {
+    let formInputs = document.querySelectorAll('input:not([type=submit]), textarea, select, .codemirror, [contenteditable]');
+
+    // Функция которая срабатывает при любом изменении
+    function handleChange() {
+      // При изменении любого поля:
+      // 1. Удаляем класс force-ignore-validation (кнопки вернут нормальный цвет)
+      // 2. Удаляем onclick обработчик
+      // 3. Восстанавливаем оригинальный action формы
+      submitButtons.forEach(function (btn) {
+        if (btn.classList.contains('force-ignore-validation')) {
+          btn.classList.remove('force-ignore-validation');
+          removeOnclickHandler(btn);
+        }
+      });
+      form.setAttribute('action', originalAction);
+
+      // Скрываем сообщения об ошибках валидации
+      let errorNotes = document.querySelectorAll('.errornote, .errorlist');
+      errorNotes.forEach(function (errorElement) {
+        errorElement.style.display = 'none';
+      });
+    }
+
+    formInputs.forEach(function (input) {
+      // Избегаем двойного присоединения слушателей (используем WeakSet)
+      if (!watchedInputs.has(input)) {
+        watchedInputs.add(input);
+        // Слушаем оба события: 'change' для обычных input/select
+        // и 'input' для CodeMirror и других редакторов
+        input.addEventListener('change', handleChange);
+        input.addEventListener('input', handleChange);
       }
-    });
-    form.setAttribute('action', originalAction);
-
-    // Скрываем сообщения об ошибках валидации
-    let errorNotes = document.querySelectorAll('.errornote, .errorlist');
-    errorNotes.forEach(function (errorElement) {
-      errorElement.style.display = 'none';
     });
   }
 
-  formInputs.forEach(function (input) {
-    // Слушаем оба события: 'change' для обычных input/select
-    // и 'input' для CodeMirror и других редакторов
-    input.addEventListener('change', handleChange);
-    input.addEventListener('input', handleChange);
-  });
+  // Первый раз присоединяем слушателей к уже существующим элементам
+  attachWatchersToInputs();
 
   // Мониторим изменение класса force-ignore-validation на кнопках
   // Используем MutationObserver для отслеживания добавления/удаления класса
-  const observer = new MutationObserver(function (mutations) {
+  const classObserver = new MutationObserver(function (mutations) {
     mutations.forEach(function (mutation) {
       if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
         let btn = mutation.target;
@@ -130,8 +147,67 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   });
 
-  // Настраиваем observer для отслеживания изменения класса
+  // Настраиваем observer для отслеживания изменения класса на кнопках
   submitButtons.forEach(function (btn) {
-    observer.observe(btn, {attributes: true, attributeFilter: ['class']});
+    classObserver.observe(btn, {attributes: true, attributeFilter: ['class']});
   });
-});
+
+  // ===== ДИНАМИЧЕСКОЕ ОТСЛЕЖИВАНИЕ ПОЯВЛЕНИЯ НОВЫХ ЭЛЕМЕНТОВ (особенно CodeMirror) =====
+  // Используем MutationObserver для отслеживания появления новых элементов формы
+  // Это нужно на случай если CodeMirror инициализируется ПОСЛЕ загрузки скрипта
+  const formObserver = new MutationObserver(function (mutations) {
+    mutations.forEach(function (mutation) {
+      // Проверяем появились ли новые узлы (добавлены новые элементы)
+      if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+        // Проверяем есть ли среди добавленных элементов CodeMirror div или input/textarea
+        let hasNewFormElements = false;
+        mutation.addedNodes.forEach(function (node) {
+          if (node.nodeType === 1) { // Node.ELEMENT_NODE
+            if (node.classList && (node.classList.contains('codemirror') || 
+                                   node.tagName === 'INPUT' || 
+                                   node.tagName === 'TEXTAREA' || 
+                                   node.tagName === 'SELECT')) {
+              hasNewFormElements = true;
+            }
+            // Проверяем в потомках
+            if (node.querySelector && (node.querySelector('.codemirror') || 
+                                       node.querySelector('input:not([type=submit])') ||
+                                       node.querySelector('textarea') ||
+                                       node.querySelector('select'))) {
+              hasNewFormElements = true;
+            }
+          }
+        });
+
+        // Если нашли новые элементы формы, повторно присоединяем слушателей
+        if (hasNewFormElements) {
+          attachWatchersToInputs();
+        }
+      }
+    });
+  });
+
+  // Настраиваем observer для отслеживания изменений в форме (появления новых элементов)
+  formObserver.observe(form, {childList: true, subtree: true});
+}
+
+// ===== ИНИЦИАЛИЗАЦИЯ: Работает в любых условиях (до или после DOMContentLoaded) =====
+// Стратегия:
+// 1. Если document.readyState === 'loading', ждем DOMContentLoaded
+// 2. Если document.readyState === 'interactive' или 'complete', запускаем сразу
+// 3. Используем requestIdleCallback если доступен, иначе setTimeout
+
+if (document.readyState === 'loading') {
+  // DOM еще загружается, ждем события
+  document.addEventListener('DOMContentLoaded', initFormWatcher);
+} else {
+  // DOM уже загружен (скрипт загрузился после DOMContentLoaded)
+  // Запускаем инициализацию асинхронно чтобы все элементы успели загрузиться
+  if (typeof requestIdleCallback !== 'undefined') {
+    // Используем requestIdleCallback для загрузки в свободное время браузера
+    requestIdleCallback(initFormWatcher, {timeout: 2000});
+  } else {
+    // Fallback: используем setTimeout с минимальной задержкой
+    setTimeout(initFormWatcher, 0);
+  }
+}

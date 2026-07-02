@@ -468,17 +468,19 @@ class MusicStyleAdmin(RequestInFormMixin, admin.ModelAdmin):
         }),
     )
 
-    # Дополнительный CSS для валидации и вотчер для отслеживания изменений
-    class Media:
-        css = {'all': ('css/validation-override.css', )}        # Стили для обхода валидации
-        js = ('js/form-field-watcher.js', )                     # Вотчер для отслеживания изменений полей формы
+    # Обогащение Media из формы (CodeMirrorFormMixin)
+    # Используем наследование для расширения, а не перекрытия
+    # Это гарантирует что все CSS/JS из формы будут загружены
+    class Media(MusicStyleAdminForm.Media):
+        css = {'all': (*MusicStyleAdminForm.Media.css['all'], 'css/validation-override.css',)}
+        js = (*MusicStyleAdminForm.Media.js, 'js/form-field-watcher.js',)
 
     def save_model(
-        self,
-        request: HttpRequest,
-        obj: TbMusicStyle,
-        form: forms.ModelForm,
-        change: bool,
+       self,
+       request: HttpRequest,
+       obj: TbMusicStyle,
+       form: forms.ModelForm,
+       change: bool,
     ) -> None:
         """
         Переопределяем save_model для добавления информативных сообщений в админку.
@@ -584,10 +586,12 @@ class ArtistAdmin(RequestInFormMixin, admin.ModelAdmin):
         }),
     )
 
-    # Дополнительный CSS для валидации и вотчер для отслеживания изменений
-    class Media:
-        css = {'all': ('css/validation-override.css', )}        # Стили для обхода валидации
-        js = ('js/form-field-watcher.js', )                     # Вотчер для отслеживания изменений полей формы
+    # Обогащение Media из формы (CodeMirrorFormMixin)
+    # Используем наследование для расширения, а не перекрытия
+    # Это гарантирует что все CSS/JS из формы будут загружены
+    class Media(ArtistAdminForm.Media):
+        css = {'all': (*ArtistAdminForm.Media.css['all'], 'css/validation-override.css', )}
+        js = (*ArtistAdminForm.Media.js, 'js/form-field-watcher.js', )
 
     def save_model(
         self,
@@ -703,10 +707,12 @@ class LabelAdmin(RequestInFormMixin, admin.ModelAdmin):
         }),
     )
 
-    # Дополнительный CSS для валидации и вотчер для отслеживания изменений
-    class Media:
-        css = {'all': ('css/validation-override.css', )}        # Стили для обхода валидации
-        js = ('js/form-field-watcher.js', )                     # Вотчер для отслеживания изменений полей формы
+    # Обогащение Media из формы (CodeMirrorFormMixin)
+    # Используем наследование для расширения, а не перекрытия
+    # Это гарантирует что все CSS/JS из формы будут загружены
+    class Media(LabelAdminForm.Media):
+        css = {'all': (*LabelAdminForm.Media.css['all'], 'css/validation-override.css', )}
+        js = (*LabelAdminForm.Media.js, 'js/form-field-watcher.js', )
 
     def save_model(
         self,
