@@ -557,7 +557,7 @@ class TbMusicStyle(models.Model):
         blank=True,
         verbose_name='Метаданные',
         help_text='В основном список синонимов/вариантов названия из Discogs, MusicBrainz и т.д. для матчинга.'
-                  ' Пример: <tt>{"SYNONYM": ["rock", "Rock Music", "Rock & Roll", "Hard Rock"]}</tt>.',
+                  ' Пример: <tt>{"SYN_EN": ["rock", "Rock Music", "Rock & Roll", "Hard Rock"]}</tt>.',
     )
     t_style_created = models.DateTimeField(auto_now_add=True, editable=False, verbose_name="Дата создания")
     t_style_updated = models.DateTimeField(auto_now=True, editable=False, verbose_name="Дата обновления")
@@ -571,8 +571,8 @@ class TbMusicStyle(models.Model):
 
         При сохранении музыкального стиля (создание и обновление):
         1. Управляем синонимами:
-           - Для новых музыкальных стилей: добавляем текущий s_style_name в SYNONYM
-           - При изменении s_style_name: добавляем как старый, так и новый s_style_name в SYNONYM
+           - Для новых музыкальных стилей: добавляем текущий s_style_name в SYN_EN
+           - При изменении s_style_name: добавляем как старый, так и новый s_style_name в SYN_EN
            - При редактировании: используем j_style_metadata из формы (приоритет админу)
         2. Если статья не привязана - создаём новую статью музыкального стиля автоматически
         3. Генерируем технический заголовок и slug для статьи
@@ -641,7 +641,7 @@ class TbArtist(models.Model):
         null=True,
         verbose_name='Метаданные JSON',
         help_text='В основном список синонимов/вариантов названия из Discogs, MusicBrainz и т.д. для матчинга.'
-                  ' Пример: <tt>{"SYNONYM": ["The Beatles", "Beatles", "Beatles, The"]}</tt>.',
+                  ' Пример: <tt>{"SYN_EN": ["The Beatles", "Beatles", "Beatles, The"]}</tt>.',
     )
     t_artist_created = models.DateTimeField(auto_now_add=True, editable=False, verbose_name="Дата создания",)
     t_artist_updated = models.DateTimeField(auto_now=True, editable=False, verbose_name="Дата обновления",
@@ -656,8 +656,8 @@ class TbArtist(models.Model):
 
         При сохранении исполнителя (создание и обновление):
         1. Управляем синонимами:
-           - Для новых исполнителей: добавляем текущий s_artist в SYNONYM
-           - При изменении s_artist: добавляем как старый, так и новый s_artist в SYNONYM
+           - Для новых исполнителей: добавляем текущий s_artist в SYN_EN
+           - При изменении s_artist: добавляем как старый, так и новый s_artist в SYN_EN
            - При редактировании: используем j_artist_metadata из формы (приоритет админу)
         2. Если статья не привязана - создаём новую статью исполнителя автоматически
         3. Генерируем технический заголовок и slug для статьи
@@ -780,6 +780,42 @@ class TbItem(models.Model):
     def __str__(self):
         return f"Item {self.id:0>4}: {self.s_item}"
 
+    def save(self, *args, **kwargs):
+        """
+        Переопределяем save для управления синонимами релиза (альбома) или просто товара и создания связанной статьи.
+
+        При сохранении релиза/альбома (создание и обновление):
+        1. Управляем синонимами альбома/релиза/товара:
+           - Для новых альбомов/релиза/товара: добавляем в SYN_EN
+           - При изменении s_item: добавляем как старый, так и новый s_item в SYN_EN
+           - При редактировании: используем j_item_metadata из формы (приоритет админу)
+        2. Если статья не привязана - создаём новую автоматически
+        3. Генерируем технический заголовок и slug для статьи
+        """
+        # ===== ВАЛИДАЦИЯ НА ДУБЛИКАТЫ =====
+        # Проверяем ДО работы с синонимами и метаданными!
+        # Страховка: защита от прямого вызова save() минуя админку или (в будущем) парсер
+        validate_and_raise_for_duplicates(self, 's_item', 'j_item_metadata')
+
+        # ===== УПРАВЛЕНИЕ СИНОНИМАМИ =====
+        # Обновляем список синонимов в метаданных (универсальный хелпер для всех моделей)
+        update_synonyms_in_metadata(self, 's_item', 'j_item_metadata')
+
+        # ===== СОЗДАНИЕ ИЛИ ПОЛУЧЕНИЕ СВЯЗАННОЙ СТАТЬИ =====
+        # Используем универсальный хелпер для создания/поиска статьи
+        # Хелпер сам проверит через обратный FK, не дублирует статьи даже если админ переименовал
+        article = create_or_get_related_article(
+            self,
+            TbArticle.ArticleType.ITEM,
+            's_item',
+            'j_item_metadata',
+            'k_item_to_article'  # ← Явно передаем имя FK поля (избегаем "магии")
+        )
+        self.k_item_to_article = article
+
+        # Вызываем оригинальный save родительского класса
+        super().save(*args, **kwargs)
+
     class Meta:
         verbose_name = 'Товар в каталоге (релиз, носитель, аксессуар)'
         verbose_name_plural = 'Товары в каталоге'
@@ -826,7 +862,7 @@ class TbLabel(models.Model):
         null=True,
         verbose_name='Метаданные',
         help_text='JSON: страна лейбла, официальный сайт и т.д. Включая список синонимов/вариантов названия для матчинга.'
-                  ' Пример: <tt>{"SYNONYM": ["Island", "Island Records", "Vertigo France"]}</tt>.'
+                  ' Пример: <tt>{"SYN_EN": ["Island", "Island Records", "Vertigo France"]}</tt>.'
         ,
     )
     t_label_created = models.DateTimeField(auto_now_add=True, editable=False, verbose_name="Дата создания",)
@@ -841,8 +877,8 @@ class TbLabel(models.Model):
 
         При сохранении лейбла (создание и обновление):
         1. Управляем синонимами лейбла:
-           - Для новых лейблов: добавляем текущий s_label в SYNONYM
-           - При изменении s_label: добавляем как старый, так и новый s_label в SYNONYM
+           - Для новых лейблов: добавляем текущий s_label в SYN_EN
+           - При изменении s_label: добавляем как старый, так и новый s_label в SYN_EN
            - При редактировании: используем j_label_metadata из формы (приоритет админу)
         2. Если статья не привязана - создаём новую автоматически
         3. Генерируем технический заголовок и slug для статьи

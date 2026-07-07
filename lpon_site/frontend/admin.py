@@ -709,7 +709,7 @@ class LabelAdmin(RequestInFormMixin, admin.ModelAdmin):
 
     # Обогащение Media из формы (CodeMirrorFormMixin)
     # Используем наследование для расширения, а не перекрытия
-    # Это гарантирует что все CSS/JS из формы будут загружены
+    # Это гарантирует, что все CSS/JS из формы будут загружены
     class Media(LabelAdminForm.Media):
         css = {'all': (*LabelAdminForm.Media.css['all'], 'css/validation-override.css', )}
         js = (*LabelAdminForm.Media.js, 'js/form-field-watcher.js', )
@@ -858,7 +858,7 @@ class SourceAdminForm(CodeMirrorFormMixin):
         self.setup_codemirror_field('j_source_metadata', language='json',
                                     css_class='codemirror-width-l codemirror-min-height-5')
 
-#
+
 class SourceAdmin(admin.ModelAdmin):
     """Админ для источников"""
     form = SourceAdminForm  # Используем кастомную форму с CodeMirror
@@ -871,18 +871,54 @@ class SourceAdmin(admin.ModelAdmin):
 
 
 # ============================================================================
-# Остальные ModelAdmin классы
-# ============================================================================
+# АДМИНКА РЕЛИЗОВ/АЛЬБОМОВ/ТОВАРОВ
+#
+# Кастомная форма
+class ItemAdminForm(CodeMirrorFormMixin):
+    """
+    Кастомная форма для админки источников данных (TbItem).
+    Добавляет виджеты CodeMirror для текстовых полей
+    """
+    class Meta:
+        model = TbItem
+        fields = ('id', 's_item', 'k_item_to_artist', 'k_item_to_style', 'k_item_to_article',
+                  's_item_date', 't_item_date', 'i_discogs_master_id', 'j_item_metadata')
+
+    def __init__(self, *args, **kwargs):
+        """
+        При инициализации формы подгружаем CodeMirror редактор
+        """
+        # Извлекаем request из kwargs если он есть
+        self.request = kwargs.pop('request', None)
+
+        super().__init__(*args, **kwargs)
+
+        # Конфигурируем поля для CodeMirror
+        self.setup_codemirror_field('s_item', language='text',
+                                    css_class='codemirror-width-l codemirror-no-lines')
+        self.setup_codemirror_field('s_item_date', language='text',
+                                    css_class='codemirror-width-s codemirror-no-lines')
+        self.setup_codemirror_field('i_discogs_master_id', language='text',
+                                    css_class='codemirror-width-l codemirror-no-lines')
+        self.setup_codemirror_field('j_item_metadata', language='json',
+                                    css_class='codemirror-width-l codemirror-min-height-5')
 
 
-class ItemAdmin(admin.ModelAdmin):
+class ItemAdmin(RequestInFormMixin, admin.ModelAdmin):
     """Админ для товаров"""
+    form = ItemAdminForm  # Используем кастомную форму с CodeMirror
+
     list_display = ('id', 's_item', 't_item_date', 't_item_created')
+    list_display_links = ('id', 's_item',)
     list_filter = ('t_item_date', 't_item_created')
     search_fields = ('s_item',)
     filter_horizontal = ('k_item_to_artist', 'k_item_to_style')
     readonly_fields = ('t_item_created', 't_item_updated')
 
+
+# ============================================================================
+# Остальные ModelAdmin классы
+# ============================================================================
 
 class OfferAdmin(admin.ModelAdmin):
     """Админ для предложений"""
