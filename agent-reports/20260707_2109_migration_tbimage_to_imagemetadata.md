@@ -35,8 +35,11 @@
 
 ## Фаза 2: Модификация моделей
 
-### Задача 2.1: Переименование и переструктурирование TbImage
-- [ ] Переименовать класс TbImage → ImageMetadata
+### Задача 2.1: Переименование и упрощение TbImageMetadata
+
+Архитектура: **МИНИМАЛИЗМ + JSON для гибкости**
+
+- [ ] Переименовать класс TbImage → TbImageMetadata
 - [ ] Добавить/проверить `related_name='metadata'` на FilerImageField
   ```python
   image = FilerImageField(
@@ -44,11 +47,27 @@
       related_name='metadata'  # ← для доступа: filer_image.metadata
   )
   ```
-- [ ] **УДАЛИТЬ** поля из ImageMetadata:
-  - `t_img_created` (используем filer.Image.uploaded_at или эквивалент)
-  - `t_img_updated` (синхронизируем с filer.Image.modified_at через сигнал)
+- [ ] **ОСТАВИТЬ в TbImageMetadata:**
+  - `image` (OneToOneField → filer.Image)
+  - `i_img_sort` (IntegerField, db_index=True) ← ТОЛЬКО это индексируется!
+  - `j_img_metadata` (JSONField, null=True, blank=True) ← всё остальное сюда
+
+- [ ] **УДАЛИТЬ ВСЕ остальные поля:**
+  - ❌ `l_img_source` (будет в JSON если нужно)
+  - ❌ `l_img_reality` (дефолт по контексту: TbItem→abstract, TbOffer админка→real, иное→abstract)
+  - ❌ `s_img_src_url` (в JSON если нужно)
+  - ❌ `f_img_confidence_score` (в JSON если нужно, парсеры его заполнят)
+  - ❌ `t_img_created` (используем filer.File.uploaded_at)
+  - ❌ `t_img_updated` (используем filer.File.modified_at)
+
 - [ ] Обновить `Meta.verbose_name` на "Метаданные изображения"
-- [ ] Обновить `Meta.ordering` (убрать временные поля если они там были)
+- [ ] Обновить `Meta.ordering` — просто `('i_img_sort',)`
+
+**ПОЧЕМУ?**
+- Парсеров еще нет, не знаем какие поля реально нужны
+- Справочные поля (источник, тип, достоверность) не нужны для индексации/фильтрации
+- JSON дает гибкость: позже когда парсеры появятся, просто добавим новые ключи или выносим в таблицу если нужен индекс
+- YAGNI: не создаем сложность пока она не нужна
 
 ### Задача 2.2: Обновление FK на изображения во всех моделях
 - [ ] TbArticle: `k_article_to_image` — ForeignKey(TbImage) → ForeignKey(filer.Image)
@@ -77,35 +96,34 @@
 
 ## Фаза 3: Сигналы и автоматизация
 
-### Задача 3.1: Signal на создание filer.Image → auto-create ImageMetadata
+### Задача 3.1: Signal на создание filer.Image → auto-create TbImageMetadata
 ```python
 # В apps.py
 @receiver(post_save, sender=filer.models.Image)
 def auto_create_image_metadata(sender, instance, created, **kwargs):
-    """При создании filer.Image автоматически создавать ImageMetadata с дефолтами"""
+    """При создании filer.Image автоматически создавать TbImageMetadata"""
     if created:
-        ImageMetadata.objects.get_or_create(
+        TbImageMetadata.objects.get_or_create(
             image=instance,
             defaults={
                 'i_img_sort': 0,
-                'l_img_source': 'manual',  # или 'parser' если известно
-                'l_img_reality': 'abstract',
-                'f_img_confidence_score': 10.0,
+                # j_img_metadata оставляем пустым, заполняется по мере необходимости
             }
         )
 ```
 
-### Задача 3.2: Обратные сигналы — синхронизация дат
+### Задача 3.2: Обратный сигнал — синхронизация дат (опционально)
 ```python
-# В apps.py
-@receiver(post_save, sender=ImageMetadata)
+# В apps.py — ЕСЛИ нужно обновлять modified_at в filer при изменении i_img_sort
+@receiver(post_save, sender=TbImageMetadata)
 def sync_image_modification_date(sender, instance, **kwargs):
-    """При обновлении ImageMetadata обновлять modified_at в filer.Image"""
-    # Обновляем filer.Image.modified_at = now()
-    # Нужно понять как именно это сделать в filer (direct update без повторного save())
+    """При обновлении i_img_sort обновляем modified_at в filer.File"""
+    # Обновляем filer.File.modified_at через SQL update (без повторного save()!)
+    from filer.models import File
+    File.objects.filter(id=instance.image.id).update(modified_at=now())
 ```
 
-**Важно:** Нужно избежать циклических сохранений (Image → Metadata → Image → ...)
+**ПРИМЕЧАНИЕ:** Сигнал опционален. Если не нужно обновлять дату каждый раз при изменении сортировки — можно пропустить.
 
 ### Задача 3.3: Сигнал на удаление
 - [ ] При удалении ImageMetadata → не удаляем filer.Image (метаданные удаляются, файл остаётся)
@@ -122,52 +140,58 @@ class ImageMetadataAdminMixin:
     # Автоматически добавлять инлайн ImageMetadata при наличии FK на Image
 ```
 
-### Задача 4.2: Создание ImageMetadataInline
-- [ ] StackedInline или TabularInline?
-- [ ] Какие поля показывать: `i_img_sort`, `l_img_source`, `l_img_reality`, `f_img_confidence_score`
-- [ ] Read-only поля? Или всё редактируемо?
+### Задача 4.2: Создание TbImageMetadataInline
+- [ ] StackedInline для TbImageMetadata
+- [ ] Поля: `i_img_sort`, `j_img_metadata`
+- [ ] `j_img_metadata` как JSON editor (админка Django поддерживает JSONField)
+- [ ] Всё просто и минималистично
 
 ### Задача 4.3: Обновление админок моделей
-- [ ] TbArticleAdmin — добавить ImageMetadataInline
-- [ ] **TbItemAdmin — добавить ImageMetadataInline для обложки (cover image)**
-  - Поле `k_item_to_image` — ForeignKey с инлайном ImageMetadata
-  - ImageMetadata: `l_img_reality` должно быть read-only = `'abstract'`
-- [ ] **TbOfferAdmin — добавить связь к изображениям с множественным выбором**
-  - M2M к filer.Image с инлайном ImageMetadata
-  - ImageMetadata: `l_img_reality` редактируемо (админ может менять на `'real'`)
+- [ ] TbArticleAdmin — добавить TbImageMetadataAdminMixin
+- [ ] **TbItemAdmin — добавить мixin для обложки**
+  - Поле `k_item_to_image` с инлайном TbImageMetadata
+  - `i_img_sort` редактируемо
+  - `j_img_metadata` может содержать замечания ("абстрактная", "с Discogs" и т.д.) если нужно
+- [ ] **TbOfferAdmin — добавить мixin для картинок товара**
+  - M2M к filer.Image с инлайном TbImageMetadata
+  - `i_img_sort` редактируемо (для сортировки фото товара)
+  - `j_img_metadata` редактируемо (админ может добавить замечания)
 - [ ] [Все остальные администраторы с изображениями]
 
 ---
 
 ## Фаза 5: Парсеры и интеграция
 
-### Задача 5.1: Обновление парсеров
-- [ ] Найти все парсеры, которые создают TbImage
-- [ ] Обновить их для создания filer.Image вместо TbImage
-- [ ] Парсеры должны заполнять ImageMetadata с правильными значениями:
-  - `l_img_source = 'parser'`
-  - `l_img_reality` — зависит от контекста:
-    - Для **TbItem**: `l_img_reality = 'abstract'` (обложка из внешних источников, Discogs, etc)
-    - Для **TbOffer**: `l_img_reality = 'abstract'` (парсер берет из каталога)
-  - `f_img_confidence_score = [значение из парсера]`
-  - `i_img_sort = 0` (дефолт)
+### Задача 5.1: Подготовка к парсерам (FUTURE-PROOF)
+- [ ] Найти все парсеры (их еще нет, но логика готова)
+- [ ] Парсеры смогут заполнять `j_img_metadata` с любыми данными:
+  ```json
+  {
+    "source": "discogs",
+    "reality": "abstract",
+    "confidence": 0.95,
+    "original_url": "https://...",
+    "notes": "..."
+  }
+  ```
+- [ ] `i_img_sort` может устанавливаться парсером если нужна специальная сортировка
+- [ ] **Дефолтная логика (без парсера):**
+  - TbItem → картинка? → j_img_metadata = `{"reality": "abstract"}`
+  - TbOffer + админка → картинка? → j_img_metadata пустой или `{}`
+  - На фронте: если не указано → apply defaults
 
-### Задача 5.1.1: Логика l_img_reality в разных контекстах
-- [ ] **TbItem → Image (обложка альбома):** всегда `'abstract'`
-  - Signal: при создании ImageMetadata для TbItem → принудительно устанавливать `l_img_reality = 'abstract'`
-  - При редактировании в админке: поле `l_img_reality` должно быть read-only для TbItem
-- [ ] **TbOffer → Image (фото товара в админке):** 
-  - Дефолт при создании: `l_img_reality = 'real'` (человек загружает реальные фото)
-  - Signal: при создании ImageMetadata через админку → `l_img_reality = 'real'`
-- [ ] **TbOffer → Image (парсер):**
-  - Дефолт при создании через парсер: `l_img_reality = 'abstract'`
-  - Signal: при создании ImageMetadata через парсер → `l_img_reality = 'abstract'`
-  - **Нужна логика определения источника:** как система узнает создана ли ImageMetadata парсером или админкой?
-
-### Задача 5.2: Обновление других интеграций
-- [ ] API endpoints (если есть)
-- [ ] Скрипты обслуживания
-- [ ] Любая логика, которая работает с изображениями
+### Задача 5.2: Миграция существующих данных (ТЫ ДЕЛАЕШЬ)
+- [ ] Перенести все TbImage в TbImageMetadata (переименование таблицы)
+- [ ] Заполнить `i_img_sort` из старого поля (если было)
+- [ ] `j_img_metadata` заполнить на основе старых полей если они важны
+  ```json
+  {
+    "old_l_img_source": "...",
+    "old_l_img_reality": "...",
+    "old_confidence": "..."
+  }
+  ```
+- [ ] Или просто пусто, парсеры потом заполнят правильно
 
 ---
 
@@ -431,15 +455,42 @@ ImageMetadataAdminMixin: автоматически добавляет инла�
 
 ---
 
-## КЛЮЧЕВЫЕ МОМЕНТЫ
+## НОВАЯ АРХИТЕКТУРА: МИНИМАЛИЗМ + JSON
 
-🔑 **Этап 1 БЕЗ МИГРАЦИЙ** — сначала весь код готовый, потом БД меняем  
-🔑 **Этап 2 ТЫ ДЕЛАЕШЬ** — я не трогаю, ты контролируешь  
-🔑 **Сигналы ТОЛЬКО ПОСЛЕ миграций** — иначе конфликты  
-🔑 **Цикличность ИСКЛЮЧЕНА** — обновляем только дату через SQL update()  
-🔑 **Парсеры готовы** — архитектура к ним готова, но коды парсеров делаешь позже  
-🔑 **Админка будет удобная** — один inline с метаданными внутри FK выбора  
+**TbImageMetadata содержит:**
+- `image` (OneToOne → filer.Image)
+- `i_img_sort` (IntegerField, db_index=True) ← **ТОЛЬКО поле с индексом!**
+- `j_img_metadata` (JSONField, null=True) ← **Всё остальное сюда**
+
+**Почему?**
+- ✅ Парсеров еще нет → не знаем какие поля реально нужны
+- ✅ Справочные данные не используются для фильтрации/индексации
+- ✅ JSON гибко хранит всё: источник, тип, достоверность, URL и т.д.
+- ✅ Если потом парсеры потребуют индексы → просто выносим поле из JSON
+- ✅ Дефолтная логика: TbItem → abstract, TbOffer админка → любое значение
+
+**Пример j_img_metadata:**
+```json
+{
+  "source": "parser",
+  "reality": "abstract",
+  "confidence": 0.95,
+  "original_url": "https://discogs.com/...",
+  "notes": "Обложка из каталога"
+}
+```
 
 ---
 
-**Готов начинать с ЭТАПА 1?**
+## ИТОГОВЫЙ ПОРЯДОК РЕАЛИЗАЦИИ (ОБНОВЛЕНО)
+
+🔑 **Этап 1 БЕЗ МИГРАЦИЙ** — сначала весь код готовый, потом БД меняем  
+🔑 **Этап 2 ТЫ ДЕЛАЕШЬ** — я не трогаю, ты контролируешь миграции  
+🔑 **Архитектура МИНИМАЛИСТИЧНА** — только i_img_sort индексируется, всё остальное в JSON  
+🔑 **Гибкость МАКСИМАЛЬНАЯ** — JSON позволяет добавлять любые данные без миграций БД  
+🔑 **Парсеры готовы** — при создании просто заполняют j_img_metadata как нужно  
+🔑 **Дефолтная логика** — на фронте если метаданных нет → применяем defaults по контексту  
+
+---
+
+**Готов начинать с ЭТАПА 1?** Или еще вопросы/уточнения?
