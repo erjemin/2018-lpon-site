@@ -915,10 +915,6 @@ class ItemAdmin(RequestInFormMixin, admin.ModelAdmin):
 
 
 # ============================================================================
-# Остальные ModelAdmin классы
-# ============================================================================
-
-# ============================================================================
 # АДМИНКА СТАТЕЙ
 #
 # Статьи очень важная сущность сайта. Через них на сайте отпределяютя URL (slag), SEO-поля и "заголовочные" картинки
@@ -929,7 +925,7 @@ class ItemAdmin(RequestInFormMixin, admin.ModelAdmin):
 class ArticleAdminForm(CodeMirrorFormMixin):
     """
     Кастомная форма для админки статей (TbArticle).
-    Добавляет виджеты CodeMirror для текстовых полей
+    Добавляет виджеты CodeMirror для текстовых полей.
     """
     class Meta:
         model = TbArticle
@@ -998,7 +994,30 @@ class ArticleAdmin(admin.ModelAdmin):
         }),
     )
 
+    def save_model(self, request, obj, form, change):
+        """
+        Переопределяем save_model чтобы передать username в модель.
+        Username используется в TbArticle.save() для установки IMG_FROM в метаданные картинки.
+        
+        Args:
+            request: HTTP-запрос (содержит info о пользователе)
+            obj: инстанция TbArticle для сохранения
+            form: валидированная форма
+            change: True если редактирование, False если создание
+        """
+        # Сохраняем username текущего пользователя
+        if request and request.user:
+            obj._admin_username = request.user.username
+        
+        # Вызываем родительский save_model который вызовет obj.save()
+        super().save_model(request, obj, form, change)
 
+
+
+# ============================================================================
+# Остальные ModelAdmin классы
+# Их еще предстоит обжужукать (натянуть CodeMirror, обвесить валидаторами, переопределить save_model и т.д.)
+# ============================================================================
 class OfferAdmin(admin.ModelAdmin):
     """Админ для предложений"""
     

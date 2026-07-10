@@ -320,6 +320,17 @@ SLUG_MAX_LENGTH = 60
 KEY_SYNONYM_EN = 'SYN_EN'  # Ключ для хранения синонимов на английском языке (для поиска по синонимам) и ДЛЯ ПАРСЕРОВ
 KEY_SYNONYM_RU = 'SYN_RU'  # Ключ для хранения синонимов на русском языке (для представления на фронтенд)
 
+# Ключи и значения для метаданных картинок
+KEY_IMAGE_TYPE = 'IMG_IS'       # Ключ для хранения типа картинки
+VALUE_IMAGE_ABSTRACT = 'abstract'   # Абстрактная картинка (лого лейбла, фото исполнителя, типовая обложка альбома...)
+VALUE_IMAGE_REAL = 'real'           # Реальная картинка (актуально, для фото товаров в TbOffer)
+KEY_IMAGE_FROM = 'IMG_FROM'   # Ключ, о том, как получено изображение
+VALUE_IMAGE_FROM_USER = '_adm'    # Картинка загружена пользователем через админку
+VALUE_IMAGE_FROM_PARSE = 'parse'  # Картинка получена через парсер (например, с сайта Discogs, Bandcamp и т.д.)
+KEY_IMAGE_URL = 'IMG_URL'       # Ключ для хранения URL оригинальной картинки (обычно это должен прописать парсер)
+KEY_IMAGE_NOTE = 'IMG_NOTE'     # Ключ для хранения заметки о картинке
+
+
 # ДЛЯ ВАЛИДАЦИИ (поиска похожих исполнителей, стилей и т.д. (используется в TbLabel.matching_type, TbSeller.matching_type и т.д.)
 VALIDATE_KEY__MATCH_TYPE = 'MATCH_TYPE'
 VALIDATE_KEY__MODEL = 'MODEL'

@@ -240,14 +240,22 @@
 #   - M2M использует числовые FK (INT) вместо строк
 #   - Slug'и как UNIQUE indexed fields (не primary_key) для экономии места
 
+import datetime
+import logging
 from django.db import models
 from django.db.models import F
 from filer.fields.image import FilerImageField
 from filer.fields.file import FilerFileField
 from frontend.utils import make_slug, update_synonyms_in_metadata, create_or_get_related_article
 from frontend.utils_validators import validate_and_raise_for_duplicates
-import datetime
-import logging
+from lpon_site.settings import (
+    KEY_IMAGE_TYPE,                 # Ключ, о том, какой тип изображения (реальное или абстрактное)
+    VALUE_IMAGE_ABSTRACT,             # Реальная картинка (актуально, для фото товаров в TbOffer)
+    KEY_IMAGE_FROM,               # Ключ, о том, как получено изображение
+    VALUE_IMAGE_FROM_USER,          # Картинка загружена пользователем через админку
+    KEY_IMAGE_URL,                  # Ключ, о том, откуда получена картинка (URL источника)
+    KEY_IMAGE_NOTE,                 # Ключ, для заметок о картинке (например, "обложка", "задник", "вкладка" и т.д.)
+)
 
 logger = logging.getLogger(__name__)
 
@@ -295,15 +303,19 @@ class TbImageMetadata(models.Model):
     )
 
     j_img_metadata = models.JSONField(
-        # Гибкие дополнительные данные о изображении
-        # Пример: {"source": "discogs", "reality": "abstract", "confidence": 0.95, ...}
-        default=dict,
+        # Гибкие дополнительные данные об изображении с предзаполненной структурой
+        # Пример: {"IMG_IS": "abstract", "IMG_FROM": "ivan", "IMG_URL": None, "IMG_NOTE": "обложка"}
+        default={
+            KEY_IMAGE_TYPE: VALUE_IMAGE_ABSTRACT,
+            KEY_IMAGE_FROM: VALUE_IMAGE_FROM_USER,
+            KEY_IMAGE_URL: None,
+            KEY_IMAGE_NOTE: '???',   # Автогенерация через парсер или админку
+        },
         blank=True,
-        null=True,
+        null=False,  # Изменено с True на False т.к. теперь всегда есть структура default
         verbose_name='Метаданные',
-        help_text='JSON с дополнительными данными: источник (парсер, админка), тип (реальное/абстрактное), '
-                  'достоверность, URL источника и т.д. Гибкое хранилище, позволяет добавлять новые поля '
-                  'без миграций БД.',
+        help_text='JSON с дополнительными данными: тип (реальное/абстрактное), источник (парсер/админка), '
+                  'URL источника и заметки. Предзаполнено структурой для удобства.',
     )
 
     # Связь с TbOffer (часть M2M через эту промежуточную таблицу)
@@ -488,6 +500,7 @@ class TbArticle(models.Model):
     def save(self, *args, **kwargs):
         """
         Автоматически генерируем slug на основе заголовка статьи.
+        Если привязана картинка и метаданных нет — создаем TbImageMetadata с тегами IMG_IS и IMG_FROM.
         Вызывается при каждом сохранении записи (создание или обновление).
         """
         # Если slug не установлен (новая запись) — генерируем его из названия
@@ -505,7 +518,38 @@ class TbArticle(models.Model):
 
             self.slug = slug
 
+        # Сохраняем статью в БД (нужно чтобы потом привязать метаданные картинки)
         super().save(*args, **kwargs)
+
+        # Если картинка привязана и метаданных для неё нет — создаем их
+        if self.k_article_to_image:
+            # Получаем существующие метаданные (если есть)
+            metadata = TbImageMetadata.objects.filter(image=self.k_article_to_image).first()
+
+            adding_metadata = {}
+            if not metadata or not KEY_IMAGE_TYPE in (metadata.j_img_metadata or {}):
+                adding_metadata[KEY_IMAGE_TYPE] = VALUE_IMAGE_ABSTRACT
+            if not metadata or not KEY_IMAGE_FROM in (metadata.j_img_metadata or {}):
+                # Получаем username из контекста админки (установлен в ArticleAdmin.save_model())
+                # Fallback на 'unknown' если username недоступен (например, при программном создании)
+                username = getattr(self, '_admin_username', 'unknown')
+                adding_metadata[KEY_IMAGE_FROM] = username
+            if not metadata or not KEY_IMAGE_URL in (metadata.j_img_metadata or {}):
+                adding_metadata[KEY_IMAGE_URL] = None
+            if not metadata or not KEY_IMAGE_NOTE in (metadata.j_img_metadata or {}):
+                adding_metadata[KEY_IMAGE_NOTE] = None
+            if not metadata:
+                TbImageMetadata.objects.create(
+                    image=self.k_article_to_image,
+                    i_img_sort=0,
+                    j_img_metadata=adding_metadata
+                )
+            else:
+                # Обновляем только недостающие ключи в j_img_metadata
+                if adding_metadata:
+                    metadata.j_img_metadata.update(adding_metadata)
+                metadata.save(update_fields=['j_img_metadata'])
+            # Примечание: m_offer остаётся NULL т.к. это статья, а не оффер
 
     class Meta:
         verbose_name = 'Статья'
