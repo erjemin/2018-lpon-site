@@ -405,7 +405,7 @@ class TbArticle(models.Model):
                   ' Может содержать HTML-разметку для типографирования (html-мнемоники и -теги). Если не указано,'
                   ' будет отображаться без заголовка.'
     )
-    k_article_to_image = models.ForeignKey(
+    k_article_to_image = FilerImageField(
         # Прямая ссылка на filer.Image (вместо TbImage)
         # Метаданные изображения (сортировка, источник, тип и т.д.) находятся в TbImageMetadata
         to='filer.Image',

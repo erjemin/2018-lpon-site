@@ -936,6 +936,31 @@ class ArticleAdmin(admin.ModelAdmin):
     readonly_fields = ('t_article_created', 't_article_updated')
     # filter_horizontal = ('k_article_to_styles',)
 
+    fieldsets = (
+        ('Основная информация', {
+            'fields': ('s_article_title', 'slug', 'l_article_type', 'b_article_published'),
+        }),
+        ('Изображение', {
+            'fields': ('k_article_to_image',),
+            'description': 'Обложка или иллюстрация статьи. Используется в списках и на странице статьи.',
+        }),
+        ('Содержание', {
+            'fields': ('s_article_title_html', 's_article_teaser_html', 's_article_content_html'),
+        }),
+        ('SEO и метаданные', {
+            'fields': ('seo_title', 'seo_description', 'seo_keywords'),
+            'classes': ('collapse',),
+        }),
+        ('Публикация', {
+            'fields': ('t_article_ended', 'i_article_views', 'i_article_favorites'),
+            'classes': ('collapse',),
+        }),
+        ('Служебная информация', {
+            'fields': ('t_article_created', 't_article_updated'),
+            'classes': ('collapse',),
+        }),
+    )
+
 
 class OfferHistoryAdmin(admin.ModelAdmin):
     """Админ для истории изменений офферов"""
