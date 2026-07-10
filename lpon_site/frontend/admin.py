@@ -918,18 +918,55 @@ class ItemAdmin(RequestInFormMixin, admin.ModelAdmin):
 # Остальные ModelAdmin классы
 # ============================================================================
 
-class OfferAdmin(admin.ModelAdmin):
-    """Админ для предложений"""
-    list_display = ('id', 's_offer', 'k_offer_to_item', 'f_offer_price', 'i_offer_quantity', 'i_offer_views')
-    list_filter = ('l_offer_condition_media', 'l_offer_condition_sleeve', 't_offer_created', 'l_offer_to_format')
-    search_fields = ('s_offer',)
-    # Изображения теперь управляются через OfferImage inline (будет добавлено позже)
-    readonly_fields = ('s_offer_skip32', 't_offer_created', 't_offer_updated', 'i_offer_views', 'i_offer_favorites')
+# ============================================================================
+# АДМИНКА СТАТЕЙ
+#
+# Статьи очень важная сущность сайта. Через них на сайте отпределяютя URL (slag), SEO-поля и "заголовочные" картинки
+# многих сущностей (артистов, лейблов, музыкальных стилей и т.д.). Также тут опредлелентся, как на сайте  будут
+# отображаться все эти сущности сверстанными в HTML.
 
+# Кастомная форма
+class ArticleAdminForm(CodeMirrorFormMixin):
+    """
+    Кастомная форма для админки статей (TbArticle).
+    Добавляет виджеты CodeMirror для текстовых полей
+    """
+    class Meta:
+        model = TbArticle
+        fields = ('s_article_title', 'slug', 'l_article_type', 'b_article_published', 'k_article_to_image',
+                  's_article_title_html', 's_article_teaser_html', 's_article_content_html', 'seo_title',
+                  'seo_description', 'seo_keywords', 't_article_ended')
+
+    def __init__(self, *args, **kwargs):
+        """
+        При инициализации формы подгружаем CodeMirror редактор
+        """
+        super().__init__(*args, **kwargs)
+
+        # Конфигурируем поля для CodeMirror
+        self.setup_codemirror_field('s_article_title', language='text',
+                                    css_class='codemirror-width-l codemirror-no-lines')
+        self.setup_codemirror_field('slug', language='text',
+                                    css_class='codemirror-width-l codemirror-no-lines')
+        self.setup_codemirror_field('s_article_title_html', language='html',
+                                    css_class='codemirror-width-l codemirror-min-height-2')
+        self.setup_codemirror_field('s_article_teaser_html', language='html',
+                                    css_class='codemirror-width-xl codemirror-min-height-5')
+        self.setup_codemirror_field('s_article_content_html', language='html',
+                                    css_class='codemirror-width-xl codemirror-min-height-10')
+        self.setup_codemirror_field('seo_title', language='text',
+                                    css_class='codemirror-width-l codemirror-no-lines')
+        self.setup_codemirror_field('seo_description', language='text',
+                                    css_class='codemirror-width-l codemirror-min-height-2')
+        self.setup_codemirror_field('seo_keywords', language='text',
+                                    css_class='codemirror-width-l codemirror-min-height-2')
 
 class ArticleAdmin(admin.ModelAdmin):
     """Админ для статей"""
+    form = ArticleAdminForm  # Используем кастомную форму с CodeMirror
+
     list_display = ('id', 's_article_title', 'l_article_type', 'b_article_published', 't_article_created')
+    list_display_links = ('id', 's_article_title',)
     list_filter = ('l_article_type', 'b_article_published', 't_article_created')
     search_fields = ('s_article_title', 'slug')
     prepopulated_fields = {'slug': ('s_article_title',)}
@@ -939,6 +976,10 @@ class ArticleAdmin(admin.ModelAdmin):
     fieldsets = (
         ('Основная информация', {
             'fields': ('s_article_title', 'slug', 'l_article_type', 'b_article_published'),
+        }),
+        ('Публикация', {
+            'fields': ('t_article_ended', 'i_article_views', 'i_article_favorites'),
+            'classes': ('collapse',),
         }),
         ('Изображение', {
             'fields': ('k_article_to_image',),
@@ -951,15 +992,36 @@ class ArticleAdmin(admin.ModelAdmin):
             'fields': ('seo_title', 'seo_description', 'seo_keywords'),
             'classes': ('collapse',),
         }),
-        ('Публикация', {
-            'fields': ('t_article_ended', 'i_article_views', 'i_article_favorites'),
-            'classes': ('collapse',),
-        }),
         ('Служебная информация', {
             'fields': ('t_article_created', 't_article_updated'),
             'classes': ('collapse',),
         }),
     )
+
+
+class OfferAdmin(admin.ModelAdmin):
+    """Админ для предложений"""
+    
+    class OfferImageInline(admin.TabularInline):
+        """
+        Inline для управления картинками оффера.
+        
+        Позволяет добавлять, редактировать и удалять картинки через:
+        - FilerImageField для красивого выбора
+        - i_img_sort для сортировки
+        - j_img_metadata для метаданных
+        """
+        model = TbImageMetadata
+        fk_name = 'm_offer'
+        extra = 1  # одна пустая строка для добавления новой картинки
+        fields = ('image', 'i_img_sort', 'j_img_metadata')
+        ordering = ('i_img_sort',)
+    
+    list_display = ('id', 's_offer', 'k_offer_to_item', 'f_offer_price', 'i_offer_quantity', 'i_offer_views')
+    list_filter = ('l_offer_condition_media', 'l_offer_condition_sleeve', 't_offer_created', 'l_offer_to_format')
+    search_fields = ('s_offer',)
+    inlines = [OfferImageInline]  # Управление картинками в inline
+    readonly_fields = ('s_offer_skip32', 't_offer_created', 't_offer_updated', 'i_offer_views', 'i_offer_favorites')
 
 
 class OfferHistoryAdmin(admin.ModelAdmin):

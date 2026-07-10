@@ -57,6 +57,9 @@
 }
 
 /* --- Новый класс для минимальной высоты --- */
+.codemirror-min-height-2 .cm-editor {
+    min-height: 3.5em; /* 5 строк */
+}
 .codemirror-min-height-5 .cm-editor {
     min-height: 8em; /* 5 строк */
 }
