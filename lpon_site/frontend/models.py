@@ -259,21 +259,28 @@ class TbImageMetadata(models.Model):
     """
     Метаданные к изображениям из django_filer.
 
-    OneToOne связь с filer.Image. Хранит дополнительные поля:
-    - i_img_sort: порядок сортировки изображений
+    Промежуточная таблица для M2M связи TbOffer ↔ filer.Image.
+    Хранит дополнительные поля:
+    - i_img_sort: порядок сортировки изображений (0=обложка, 1=задник, 2=вкладка и т.д.)
     - j_img_metadata: JSON с гибкими данными (источник, тип, достоверность и т.д.)
+    - m_offer: FK на TbOffer (часть M2M через эту промежуточную таблицу)
+    - image: FK на filer.Image (часть M2M через эту промежуточную таблицу)
 
     Данные можно заполнять вручную через админку или программно из парсеров.
-    При создании новой filer.Image автоматически создаётся TbImageMetadata
-    с дефолтными значениями (через signal).
+    
+    Доступ в коде:
+    - Все картинки офера (отсортированные): offer.m_image.all().order_by('i_img_sort')
+    - Все картинки для изображения: image.m_offer.all()
+    - Прямой доступ к данным: tbimagemetadata.image, tbimagemetadata.m_offer, tbimagemetadata.i_img_sort, tbimagemetadata.j_img_metadata
     """
 
     image = FilerImageField(
-        # Связь OneToOne с filer.Image (через наследование)
+        # Связь в M2M с filer.Image (часть промежуточной таблицы)
+        # CASCADE: если удалится картинка → удалить метаданные (метаданные без картинки бессмысленны)
         null=False,
         blank=False,
-        on_delete=models.DO_NOTHING,
-        related_name='metadata',  # Встречный доступ: filer_image.metadata
+        on_delete=models.CASCADE,
+        related_name='m_offer',  # Встречный доступ: filer_image.m_offer.all()
         verbose_name='Файл изображения',
         help_text='Файл изображения из django_filer.',
     )
@@ -299,36 +306,16 @@ class TbImageMetadata(models.Model):
                   'без миграций БД.',
     )
 
-    # Эти поля ПОКА остаются (удалим после миграции данных)
-    # но НЕ используются в новой архитектуре
-    l_img_source = models.CharField(
-        max_length=10,
-        blank=True,
-        null=True,
-        verbose_name='[DEPRECATED] Источник',
-        help_text='[DEPRECATED] Использовать j_img_metadata вместо этого поля.',
-    )
-    l_img_reality = models.CharField(
-        max_length=10,
-        blank=True,
-        null=True,
-        verbose_name='[DEPRECATED] Тип снимка',
-        help_text='[DEPRECATED] Использовать j_img_metadata вместо этого поля.',
-    )
-    s_img_src_url = models.URLField(
-        blank=True,
-        null=True,
-        verbose_name='[DEPRECATED] URL',
-        help_text='[DEPRECATED] Использовать j_img_metadata вместо этого поля.',
-    )
-    f_img_confidence_score = models.FloatField(
+    # Связь с TbOffer (часть M2M через эту промежуточную таблицу)
+    m_offer = models.ForeignKey(
+        'TbOffer',
+        on_delete=models.SET_NULL,  # SET_NULL: если удалится оффер → метаданные остаются (картинка же еще есть!)
         null=True,
         blank=True,
-        verbose_name='[DEPRECATED] Достоверность',
-        help_text='[DEPRECATED] Использовать j_img_metadata вместо этого поля.',
+        related_name='m_image',  # Встречный доступ: offer.m_image.all()
+        verbose_name='Оффер',
+        help_text='Оффер, к которому привязана эта картинка (может быть пусто, если оффер удален)',
     )
-    t_img_created = models.DateTimeField(auto_now_add=True, verbose_name='[DEPRECATED] Дата добавления')
-    t_img_updated = models.DateTimeField(auto_now=True, verbose_name='[DEPRECATED] Дата обновления')
 
     class Meta:
         verbose_name = 'Метаданные изображения'
@@ -406,11 +393,10 @@ class TbArticle(models.Model):
                   ' будет отображаться без заголовка.'
     )
     k_article_to_image = FilerImageField(
-        # Прямая ссылка на filer.Image (вместо TbImage)
-        # Метаданные изображения (сортировка, источник, тип и т.д.) находятся в TbImageMetadata
-        to='filer.Image',
+        # Метаданные изображения (сортировка, источник, тип и т.д.) находятся в TbImageMetadata.
+        # Если нужно получить метаданные изображения, можно использовать `article.k_article_to_image.metadata`.
         on_delete=models.SET_NULL,
-        related_name='article_images',
+        related_name='image_to_article',
         blank=True,
         null=True,
         db_index=True,
@@ -1040,6 +1026,13 @@ class TbOffer(models.Model):
     """
     Конкретное предложение от продавца.
     Один и тот же релиз может быть несколько раз в системе от разных продавцов.
+    
+    СВЯЗЬ С КАРТИНКАМИ:
+    Картинки к офферу управляются через TbImageMetadata.offer (M2M):
+    - offer.image_metadata.all() — все картинки этого офера (упорядочены по i_img_sort)
+    - TbImageMetadata(offer=self, image=<картинка>, i_img_sort=0, j_img_metadata={...})
+    
+    В админке это выглядит как M2M с дополнительными полями (сортировка, метаданные).
     """
     class Condition(models.TextChoices):
         S = 's', 'Still Sealed (новое, запечатано)'
@@ -1128,18 +1121,19 @@ class TbOffer(models.Model):
         help_text='Обязательно - каждый оффер должен иметь источник. Через источник получаем данные '
                   'продавца: offer.k_offer_to_source.k_source_to_seller',
     )
-    k_offer_to_image = models.ManyToManyField(
-        # Изображения товара из django_filer (одна картинка может быть у многих офферов, 
-        # а оффер иметь много картинок)
-        # M2M связь для удобства в админке (filter_horizontal)
-        # Порядок картинок определяется полем i_img_sort в TbImageMetadata
-        to='filer.Image',
+    # Изображения (M2M к filer.Image через TbImageMetadata промежуточную таблицу)
+    m_offer_to_image = models.ManyToManyField(
+        'filer.Image',
+        through='TbImageMetadata',
+        related_name='m_image_to_offer',
         blank=True,
-        related_name='offer_images',
-        db_index=True,
-        verbose_name='Изображения',
-        help_text='Картинки этого товара/предложения. Порядок определяется полем i_img_sort в TbImageMetadata. '
-                  'Доступ к метаданным: image.metadata.i_img_sort и image.metadata.j_img_metadata',
+        verbose_name='Изображения товара',
+        help_text='Картинки этого предложения (обложка, задник, фото и т.д). '
+                  'Управляются в админке TbImageMetadata с сортировкой (i_img_sort) и метаданными (j_img_metadata). '
+                  'Доступ в коде: '
+                  'offer.m_image.all() (все TbImageMetadata, отсортированные) или '
+                  'offer.m_offer_to_image.all() (все картинки). '
+                  'Каждая запись TbImageMetadata содержит: image, m_offer, i_img_sort, j_img_metadata.',
     )
     # Характеристики
     s_offer_catalog_num = models.TextField(
@@ -1265,6 +1259,7 @@ class TbOffer(models.Model):
         # M2M не поддерживают участие в constraints. Уникальность на уровне БД не требуется.
 
 
+# ============================================================================
 class TbSource(models.Model):
     """
         Источник данных, из которого был импортирован оффер.

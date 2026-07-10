@@ -923,7 +923,7 @@ class OfferAdmin(admin.ModelAdmin):
     list_display = ('id', 's_offer', 'k_offer_to_item', 'f_offer_price', 'i_offer_quantity', 'i_offer_views')
     list_filter = ('l_offer_condition_media', 'l_offer_condition_sleeve', 't_offer_created', 'l_offer_to_format')
     search_fields = ('s_offer',)
-    filter_horizontal = ('k_offer_to_image',)
+    # Изображения теперь управляются через OfferImage inline (будет добавлено позже)
     readonly_fields = ('s_offer_skip32', 't_offer_created', 't_offer_updated', 'i_offer_views', 'i_offer_favorites')
 
 
