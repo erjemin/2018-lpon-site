@@ -9,7 +9,7 @@ from django.contrib import admin
 from django.utils.html import format_html, mark_safe
 from easy_thumbnails.files import get_thumbnailer
 from .models import (
-    TbImage, TbArticle, TbArtist, TbItem, TbLabel, TbSeller,
+    TbImageMetadata, TbArticle, TbArtist, TbItem, TbLabel, TbSeller,
     TbOffer, TbSource, TbOfferHistory, TbMusicStyle
 )
 from .utils_validators import validate_entity_for_admin_form, generate_admin_save_message
@@ -150,14 +150,14 @@ class CodeMirrorFormMixin(forms.ModelForm):
 
 
 # ============================================================================
-# АДМИНИСТРИРОВАНИЕ TbImage
+# АДМИНИСТРИРОВАНИЕ TbImageMetadata
 #
-# Кастомня форма для админки TbImage
-class TbImageAdminForm(CodeMirrorFormMixin):
+# Кастомная форма для админки TbImageMetadata
+class TbImageMetadataAdminForm(CodeMirrorFormMixin):
     """
-    Кастомная форма для TbImage в админке.
+    Кастомная форма для TbImageMetadata в админке.
     Добавляет виртуальные поля для редактирования метаданных filer_image
-    (default_alt_text и default_caption), которые не хранятся в TbImage, но есть в filer_image.
+    (default_alt_text и default_caption), которые не хранятся в TbImageMetadata, но есть в filer_image.
     
     Наследует от CodeMirrorFormMixin для поддержки редактора CodeMirror.
     """
@@ -193,8 +193,8 @@ class TbImageAdminForm(CodeMirrorFormMixin):
     )
 
     class Meta:
-        model = TbImage
-        fields = ('image', 'l_img_source', 'l_img_reality', 's_img_src_url', 'i_img_sort', 'f_img_confidence_score')
+        model = TbImageMetadata
+        fields = ('image', 'i_img_sort', 'j_img_metadata')
 
     def __init__(self, *args, **kwargs):
         """
@@ -227,37 +227,39 @@ class TbImageAdminForm(CodeMirrorFormMixin):
                                     css_class='codemirror-width-m codemirror-no-lines')
 
         # Активируем CodeMirror для реальных полей
-        self.setup_codemirror_field('s_img_src_url', language='url',
-                                    css_class='codemirror-width-xl codemirror-no-lines')
         self.setup_codemirror_field('i_img_sort', language='text',
                                     css_class='codemirror-width-s codemirror-no-lines')
-        self.setup_codemirror_field('f_img_confidence_score', language='text',
-                                    css_class='codemirror-width-s codemirror-no-lines')
+        self.setup_codemirror_field('j_img_metadata', language='json',
+                                    css_class='codemirror-width-xl')
 
 
-# Админка для TbImage с кастомной формой
-class ImageAdmin(admin.ModelAdmin):
+# Админка для TbImageMetadata с кастомной формой
+class ImageMetadataAdmin(admin.ModelAdmin):
     """
-    Админ для изображений TbImage с поддержкой редактирования метаданных filer_image.
+    Админ для метаданных изображений TbImageMetadata с поддержкой редактирования метаданных filer_image.
 
     Позволяет пользователю заполнить default_alt_text и default_caption для картинки в filer
-    прямо в админке TbImage, без необходимости отдельного редактирования filer.
+    прямо в админке TbImageMetadata, без необходимости отдельного редактирования filer.
     
-    Использует TbImageAdminForm с наследованием от CodeMirrorFormMixin для поддержки CodeMirror.
+    Использует TbImageMetadataAdminForm с наследованием от CodeMirrorFormMixin для поддержки CodeMirror.
     """
-    form = TbImageAdminForm  # Используем кастомную форму с виртуальными полями (Media подключится через миксин)
+    form = TbImageMetadataAdminForm  # Используем кастомную форму с виртуальными полями (Media подключится через миксин)
 
-    list_display = ('id', 'image_thumbnail', 'image', '_display_alt_text', 'i_img_sort', 't_img_created')
+    list_display = ('id', 'image_thumbnail', 'image', '_display_alt_text', 'i_img_sort')
     list_display_links = ('id', 'image_thumbnail', 'image')
-    list_filter = ('l_img_source', 'l_img_reality', 't_img_created')
+    list_filter = ('i_img_sort',)
     ordering = ('image', 'i_img_sort')
-    readonly_fields = ('t_img_created', 't_img_updated', '_display_alt_text', '_display_title_text')
+    readonly_fields = ('_display_alt_text', '_display_title_text')
 
     fieldsets = (
         ('Изображение', {
-            'fields': ('image', 'l_img_source', 'l_img_reality', 's_img_src_url', 'i_img_sort',
-                       'f_img_confidence_score'),
-            'description': 'Основные данные об изображении и источнике',
+            'fields': ('image', 'i_img_sort'),
+            'description': 'Файл изображения и порядок его отображения (i_img_sort)',
+        }),
+        ('Метаданные (JSON)', {
+            'fields': ('j_img_metadata',),
+            'description': 'Гибкие дополнительные данные в JSON формате (источник, тип, достоверность и т.д.). '
+                           'Пример: {"source": "discogs", "reality": "abstract", "confidence": 0.95}',
         }),
         ('Метаданные filer (SEO для картинок)', {
             'fields': ('_display_alt_text', '_display_title_text', 'alt_text', 'title_text',
@@ -265,10 +267,6 @@ class ImageAdmin(admin.ModelAdmin):
             'description': 'Редактируемые поля для заполнения ALT-, TITLE- и ©-текста в filer. Если не заполнить,'
                            ' текущие значения останутся без изменений (и не будут заполнены при создании).',
             # 'classes': ('collapse',),
-        }),
-        ('Служебная информация', {
-            'fields': ('t_img_created', 't_img_updated'),
-            'classes': ('collapse',),
         }),
     )
 
@@ -340,7 +338,7 @@ class ImageAdmin(admin.ModelAdmin):
     def save_model(
         self,
         request: HttpRequest,
-        obj: TbImage,
+        obj: TbImageMetadata,
         form: forms.ModelForm,
         change: bool,
     ) -> None:
@@ -351,7 +349,7 @@ class ImageAdmin(admin.ModelAdmin):
         их значения сохраняются в соответствующие поля filer_image.
         Если поля не заполнены, текущие значения в filer остаются без изменений.
         """
-        # Сначала сохраняем саму запись TbImage
+        # Сначала сохраняем саму запись TbImageMetadata
         super().save_model(request, obj, form, change)
 
         # Работаем с meta-данными filer только если картинка привязана
@@ -949,7 +947,7 @@ class OfferHistoryAdmin(admin.ModelAdmin):
 # ============================================================================
 # Регистрация моделей в дефолтном admin.site
 # ============================================================================
-admin.site.register(TbImage, ImageAdmin)
+admin.site.register(TbImageMetadata, ImageMetadataAdmin)
 admin.site.register(TbArticle, ArticleAdmin)
 admin.site.register(TbMusicStyle, MusicStyleAdmin)
 admin.site.register(TbArtist, ArtistAdmin)

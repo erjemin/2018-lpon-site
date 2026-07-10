@@ -253,76 +253,87 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# ИЗОБРАЖЕНИЯ
+# МЕТАДАННЫЕ ИЗОБРАЖЕНИЙ
 # ============================================================================
-class TbImage(models.Model):
+class TbImageMetadata(models.Model):
     """
-    Изображение, связанное с релизом, оффером, исполнителем и т.д.
-    """
-    # Источник изображения
-    class ImageSource(models.TextChoices):
-        PARSER_UPLOAD = 'parser', 'Загружено парсером (из Discogs, Meshok или другого сайта)'
-        MANUAL_UPLOAD = 'manual', 'Ручная загрузка пользователем'
-        VENDOR = 'vendor', 'От продавца'
-        OTHER = 'other', 'Другое'
+    Метаданные к изображениям из django_filer.
 
-    # Тип изображения (реальное или абстрактное)
-    class ImageReality(models.TextChoices):
-        REAL_PHOTO = 'real', 'Реальная фотография товара'
-        ABSTRACT = 'abstract', 'Абстрактное (из внешнего источника)'
+    OneToOne связь с filer.Image. Хранит дополнительные поля:
+    - i_img_sort: порядок сортировки изображений
+    - j_img_metadata: JSON с гибкими данными (источник, тип, достоверность и т.д.)
+
+    Данные можно заполнять вручную через админку или программно из парсеров.
+    При создании новой filer.Image автоматически создаётся TbImageMetadata
+    с дефолтными значениями (через signal).
+    """
 
     image = FilerImageField(
-        # Файл через django_filer
+        # Связь OneToOne с filer.Image (через наследование)
         null=False,
         blank=False,
         on_delete=models.DO_NOTHING,
+        related_name='metadata',  # Встречный доступ: filer_image.metadata
         verbose_name='Файл изображения',
-        help_text='Файл изображения, загруженный через django_filer.',
+        help_text='Файл изображения из django_filer.',
     )
+
+    i_img_sort = models.IntegerField(
+        # Порядок (сортировка) вывода изображений
+        default=0,
+        db_index=True,
+        verbose_name='Сортировка',
+        help_text='Порядок отображения изображений. Чем меньше число, тем выше в списке. '
+                  'Можно использовать для указания обложки (0), задника (1) и т.д.',
+    )
+
+    j_img_metadata = models.JSONField(
+        # Гибкие дополнительные данные о изображении
+        # Пример: {"source": "discogs", "reality": "abstract", "confidence": 0.95, ...}
+        default=dict,
+        blank=True,
+        null=True,
+        verbose_name='Метаданные',
+        help_text='JSON с дополнительными данными: источник (парсер, админка), тип (реальное/абстрактное), '
+                  'достоверность, URL источника и т.д. Гибкое хранилище, позволяет добавлять новые поля '
+                  'без миграций БД.',
+    )
+
+    # Эти поля ПОКА остаются (удалим после миграции данных)
+    # но НЕ используются в новой архитектуре
     l_img_source = models.CharField(
         max_length=10,
-        choices=ImageSource.choices,
-        default=ImageSource.MANUAL_UPLOAD,
-        verbose_name='Источник',
-        help_text='Как был получен этот снимок: загружен вручную, получен парсером из внешнего источника (например,'
-                  ' Discogs), предоставлен продавцом и т.д.',
+        blank=True,
+        null=True,
+        verbose_name='[DEPRECATED] Источник',
+        help_text='[DEPRECATED] Использовать j_img_metadata вместо этого поля.',
     )
     l_img_reality = models.CharField(
         max_length=10,
-        choices=ImageReality.choices,
-        default=ImageReality.ABSTRACT,
-        verbose_name='Тип снимка',
-        help_text='Реальная фотография товара или картинка из внешнего источника?',
+        blank=True,
+        null=True,
+        verbose_name='[DEPRECATED] Тип снимка',
+        help_text='[DEPRECATED] Использовать j_img_metadata вместо этого поля.',
     )
     s_img_src_url = models.URLField(
         blank=True,
         null=True,
-        verbose_name='URL',
-        help_text='URL источника, если изображение взято (в том числе и парсером) из внешнего источника (например, Discogs)',
-    )
-    i_img_sort = models.IntegerField(
-        # Порядок (сортировка) вывода
-        default=0,
-        db_index=True,
-        verbose_name='Сортировка',
-        help_text='Порядок отображения изображений. Чем меньше число, тем выше в списке. Можно использовать'
-                  ' для указания обложки (0), задника (1) и т.д.',
+        verbose_name='[DEPRECATED] URL',
+        help_text='[DEPRECATED] Использовать j_img_metadata вместо этого поля.',
     )
     f_img_confidence_score = models.FloatField(
-        # Доверие данным (для парсеров и API)
         null=True,
         blank=True,
-        default=10.0,
-        verbose_name='Достоверность',
-        help_text='Уверенность (для автоматических данных) 0.0 - 10.0, насколько уверены, что это правильное изображение',
+        verbose_name='[DEPRECATED] Достоверность',
+        help_text='[DEPRECATED] Использовать j_img_metadata вместо этого поля.',
     )
-    t_img_created = models.DateTimeField(auto_now_add=True, verbose_name='Дата добавления',)
-    t_img_updated = models.DateTimeField(auto_now=True, verbose_name='Дата обновления',)
+    t_img_created = models.DateTimeField(auto_now_add=True, verbose_name='[DEPRECATED] Дата добавления')
+    t_img_updated = models.DateTimeField(auto_now=True, verbose_name='[DEPRECATED] Дата обновления')
 
     class Meta:
-        verbose_name = 'Изображение'
-        verbose_name_plural = 'Изображения'
-        ordering = ('-t_img_created', 'i_img_sort',)
+        verbose_name = 'Метаданные изображения'
+        verbose_name_plural = 'Метаданные изображений'
+        ordering = ('i_img_sort',)
 
 
 # ============================================================================
@@ -395,13 +406,20 @@ class TbArticle(models.Model):
                   ' будет отображаться без заголовка.'
     )
     k_article_to_image = models.ForeignKey(
-        TbImage,
+        # Прямая ссылка на filer.Image (вместо TbImage)
+        # Метаданные изображения (сортировка, источник, тип и т.д.) находятся в TbImageMetadata
+        to='filer.Image',
         on_delete=models.SET_NULL,
-        related_name='image_to_article',
+        related_name='article_images',
         blank=True,
         null=True,
-        db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
+        db_index=True,
         verbose_name='Изображение для статьи',
+        help_text='Обложка или иллюстрация статьи из файлового хранилища (django_filer).'
+                  ' Метаданные: image.metadata.i_img_sort и image.metadata.j_img_metadata.</br>'
+                  '<b>ВАЖНО</b>: Так как статья призывается к исполнителям, лейблам, продавцам, музыкальным стилям,'
+                  ' её можно использовать как логотип-пкитограмму или баннер этих сущностей. В этом случае '
+                  ' рекомендуется использовать изображение с прозрачным фоном (движок поддерживает SVG, WebP и PNG).'
     )
     s_article_teaser_html = models.TextField(
         blank=True,
@@ -426,7 +444,7 @@ class TbArticle(models.Model):
         verbose_name='Число просмотров',
     )
     i_article_favorites = models.IntegerField(
-        # Счетчик добавлений в избранное (включая избранное артиста, итема/релиза/товара, лейбла и продавца)
+        # Счетчик добавлений в избранное (включая избранный артист, item/релиз/товар/лейбл/продавец)
         default=0,
         db_index=True,  # для сортировки "самые добавляемые в избранное"
         verbose_name='Число в избранном',
@@ -632,7 +650,7 @@ class TbArtist(models.Model):
         blank=True,     # <-- Интерфейсное удобство. Связь будет сделана автоматически, и статья создана автоматически.
         verbose_name='Связанная статья',
         help_text='Связанная статья об исполнителе (Типографированные заголовок, тизер и текст статьи. Так же'
-                  ' через статью может быть получена картинка, seo атрибуты, слаг (обязательно) и т.п.)<br />'
+                  ' через статью может быть получена <b>картинка<b>, seo атрибуты, слаг (обязательно) и т.п.)<br />'
                   '<b>ОБЯЗАТЕЛЬНО УКАЗЫВАТЬ</b> т.к. через статью получаем слаг для URL артиста.'
     )
     j_artist_metadata = models.JSONField(
@@ -731,18 +749,16 @@ class TbItem(models.Model):
         TbArticle,
         on_delete=models.SET_NULL,
         related_name='article_to_item',
-        db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
+        db_index=True,
         default=None,
         null=True,
-        blank=True,     # <-- Интерфейсное удобство. Связь будет сделана автоматически, и статья создана автоматически.
+        blank=True,
         verbose_name='Связанная статья',
         help_text='Связанная статья об альбоме/релизе/товаре (Типографированные заголовок, тизер и текст статьи.'
-                  ' Так же через статью может быть получена картинка, seo атрибуты, слаг (обязательно) и т.п.)<br />'
+                  ' Так же через статью может быть получена <b>картинка</b>, seo атрибуты, слаг (обязательно) и т.п.)<br />'
                   '<b>ОБЯЗАТЕЛЬНО УКАЗЫВАТЬ</b> т.к. через статью получаем слаг для URL альбома/релиза/товара.'
     )
     s_item_date = models.CharField(
-        # Год выпуска (важно для коллекционеров). Так же в будущем можно использовать для "ЮБИЛЕЙНОГО ПРЕДЛОЖЕНИЯ"
-        # и фан-календаря
         max_length=10,
         blank=True,
         null=True,
@@ -853,7 +869,7 @@ class TbLabel(models.Model):
         blank=True,     # <-- Интерфейсное удобство. Связь будет сделана автоматически, и статья создана автоматически.
         verbose_name='Связанная статья',
         help_text='Связанная статья об лейбле (Типографированные заголовок, тизер и текст статьи.'
-                  ' Так же через статью может быть получена картинка, seo атрибуты, слаг (обязательно) и т.п.)<br />'
+                  ' Так же через статью может быть получена <b>картинка</b>, seo атрибуты, слаг (обязательно) и т.п.)<br />'
                   '<b>ОБЯЗАТЕЛЬНО УКАЗЫВАТЬ</b> т.к. через статью получаем слаг для URL лейбла.'
     )
     j_label_metadata = models.JSONField(
@@ -968,7 +984,7 @@ class TbSeller(models.Model):
         blank=True,     # <-- Интерфейсное удобство. Связь будет сделана автоматически, и статья создана автоматически.
         verbose_name='Связанная статья',
         help_text='Связанная статья о продавце (HTML-готовые заголовок, тизер и текст статьи).'
-                  ' Так же через статью может быть получена картинка, seo атрибуты, слаг (обязательно) и т.п.)<br />'
+                  ' Так же через статью может быть получена <b>картинка</b>, seo атрибуты, слаг (обязательно) и т.п.)<br />'
                   '<b>ОБЯЗАТЕЛЬНО УКАЗЫВАТЬ</b> т.к. через статью получаем слаг для URL продавца.'
     )
     l_seller_type = models.CharField(
@@ -1113,15 +1129,17 @@ class TbOffer(models.Model):
                   'продавца: offer.k_offer_to_source.k_source_to_seller',
     )
     k_offer_to_image = models.ManyToManyField(
-        # Изображения товара (одна картинка может быть у многих офферов, а оффер иметь много картинок)
+        # Изображения товара из django_filer (одна картинка может быть у многих офферов, 
+        # а оффер иметь много картинок)
         # M2M связь для удобства в админке (filter_horizontal)
-        # Порядок картинок определяется полем i_img_sort в TbImage
-        TbImage,
+        # Порядок картинок определяется полем i_img_sort в TbImageMetadata
+        to='filer.Image',
         blank=True,
-        related_name='image_to_offer',
-        db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
+        related_name='offer_images',
+        db_index=True,
         verbose_name='Изображения',
-        help_text='Картинки этого товара. Порядок определяется полем i_img_sort в ка��тинке.',
+        help_text='Картинки этого товара/предложения. Порядок определяется полем i_img_sort в TbImageMetadata. '
+                  'Доступ к метаданным: image.metadata.i_img_sort и image.metadata.j_img_metadata',
     )
     # Характеристики
     s_offer_catalog_num = models.TextField(
