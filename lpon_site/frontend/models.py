@@ -539,7 +539,7 @@ class TbArticle(models.Model):
             if not metadata or not KEY_IMAGE_NOTE in (metadata.j_img_metadata or {}):
                 adding_metadata[KEY_IMAGE_NOTE] = None
             if not metadata:
-                TbImageMetadata.objects.create(
+                metadata = TbImageMetadata.objects.create(
                     image=self.k_article_to_image,
                     i_img_sort=0,
                     j_img_metadata=adding_metadata
@@ -549,6 +549,39 @@ class TbArticle(models.Model):
                 if adding_metadata:
                     metadata.j_img_metadata.update(adding_metadata)
                 metadata.save(update_fields=['j_img_metadata'])
+            
+            # Заполняем поля filer.Image если они пусты
+            # Это улучшает SEO и accessibility (для скринридеров, поисковиков)
+            image_needs_update = False
+            
+            # default_alt_text (alt) — компактное описание для скринридеров и SEO
+            if not self.k_article_to_image.default_alt_text:
+                # Приоритет: KEY_IMAGE_NOTE → seo_title (оптимизирован для SEO) → fallback
+                alt_text = (
+                    metadata.j_img_metadata.get(KEY_IMAGE_NOTE) 
+                    or self.seo_title 
+                    or self.s_article_title[:60]
+                )
+                self.k_article_to_image.default_alt_text = alt_text
+                image_needs_update = True
+            
+            # default_caption (title) — подробное описание с контекстом
+            if not self.k_article_to_image.default_caption:
+                # Используем seo_description (оптимизирован для SEO) с добавлением типа и источника
+                caption = self.seo_description or self.s_article_title[:80]
+                # Добавляем метаинформацию для полноты
+                caption = (
+                    f"{caption}. "
+                    f"Type: {metadata.j_img_metadata[KEY_IMAGE_TYPE]}. "
+                    f"Source: {metadata.j_img_metadata[KEY_IMAGE_FROM]}"
+                )
+                self.k_article_to_image.default_caption = caption
+                image_needs_update = True
+            
+            # Сохраняем картинку, если были изменения
+            if image_needs_update:
+                self.k_article_to_image.save()
+            
             # Примечание: m_offer остаётся NULL т.к. это статья, а не оффер
 
     class Meta:
