@@ -981,25 +981,26 @@ class ArticleAdminForm(CodeMirrorFormMixin):
                 title_source = cleaned_data.get('s_article_title_html') or cleaned_data.get('s_article_title') or ''
                 new_potential_slug = make_slug(title_source)
                 
-                # Если новый slug совпадает с началом текущего, то менять ничего не нужно
-                # Текущий slug уже был сгенерирован из этого заголовка (циферка добавилась только для уникальности)
-                if self.instance.slug.startswith(new_potential_slug):
-                    return cleaned_data
-                
-                # Иначе предлагаем изменить slug
-                error_html = (
-                    '<div class="confirmation-button-container">'
-                    '  <big>Ой! Кажется вы изменили заголовок статьи!</big></br>'
-                    f' Текущий slug: <b><tt><u>{self.instance.slug}</u></tt></b></br>'
-                    f' Для измененного заголовка «<tt><i><u>{cleaned_data.get('s_article_title_html')}</u></i></tt>»'
-                    f' лучше сделать slug <b><tt><u>{new_potential_slug}</u></tt></b></br></br>'
-                    '  Пожалуйста, проверьте, что это правильно. Если вы уверены — нажмите подтверждение.<br></br>'
-                    '  <button type="button" onclick="markSubmitButtonsToIgnoreValidation();">'
-                    '    ✓ Я ПРОВЕРИЛ И УВЕРЕН!'
-                    '  </button>'
-                    '</div>'
-                )
-                raise ValidationError(mark_safe(error_html))
+                # Если новый slug не совпадает с началом текущего...
+                if not self.instance.slug.startswith(new_potential_slug):
+                    # ...предлагаем изменить slug
+                    error_html = (
+                        '<div class="confirmation-button-container">'
+                        '  <big>Ой! Кажется, вы изменили заголовок статьи!</big></br>'
+                        f' Текущий slug: <b><tt><u>{self.instance.slug}</u></tt></b></br>'
+                        f' Для измененного заголовка «<tt><i><u>{cleaned_data.get('s_article_title_html')}</u></i></tt>»'
+                        f' лучше сделать slug <b><tt><u>{new_potential_slug}</u></tt></b></br></br>'
+                        '  Пожалуйста, проверьте, что это правильно. Если вы уверены — нажмите подтверждение.<br></br>'
+                        '  <button type="button" onclick="markSubmitButtonsToIgnoreValidation();">'
+                        '    ✓ Я ПРОВЕРИЛ И УВЕРЕН!'
+                        '  </button></br>&nbsp;'
+                        '</div>'
+                    )
+                    raise ValidationError(mark_safe(error_html))
+
+        # Типографика для HTML-полей (s_article_title_html, s_article_teaser_html, s_article_content_html)
+        for field_name in ['s_article_title_html', 's_article_teaser_html', 's_article_content_html']:
+            continue
         
         return cleaned_data
 
