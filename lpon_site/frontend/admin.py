@@ -6,6 +6,7 @@ from django import forms
 from django.forms import Textarea
 from django.http import HttpRequest
 from django.contrib import admin
+from django.core.exceptions import ValidationError
 from django.utils.html import format_html, mark_safe
 from easy_thumbnails.files import get_thumbnailer
 from .models import (
@@ -13,6 +14,7 @@ from .models import (
     TbOffer, TbSource, TbOfferHistory, TbMusicStyle
 )
 from .utils_validators import validate_entity_for_admin_form, generate_admin_save_message
+from .utils import make_slug
 
 
 # ============================================================================
@@ -935,8 +937,12 @@ class ArticleAdminForm(CodeMirrorFormMixin):
 
     def __init__(self, *args, **kwargs):
         """
-        При инициализации формы подгружаем CodeMirror редактор
+        При инициализации формы подгружаем CodeMirror редактор.
+        Получаем request из kwargs, переданных из get_form_kwargs в AdminClass.
         """
+        # Извлекаем request из kwargs если он есть
+        self.request = kwargs.pop('request', None)
+        
         super().__init__(*args, **kwargs)
 
         # Конфигурируем поля для CodeMirror
@@ -957,8 +963,48 @@ class ArticleAdminForm(CodeMirrorFormMixin):
         self.setup_codemirror_field('seo_keywords', language='text',
                                     css_class='codemirror-width-l codemirror-no-lines codemirror-min-height-2')
 
-class ArticleAdmin(admin.ModelAdmin):
-    """Админ для статей"""
+    def clean(self):
+        """
+        Валидируем форму: при редактировании проверяем изменился ли s_article_title_html
+        и может ли измениться slug. Если да — показываем красную кнопку подтверждения.
+        Используем GET параметр ignore_validate для пропуска при переотправке.
+        """
+        cleaned_data = super().clean()
+        
+        # Проверяем только при редактировании и не установлен ignore_validate
+        if self.instance.pk and self.request and not self.request.GET.get('ignore_validate'):
+            # Получаем старый объект из БД
+            old_obj = TbArticle.objects.get(pk=self.instance.pk)
+            
+            if old_obj.s_article_title_html != cleaned_data.get('s_article_title_html'):
+                # Заголовок изменился, проверяем, нужно ли менять slug
+                title_source = cleaned_data.get('s_article_title_html') or cleaned_data.get('s_article_title') or ''
+                new_potential_slug = make_slug(title_source)
+                
+                # Если новый slug совпадает с началом текущего, то менять ничего не нужно
+                # Текущий slug уже был сгенерирован из этого заголовка (циферка добавилась только для уникальности)
+                if self.instance.slug.startswith(new_potential_slug):
+                    return cleaned_data
+                
+                # Иначе предлагаем изменить slug
+                error_html = (
+                    '<div class="confirmation-button-container">'
+                    '  <big>Ой! Кажется вы изменили заголовок статьи!</big></br>'
+                    f' Текущий slug: <b><tt><u>{self.instance.slug}</u></tt></b></br>'
+                    f' Для измененного заголовка «<tt><i><u>{cleaned_data.get('s_article_title_html')}</u></i></tt>»'
+                    f' лучше сделать slug <b><tt><u>{new_potential_slug}</u></tt></b></br></br>'
+                    '  Пожалуйста, проверьте, что это правильно. Если вы уверены — нажмите подтверждение.<br></br>'
+                    '  <button type="button" onclick="markSubmitButtonsToIgnoreValidation();">'
+                    '    ✓ Я ПРОВЕРИЛ И УВЕРЕН!'
+                    '  </button>'
+                    '</div>'
+                )
+                raise ValidationError(mark_safe(error_html))
+        
+        return cleaned_data
+
+class ArticleAdmin(RequestInFormMixin, admin.ModelAdmin):
+    """Админ для статей с поддержкой передачи request в форму"""
     form = ArticleAdminForm  # Используем кастомную форму с CodeMirror
 
     list_display = ('id', 's_article_title', 'l_article_type', 'b_article_published', 't_article_created')
@@ -994,11 +1040,17 @@ class ArticleAdmin(admin.ModelAdmin):
         }),
     )
 
+    # Подключаем CSS и JS для валидации
+    # Переиспользуем стили и скрипты из админок Label/MusicStyle
+    class Media(ArticleAdminForm.Media):
+        css = {'all': (*ArticleAdminForm.Media.css['all'], 'css/validation-override.css', )}
+        js = (*ArticleAdminForm.Media.js, 'js/form-field-watcher.js', )
+
     def save_model(self, request, obj, form, change):
         """
         Переопределяем save_model чтобы передать username в модель.
         Username используется в TbArticle.save() для установки IMG_FROM в метаданные картинки.
-        
+
         Args:
             request: HTTP-запрос (содержит info о пользователе)
             obj: инстанция TbArticle для сохранения
@@ -1008,7 +1060,7 @@ class ArticleAdmin(admin.ModelAdmin):
         # Сохраняем username текущего пользователя
         if request and request.user:
             obj._admin_username = request.user.username
-        
+
         # Вызываем родительский save_model который вызовет obj.save()
         super().save_model(request, obj, form, change)
 
