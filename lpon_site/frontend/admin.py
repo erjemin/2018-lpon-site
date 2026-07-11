@@ -953,9 +953,9 @@ class ArticleAdminForm(CodeMirrorFormMixin):
         self.setup_codemirror_field('seo_title', language='text',
                                     css_class='codemirror-width-l codemirror-no-lines')
         self.setup_codemirror_field('seo_description', language='text',
-                                    css_class='codemirror-width-l codemirror-min-height-2')
+                                    css_class='codemirror-width-l codemirror-no-lines codemirror-min-height-2')
         self.setup_codemirror_field('seo_keywords', language='text',
-                                    css_class='codemirror-width-l codemirror-min-height-2')
+                                    css_class='codemirror-width-l codemirror-no-lines codemirror-min-height-2')
 
 class ArticleAdmin(admin.ModelAdmin):
     """Админ для статей"""
