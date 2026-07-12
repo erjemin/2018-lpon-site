@@ -1,6 +1,7 @@
 # Кастомная конфигурация Django Admin для LPON сайта.
 # Регистрируем модели с удобным интерфейсом.
 
+import etpgrf
 from typing import Any
 from django import forms
 from django.forms import Textarea
@@ -929,11 +930,65 @@ class ArticleAdminForm(CodeMirrorFormMixin):
     Кастомная форма для админки статей (TbArticle).
     Добавляет виджеты CodeMirror для текстовых полей.
     """
+    # Виртуальные поля для настройки типографа
+    etp_enable = forms.BooleanField(
+        label="Включить типограф",
+        initial=True,
+        required=False,
+        help_text="Включить автоматическую типографику для HTML полей (заголовок, тизер, контент)&nbsp;&nbsp;&nbsp;"
+    )
+    etp_language = forms.ChoiceField(
+        label="Язык типографики",
+        choices=[('ru', 'Русский'), ('en', 'English'), ('ru,en', 'Ru + En')],
+        initial='ru',
+        required=False
+    )
+    etp_quotes = forms.BooleanField(
+        label="Кавычки",
+        initial=True,
+        required=False,
+        help_text="Заменять кавычки</br>(«ёлочки» для русского, “лапки” для английского)&nbsp;&nbsp;&nbsp;"
+    )
+    etp_hyphenation = forms.BooleanField(
+        label="Расставлять переносы",
+        initial=True,
+        required=False,
+        help_text="Расставлять мягкие переносы (&amp;shy;)&nbsp;&nbsp;&nbsp;</br>"
+                  "в словах длиннее <b>14</b> символов&nbsp;&nbsp;&nbsp;"
+    )
+    etp_sanitize = forms.BooleanField(
+        label="Очистка HTML",
+        initial=True,
+        required=False,
+        help_text="Удалять весь HTML из исходного текста&nbsp;&nbsp;&nbsp;"
+    )
+    etp_hanging_punctuation = forms.BooleanField(
+        label="Висячая пунктуация",
+        initial=True,
+        required=False,
+        help_text="Выносить пунктуацию в начало строк</br>&nbsp;&nbsp;&nbsp;"
+                  "(только для заголовков... для тизера и контента отключается автоматически)&nbsp;&nbsp;&nbsp;"
+    )
+    etp_mode = forms.ChoiceField(
+        label="Режим вывода",
+        choices=[('mixed', 'Смешанный (Mixed)'), ('unicode', 'Юникод (Unicode)'), ('mnemonic', 'Мнемоники')],
+        initial='mixed',
+        required=False,
+        help_text="Формат спецсимволов (например, кавычек, тире, многоточий) в&nbsp;HTML: смешанный, юникод"
+                  "&nbsp;или мнемоники&nbsp;&nbsp;&nbsp;"
+    )
+
     class Meta:
         model = TbArticle
-        fields = ('s_article_title', 'slug', 'l_article_type', 'b_article_published', 'k_article_to_image',
-                  's_article_title_html', 's_article_teaser_html', 's_article_content_html', 'seo_title',
-                  'seo_description', 'seo_keywords', 't_article_ended')
+        fields = (
+            # Виртуальные поля для настройки типографа
+            'etp_enable', 'etp_language', 'etp_quotes', 'etp_hyphenation', 'etp_sanitize',
+            'etp_hanging_punctuation', 'etp_mode',
+            # Остальные поля модели TbArticle
+            's_article_title', 'slug', 'l_article_type', 'b_article_published', 'k_article_to_image',
+            's_article_title_html', 's_article_teaser_html', 's_article_content_html', 'seo_title',
+            'seo_description', 'seo_keywords', 't_article_ended', 'i_article_views', 'i_article_favorites',
+        )
 
     def __init__(self, *args, **kwargs):
         """
@@ -962,6 +1017,10 @@ class ArticleAdminForm(CodeMirrorFormMixin):
                                     css_class='codemirror-width-l codemirror-no-lines codemirror-min-height-2')
         self.setup_codemirror_field('seo_keywords', language='text',
                                     css_class='codemirror-width-l codemirror-no-lines codemirror-min-height-2')
+        self.setup_codemirror_field('i_article_views', language='text',
+                                    css_class='codemirror-width-s codemirror-no-lines')
+        self.setup_codemirror_field('i_article_favorites', language='text',
+                                    css_class='codemirror-width-s codemirror-no-lines')
 
     def clean(self):
         """
@@ -998,10 +1057,6 @@ class ArticleAdminForm(CodeMirrorFormMixin):
                     )
                     raise ValidationError(mark_safe(error_html))
 
-        # Типографика для HTML-полей (s_article_title_html, s_article_teaser_html, s_article_content_html)
-        for field_name in ['s_article_title_html', 's_article_teaser_html', 's_article_content_html']:
-            continue
-        
         return cleaned_data
 
 class ArticleAdmin(RequestInFormMixin, admin.ModelAdmin):
@@ -1020,16 +1075,26 @@ class ArticleAdmin(RequestInFormMixin, admin.ModelAdmin):
         ('Основная информация', {
             'fields': ('s_article_title', 'slug', 'l_article_type', 'b_article_published'),
         }),
-        ('Публикация', {
-            'fields': ('t_article_ended', 'i_article_views', 'i_article_favorites'),
-            'classes': ('collapse',),
-        }),
         ('Изображение', {
             'fields': ('k_article_to_image',),
             'description': 'Обложка или иллюстрация статьи. Используется в списках и на странице статьи.',
         }),
+        ('Окончание публикации', {
+            'fields': ('t_article_ended',),
+            'classes': ('collapse',),
+        }),
+        ('Типограф', {
+            'fields': (('etp_enable',), ('etp_language', 'etp_mode'), ('etp_quotes', 'etp_hyphenation', 'etp_sanitize', 'etp_hanging_punctuation')),
+            'classes': ('collapse',),
+            'description': 'Типограф применяется при сохранении и срабатывает на HTML-поля (ЗАГОЛОВОК, ТИЗЕР СТАТЬИ'
+                           ' и СТАТЬЯ). Если выключить — HTML будет сохранен без изменений.',
+        }),
         ('Содержание', {
             'fields': ('s_article_title_html', 's_article_teaser_html', 's_article_content_html'),
+        }),
+        ('Просмотры и избранное', {
+            'fields': ('i_article_views', 'i_article_favorites',),
+            'classes': ('collapse',),
         }),
         ('SEO и метаданные', {
             'fields': ('seo_title', 'seo_description', 'seo_keywords'),
@@ -1049,7 +1114,7 @@ class ArticleAdmin(RequestInFormMixin, admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         """
-        Переопределяем save_model чтобы передать username в модель.
+        Переопределяем save_model для применения типографа.
         Username используется в TbArticle.save() для установки IMG_FROM в метаданные картинки.
 
         Args:
@@ -1058,7 +1123,69 @@ class ArticleAdmin(RequestInFormMixin, admin.ModelAdmin):
             form: валидированная форма
             change: True если редактирование, False если создание
         """
-        # Сохраняем username текущего пользователя
+        # Типографика для HTML-полей (s_article_title_html, s_article_teaser_html, s_article_content_html)
+        
+        # Проверяем, включен ли типограф
+        if form.cleaned_data.get('etp_enable', True):
+            # Получаем все настройки из формы
+            langs = form.cleaned_data.get('etp_language', 'ru').split(',')
+            
+            # 1. LayoutProcessor: включаем layout с базовыми настройками
+            layout_option = etpgrf.LayoutProcessor(
+                langs=langs,
+                process_initials_and_acronyms=True,
+                process_units=True
+            )
+
+            # 2. Hyphenator (переносы слов)
+            hyphenation_option = False
+            if form.cleaned_data.get('etp_hyphenation', True):
+                hyphenation_option = etpgrf.Hyphenator(
+                    langs=langs,
+                    max_unhyphenated_len=14
+                )
+
+            # 3. Sanitizer (очистка HTML перед типографированием)
+            # Режимы: 'html' (удаляет все теги), 'etp' (только висячая пунктуация), None/False (ничего не делает)
+            if form.cleaned_data.get('etp_sanitize', True):
+                sanitizer_option = 'html'  # Удаляет все HTML-теги
+            else:
+                sanitizer_option = False  # Санитайзер отключен
+
+            # 4. Базовые настройки типографа (используются для всех полей)
+            base_options = {
+                'langs': langs,
+                'process_html': True,
+                'quotes': form.cleaned_data.get('etp_quotes', True),
+                'layout': layout_option,
+                'unbreakables': True,
+                'hyphenation': hyphenation_option,
+                'sanitizer': sanitizer_option,
+                'symbols': True,
+                'mode': form.cleaned_data.get('etp_mode', 'mixed'),
+            }
+
+            # 5. Для заголовков: висячая пунктуация может быть включена
+            options_title = {
+                **base_options,
+                'hanging_punctuation': form.cleaned_data.get('etp_hanging_punctuation', True),
+            }
+            t_title = etpgrf.Typographer(**options_title)
+            if obj.s_article_title_html:
+                obj.s_article_title_html = t_title.process(obj.s_article_title_html)
+
+            # 6. Для тизера и контента: висячая пунктуация всегда отключена
+            options_body = {
+                **base_options,
+                'hanging_punctuation': False,
+            }
+            t_body = etpgrf.Typographer(**options_body)
+            if obj.s_article_teaser_html:
+                obj.s_article_teaser_html = t_body.process(obj.s_article_teaser_html)
+            if obj.s_article_content_html:
+                obj.s_article_content_html = t_body.process(obj.s_article_content_html)
+
+        # Сохраняем username текущего пользователя для передачи в TbArticle.save() для IMG_FROM
         if request and request.user:
             obj._admin_username = request.user.username
 
