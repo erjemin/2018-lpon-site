@@ -958,13 +958,13 @@ class ArticleAdminForm(CodeMirrorFormMixin):
     )
     etp_sanitize = forms.BooleanField(
         label="Очистка HTML",
-        initial=True,
+        initial=False,
         required=False,
         help_text="Удалять весь HTML из исходного текста&nbsp;&nbsp;&nbsp;"
     )
     etp_hanging_punctuation = forms.BooleanField(
         label="Висячая пунктуация",
-        initial=True,
+        initial=False,
         required=False,
         help_text="Выносить пунктуацию в начало строк</br>&nbsp;&nbsp;&nbsp;"
                   "(только для заголовков... для тизера и контента отключается автоматически)&nbsp;&nbsp;&nbsp;"
