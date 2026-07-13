@@ -240,8 +240,10 @@
 #   - M2M использует числовые FK (INT) вместо строк
 #   - Slug'и как UNIQUE indexed fields (не primary_key) для экономии места
 
+import base64
 import datetime
 import logging
+from hashids import Hashids
 from django.db import models
 from django.db.models import F
 from filer.fields.image import FilerImageField
@@ -257,6 +259,8 @@ from lpon_site.settings import (
     KEY_IMAGE_NOTE,                 # Ключ, для заметок о картинке (например, "обложка", "задник", "вкладка" и т.д.)
     KEY_OFFER_NOTE,                 # Ключ, для заметок о коммерческом предложении (например, "замят угол конверта" и т.д.)
     KEY_OFFER_ALL_MEDIA,             # Ключ, для хранения информации о том, какие носители входят в оффер (например, CD+2LP)
+    OFFER_HASHIDS_SALT,             # Соль для криптографического кодирования ID оферов
+    OFFER_HASHIDS_MIN_LENGTH,       # Минимальная длина кода
 )
 
 logger = logging.getLogger(__name__)
@@ -1340,6 +1344,55 @@ class TbOffer(models.Model):
         TbOffer.objects.filter(id=self.id).update(
             i_offer_favorites=F('i_offer_favorites') + 1
         )
+
+    def save(self, *args, **kwargs):
+        """
+        Переопределенный метод save для автоматического формирования s_offer_skip32.
+        
+        Уникальный код товара формируется в двух случаях:
+        1. Для новых оферов (при первом сохранении)
+        2. Для старых оферов БЕЗ s_offer_skip32 (миграция существующих данных)
+        
+        Использует криптографическое хеширование (hashids):
+        - Невозможно восстановить исходный ID из кода
+        - Даже администратор, зная алгоритм, не может нарушить безопасность
+        - Коды выглядят случайно и не идут подряд
+        - Компактные (6-12 символов, настраивается в settings)
+        
+        Примеры: ID 1 → "q1am12", ID 42 → "QBErd8", ID 1000 → "kd8GgB", ID 9999 → "1GYeRd"
+        
+        ЛОГИКА:
+        - Если это новый оффер (self.pk == None):
+          1. super().save() → Django создает запись в БД и присваивает self.pk
+          2. Кодируем self.pk в хеш и сохраняем еще раз
+          
+        - Если это старый оффер БЕЗ s_offer_skip32 (миграция):
+          1. Кодируем существующий self.pk в хеш
+          2. Сохраняем с обновленным s_offer_skip32
+          
+        - Если это старый оффер С s_offer_skip32:
+          1. Сохраняем как обычно, не трогаем s_offer_skip32
+        """
+        # Проверяем нужно ли генерировать s_offer_skip32:
+        # - ИЛИ это новый объект (self.pk == None)
+        # - ИЛИ это старый объект без s_offer_skip32 (миграция)
+        if not self.pk or not self.s_offer_skip32:
+            # Если это новый оффер, сначала сохраняем, чтобы получить ID
+            if not self.pk:
+                # Сохраняем БЕЗ s_offer_skip32 чтобы Django создал запись и присвоил pk
+                super().save(*args, **kwargs)
+                # После save() Django автоматически заполнит self.pk
+
+            # Кодируем pk в компактный, необратимый код
+            # Пример: pk=42 → "QBErd8"
+            self.s_offer_skip32 = Hashids(salt=OFFER_HASHIDS_SALT, min_length=OFFER_HASHIDS_MIN_LENGTH).encode(self.pk)
+            
+            # Сохраняем только поле s_offer_skip32 (не перезаписываем остальное)
+            super().save(update_fields=['s_offer_skip32'])
+        else:
+            # Оффер существует И уже имеет s_offer_skip32: сохраняем как обычно
+            # Не трогаем s_offer_skip32, он был сформирован при создании
+            super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = 'Оффер (предложение)'

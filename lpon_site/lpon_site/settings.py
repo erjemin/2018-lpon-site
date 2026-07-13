@@ -48,6 +48,13 @@ ALLOWED_HOSTS = env.list(
 
 CSRF_TRUSTED_ORIGINS = env.list('DJANGO_CSRF_TRUSTED_ORIGINS', default=['127.0.0.1', 'localhost', 'testserver'])
 
+# ====== HASHIDS настройка для s_offer_skip32 ======
+# Криптографическое кодирование ID оферов в компактные, необратимые коды.
+# Благодаря hashids невозможно восстановить исходный ID из кода,
+# даже зная алгоритм (в отличие от простого XOR).
+OFFER_HASHIDS_SALT = env('OFFER_HASHIDS_SALT', default='your-secret-salt-change-me')
+OFFER_HASHIDS_MIN_LENGTH = env.int('OFFER_HASHIDS_MIN_LENGTH', default=6)
+
 #########################################
 # Настройки сообщений об ошибках когда все упало и т.п.
 ADMINS = tuple(

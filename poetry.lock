@@ -315,6 +315,20 @@ lxml = ">=4.9.0"
 regex = ">=2022.1.18"
 
 [[package]]
+name = "hashids"
+version = "1.3.1"
+description = "Implements the hashids algorithm in python. For more information, visit http://hashids.org/"
+optional = false
+python-versions = ">=2.7"
+files = [
+    {file = "hashids-1.3.1-py2.py3-none-any.whl", hash = "sha256:8bddd1acba501bfc9306e7e5a99a1667f4f2cacdc20cbd70bcc5ddfa5147c94c"},
+    {file = "hashids-1.3.1.tar.gz", hash = "sha256:6c3dc775e65efc2ce2c157a65acb776d634cb814598f406469abef00ae3f635c"},
+]
+
+[package.extras]
+test = ["pytest (>=2.1.0)"]
+
+[[package]]
 name = "lxml"
 version = "6.1.1"
 description = "Powerful and Pythonic XML processing library combining libxml2/libxslt with the ElementTree API."
@@ -903,4 +917,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "69bad093bc7511b8da08bb4673d5883f7cbeb9b45123b6a17350dd885e2a3a33"
+content-hash = "df0a39ef96e82584ad911b561106eeb7559db3c6e78fb0c3a8b53a80738620b9"
