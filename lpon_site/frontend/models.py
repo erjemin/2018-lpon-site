@@ -1280,7 +1280,7 @@ class TbOffer(models.Model):
         blank=True,
         default=0,
         db_index=True,   # <-- Чтобы можно было сортировать по скидке и быстро выбирать то, что участвует в распродажах
-        verbose_name='Скидка',
+        verbose_name='Возможна cкидка (%)',
         help_text='Процент возможной скидки, если участвует в "ежедневной распродаже" или акции. Если указано'
                   ' <tt>0</tt> то данное предложение не может участвовать в распродажах, спецпредложениях и акциях',
     )
@@ -1331,7 +1331,9 @@ class TbOffer(models.Model):
     def __str__(self):
         seller = self.k_offer_to_source.k_source_to_seller.s_seller if (self.k_offer_to_source
                                                               and self.k_offer_to_source.k_source_to_seller) else "?"
-        return f"offer {self.id:0>4} for item {self.k_offer_to_item_id} from seller {seller}"
+        return (f"[{self.s_offer_skip32:0>6}]\u00A0«{self.s_offer}»"
+                f" ⟶\u00A0item\u00A0«{self.k_offer_to_item_id}»"
+                f" ⟶\u00A0seller\u00A0«{seller}»")
 
     def increment_views(self):
         """Безопасный инкремент просмотров оффера"""
@@ -1347,33 +1349,21 @@ class TbOffer(models.Model):
 
     def save(self, *args, **kwargs):
         """
-        Переопределенный метод save для автоматического формирования s_offer_skip32.
+        Переопределенный метод save для:
+        1. Автоматического формирования s_offer_skip32 (криптографический код)
+        2. Записи истории изменений цены и количества в TbOfferHistory
         
-        Уникальный код товара формируется в двух случаях:
-        1. Для новых оферов (при первом сохранении)
-        2. Для старых оферов БЕЗ s_offer_skip32 (миграция существующих данных)
+        ЛОГИКА s_offer_skip32:
+        - Для новых оферов: генерируем код после получения ID
+        - Для старых оферов БЕЗ кода: кодируем существующий ID (миграция)
+        - Для старых оферов С кодом: не трогаем
         
-        Использует криптографическое хеширование (hashids):
-        - Невозможно восстановить исходный ID из кода
-        - Даже администратор, зная алгоритм, не может нарушить безопасность
-        - Коды выглядят случайно и не идут подряд
-        - Компактные (6-12 символов, настраивается в settings)
-        
-        Примеры: ID 1 → "q1am12", ID 42 → "QBErd8", ID 1000 → "kd8GgB", ID 9999 → "1GYeRd"
-        
-        ЛОГИКА:
-        - Если это новый оффер (self.pk == None):
-          1. super().save() → Django создает запись в БД и присваивает self.pk
-          2. Кодируем self.pk в хеш и сохраняем еще раз
-          
-        - Если это старый оффер БЕЗ s_offer_skip32 (миграция):
-          1. Кодируем существующий self.pk в хеш
-          2. Сохраняем с обновленным s_offer_skip32
-          
-        - Если это старый оффер С s_offer_skip32:
-          1. Сохраняем как обычно, не трогаем s_offer_skip32
+        ЛОГИКА истории (TbOfferHistory):
+        - При первом сохранении: создаем первую запись с ценой и количеством
+        - При обновлении: если цена или количество изменилось → создаем новую запись
+        - Это позволяет отследить полную историю изменений
         """
-        # Проверяем нужно ли генерировать s_offer_skip32:
+        # 1. Проверяем нужно ли генерировать s_offer_skip32:
         # - ИЛИ это новый объект (self.pk == None)
         # - ИЛИ это старый объект без s_offer_skip32 (миграция)
         if not self.pk or not self.s_offer_skip32:
@@ -1386,13 +1376,31 @@ class TbOffer(models.Model):
             # Кодируем pk в компактный, необратимый код
             # Пример: pk=42 → "QBErd8"
             self.s_offer_skip32 = Hashids(salt=OFFER_HASHIDS_SALT, min_length=OFFER_HASHIDS_MIN_LENGTH).encode(self.pk)
-            
+
             # Сохраняем только поле s_offer_skip32 (не перезаписываем остальное)
             super().save(update_fields=['s_offer_skip32'])
         else:
             # Оффер существует И уже имеет s_offer_skip32: сохраняем как обычно
             # Не трогаем s_offer_skip32, он был сформирован при создании
             super().save(*args, **kwargs)
+
+        # 2. Записывает историю изменений цены и количества в TbOfferHistory.
+        # Пытаемся получить последнюю (самую свежую) запись в истории
+        latest_history = TbOfferHistory.objects.filter(
+            k_history_to_offer_id=self.pk
+        ).order_by('-t_history_created').first()
+
+        if latest_history is None \
+                or self.f_offer_price != latest_history.f_history_price \
+                or self.i_offer_quantity != latest_history.i_history_quantity:
+            # Нет истории для этого офера, или изменилась цена/количество → создаем новую запись в истории
+            TbOfferHistory.objects.create(
+                k_history_to_offer_id=self.pk,
+                f_history_price=self.f_offer_price,
+                i_history_quantity=self.i_offer_quantity,
+                # TODO: когда появится паерсер, нужно будет добавить запись поля j_history_metadata с информацией
+                #  откуда "прилетели" изменения (координаты ячеек в EXCEL или CSS-селектор и URL
+            )
 
     class Meta:
         verbose_name = 'Оффер (предложение)'
