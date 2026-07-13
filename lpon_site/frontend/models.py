@@ -255,6 +255,8 @@ from lpon_site.settings import (
     VALUE_IMAGE_FROM_USER,          # Картинка загружена пользователем через админку
     KEY_IMAGE_URL,                  # Ключ, о том, откуда получена картинка (URL источника)
     KEY_IMAGE_NOTE,                 # Ключ, для заметок о картинке (например, "обложка", "задник", "вкладка" и т.д.)
+    KEY_OFFER_NOTE,                 # Ключ, для заметок о коммерческом предложении (например, "замят угол конверта" и т.д.)
+    KEY_OFFER_ALL_MEDIA,             # Ключ, для хранения информации о том, какие носители входят в оффер (например, CD+2LP)
 )
 
 logger = logging.getLogger(__name__)
@@ -414,7 +416,7 @@ class TbArticle(models.Model):
         db_index=True,
         verbose_name='Изображение для статьи',
         help_text='Обложка или иллюстрация статьи из файлового хранилища (django_filer).'
-                  ' Метаданные: image.metadata.i_img_sort и image.metadata.j_img_metadata.</br>'
+                  ' Метаданные: image.metadata.i_img_sort и image.metadata.j_img_metadata.<br/>'
                   '<b>ВАЖНО</b>: Так как статья призывается к исполнителям, лейблам, продавцам, музыкальным стилям,'
                   ' её можно использовать как логотип-пкитограмму или баннер этих сущностей. В этом случае '
                   ' рекомендуется использовать изображение с прозрачным фоном (движок поддерживает SVG, WebP и PNG).'
@@ -1151,7 +1153,7 @@ class TbOffer(models.Model):
         verbose_name='Формат',
         help_text='Форматы основного носителей (пластинка, CD, кассета и т.п.). Если несколько носителей (и разных),'
                   ' то это указывать в "Дополнительных данных" в JSON-формате. Например:'
-                  ' <tt>{"formats": {"lp": 2, "cd": 1},}</tt>',
+                  ' <tt>{"OFR_MF": {"lp": 2, "cd": 1},}</tt>',
     )
     # Связи
     k_offer_to_article = models.ForeignKey(
@@ -1179,13 +1181,15 @@ class TbOffer(models.Model):
     )
     k_offer_to_label = models.ForeignKey(
         TbLabel,
+        blank=True,
         null=True,
         default=None,
         on_delete=models.SET_NULL,
         related_name='label_to_offer',  # ← label.label_to_offers.all()
         db_index=True,  # Принудительно создаем индекс, т.к. SQLite их сам не создаст.
-        verbose_name='Лейбл',
-        help_text='Лейбл, на котором был выпущен релиз, если он известен. Например: <tt>Atlantic</tt> или <tt>Мелодия</tt>',
+        verbose_name='Лейбл/Производитель',
+        help_text='Лейбл, на котором был выпущен релиз (если известен), или производитель для аудиио-кассет и MD'
+                  ' под запись, технику или аксессуар.',
     )
     k_offer_to_source = models.ForeignKey(
         to='TbSource',
@@ -1226,7 +1230,7 @@ class TbOffer(models.Model):
         help_text='Если товар доступен только для предзаказа',
     )
     d_offer_date_release = models.DateField(
-        blank=False,
+        blank=True,
         null=True,
         default=None,
         db_index=True,
@@ -1278,9 +1282,26 @@ class TbOffer(models.Model):
     )
     j_offer_metadata = models.JSONField(
         # Метаданные оффера (сырые данные из источника, координаты в Excel и т.д.)
-        default=dict, null=True,
+        default={
+            KEY_OFFER_NOTE: '',
+            KEY_OFFER_ALL_MEDIA: [],
+        },
+        null=True,
         verbose_name='Дополнительные данные',
-        help_text='Дополнительные данные о предложении в виде JSON-словаря.',
+        help_text='Дополнительные данные о предложении в виде JSON-словаря. Например:<pre style=\"'
+                  'background-color:#80808080;border:1px solid #ccc; padding:1ex;max-width: calc(75% - 13em);\">{\n'
+                  f'  \"{KEY_OFFER_NOTE}\": \"Уценка: замят угол конверта, повреждены наклейки.\",\n'
+                  f'  \"{KEY_OFFER_ALL_MEDIA}\": '
+                  '{\n    "lp": 2,\n    "cd": 1\n  }\n}</pre>'
+                  f'Ключи:<ul>'
+                  f'  <li>\"{KEY_OFFER_NOTE}\" — Примечание к офферу</li>'
+                  f'  <li>\"{KEY_OFFER_ALL_MEDIA}\" — Какие носители входят в коммерческое предложение.<br/>'
+                  ' Допустимые значения: \"lp\" — Vinyl Long-Play (12"), \"ep\" — Vinyl Extended-Play (12\", 10\",'
+                  ' 7\"), \"45\" — Vinyl 7\" (45 rpm), \"cd\" — Compact Disc, \"ld\" — LaserDisc,'
+                  ' \"md\" — MiniDisc Record, \"ms\" — Used MiniDisc (для записи),'
+                  ' \"cs\" — Cassette Record, \"uc\" — Used Cassette (для записи),'
+                  ' \"tp\" — Tape Reel Record, \"ur\" — Used Tape Reel (для записи),'
+                  ' \"??\" — Other</li></ul>',
     )
     s_offer_skip32 = models.CharField(
         max_length=12,

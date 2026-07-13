@@ -947,13 +947,13 @@ class ArticleAdminForm(CodeMirrorFormMixin):
         label="Кавычки",
         initial=True,
         required=False,
-        help_text="Заменять кавычки</br>(«ёлочки» для русского, “лапки” для английского)&nbsp;&nbsp;&nbsp;"
+        help_text="Заменять кавычки<br/>(«ёлочки» для русского, “лапки” для английского)&nbsp;&nbsp;&nbsp;"
     )
     etp_hyphenation = forms.BooleanField(
         label="Расставлять переносы",
         initial=True,
         required=False,
-        help_text="Расставлять мягкие переносы (&amp;shy;)&nbsp;&nbsp;&nbsp;</br>"
+        help_text="Расставлять мягкие переносы (&amp;shy;)&nbsp;&nbsp;&nbsp;<br/>"
                   "в словах длиннее <b>14</b> символов&nbsp;&nbsp;&nbsp;"
     )
     etp_sanitize = forms.BooleanField(
@@ -966,7 +966,7 @@ class ArticleAdminForm(CodeMirrorFormMixin):
         label="Висячая пунктуация",
         initial=False,
         required=False,
-        help_text="Выносить пунктуацию в начало строк</br>&nbsp;&nbsp;&nbsp;"
+        help_text="Выносить пунктуацию в начало строк<br/>&nbsp;&nbsp;&nbsp;"
                   "(только для заголовков... для тизера и контента отключается автоматически)&nbsp;&nbsp;&nbsp;"
     )
     etp_mode = forms.ChoiceField(
@@ -1045,14 +1045,14 @@ class ArticleAdminForm(CodeMirrorFormMixin):
                     # ...предлагаем изменить slug
                     error_html = (
                         '<div class="confirmation-button-container">'
-                        '  <big>Ой! Кажется, вы изменили заголовок статьи!</big></br>'
-                        f' Текущий slug: <b><tt><u>{self.instance.slug}</u></tt></b></br>'
+                        '  <big>Ой! Кажется, вы изменили заголовок статьи!</big><br/>'
+                        f' Текущий slug: <b><tt><u>{self.instance.slug}</u></tt></b><br/>'
                         f' Для измененного заголовка «<tt><i><u>{cleaned_data.get('s_article_title_html')}</u></i></tt>»'
-                        f' лучше сделать slug <b><tt><u>{new_potential_slug}</u></tt></b></br></br>'
-                        '  Пожалуйста, проверьте, что это правильно. Если вы уверены — нажмите подтверждение.<br></br>'
+                        f' лучше сделать slug <b><tt><u>{new_potential_slug}</u></tt></b><br/><br/>'
+                        '  Пожалуйста, проверьте, что это правильно. Если вы уверены — нажмите подтверждение.<br><br/>'
                         '  <button type="button" onclick="markSubmitButtonsToIgnoreValidation();">'
                         '    ✓ Я ПРОВЕРИЛ И УВЕРЕН!'
-                        '  </button></br>&nbsp;'
+                        '  </button><br/>&nbsp;'
                         '</div>'
                     )
                     raise ValidationError(mark_safe(error_html))
@@ -1193,13 +1193,92 @@ class ArticleAdmin(RequestInFormMixin, admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
+# ============================================================================
+# АДМИНКА КОММЕРЧЕСКИХ ПРЕДЛОЖЕНИЙ (ОФФЕРОВ)
+#
+# Статьи очень важная сущность сайта. Через них на сайте отпределяютя URL (slag), SEO-поля и "заголовочные" картинки
+# многих сущностей (артистов, лейблов, музыкальных стилей и т.д.). Также тут опредлелентся, как на сайте  будут
+# отображаться все эти сущности сверстанными в HTML.
+
+# Кастомная форма
+class OfferAdminForm(CodeMirrorFormMixin):
+    """
+    Кастомная форма для админки коммерческих предложений (TbOffer).
+    Добавляет виджеты CodeMirror для текстовых полей
+    """
+    class Meta:
+        model = TbOffer
+        fields = (
+            's_offer',
+            'l_offer_to_format',
+            'k_offer_to_article',
+            'k_offer_to_item',
+            'k_offer_to_label',
+            'k_offer_to_source',
+            's_offer_catalog_num',
+            'b_offer_is_preorder',
+            'd_offer_date_release',
+            'i_offer_discogs_id',
+            'l_offer_condition_media',
+            'l_offer_condition_sleeve',
+            'f_offer_price',
+            'i_offer_quantity',
+            'i_offer_discount_to_daily_sale',
+            'j_offer_metadata',
+            'i_offer_views',
+            'i_offer_favorites',
+        )
+
+    def __init__(self, *args, **kwargs):
+        """
+        При инициализации формы подгружаем CodeMirror редактор.
+        Получаем request из kwargs, переданных из get_form_kwargs в AdminClass.
+        """
+        # Извлекаем request из kwargs если он есть
+        self.request = kwargs.pop('request', None)
+
+        super().__init__(*args, **kwargs)
+
+        # Конфигурируем поля для CodeMirror
+        self.setup_codemirror_field('s_offer', language='text',
+                                    css_class='codemirror-width-l codemirror-no-lines')
+        self.setup_codemirror_field('f_offer_price', language='text',
+                                    css_class='codemirror-width-s codemirror-no-lines')
+        self.setup_codemirror_field('i_offer_quantity', language='text',
+                                    css_class='codemirror-width-s codemirror-no-lines')
+        self.setup_codemirror_field('j_offer_metadata', language='json',
+                                    css_class='codemirror-width-l codemirror-min-height-5')
+        self.setup_codemirror_field('i_offer_views', language='text',
+                                    css_class='codemirror-width-s codemirror-no-lines')
+        self.setup_codemirror_field('i_offer_favorites', language='text',
+                                    css_class='codemirror-width-s codemirror-no-lines')
+        self.setup_codemirror_field('s_offer_catalog_num', language='text',
+                                    css_class='codemirror-width-m codemirror-no-lines')
+        self.setup_codemirror_field('i_offer_discogs_id', language='text',
+                                    css_class='codemirror-width-m codemirror-no-lines')
+        self.setup_codemirror_field('i_offer_discount_to_daily_sale', language='text',
+                                    css_class='codemirror-width-s codemirror-no-lines')
 
 # ============================================================================
-# Остальные ModelAdmin классы
-# Их еще предстоит обжужукать (натянуть CodeMirror, обвесить валидаторами, переопределить save_model и т.д.)
+# АДМИНКА ОФФЕРОВ (OfferAdminForm, OfferImageInlineForm, OfferAdmin)
 # ============================================================================
-class OfferAdmin(admin.ModelAdmin):
-    """Админ для предложений"""
+
+class OfferImageInlineForm(CodeMirrorFormMixin):
+    """Форма для inline картинок с CodeMirror стилями"""
+    class Meta:
+        model = TbImageMetadata
+        fields = ('image', 'i_img_sort')
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Стилизуем i_img_sort в стиле CodeMirror (как число, компактное)
+        self.setup_codemirror_field('i_img_sort', language='text',
+                                    css_class='codemirror-width-s codemirror-no-lines')
+
+class OfferAdmin(RequestInFormMixin, admin.ModelAdmin):
+    """Админ для предложений с поддержкой передачи request в форму"""
+    form = OfferAdminForm  # Используем кастомную форму с CodeMirror
+
     
     class OfferImageInline(admin.TabularInline):
         """
@@ -1208,21 +1287,69 @@ class OfferAdmin(admin.ModelAdmin):
         Позволяет добавлять, редактировать и удалять картинки через:
         - FilerImageField для красивого выбора
         - i_img_sort для сортировки
-        - j_img_metadata для метаданных
         """
         model = TbImageMetadata
+        form = OfferImageInlineForm
         fk_name = 'm_offer'
         extra = 1  # одна пустая строка для добавления новой картинки
-        fields = ('image', 'i_img_sort', 'j_img_metadata')
+        fields = ('image', 'i_img_sort')
         ordering = ('i_img_sort',)
+        verbose_name = 'Изображения и метаданные-изображений коммерческого предложения'
+        verbose_name_plural = 'Изображения и метаданные-изображений коммерческих предложений'
     
     list_display = ('id', 's_offer', 'k_offer_to_item', 'f_offer_price', 'i_offer_quantity', 'i_offer_views')
+    list_display_links = ('id', 's_offer',)
     list_filter = ('l_offer_condition_media', 'l_offer_condition_sleeve', 't_offer_created', 'l_offer_to_format')
     search_fields = ('s_offer',)
     inlines = [OfferImageInline]  # Управление картинками в inline
-    readonly_fields = ('s_offer_skip32', 't_offer_created', 't_offer_updated', 'i_offer_views', 'i_offer_favorites')
+    readonly_fields = ('s_offer_skip32', 't_offer_created', 't_offer_updated',)
+    fieldsets = (
+        ('Код товара в базе', {
+            'fields': ('s_offer_skip32',),
+        }),
+        ('Основная информация', {
+            'fields': ('k_offer_to_item', 's_offer', 'f_offer_price', 'i_offer_quantity'),
+        }),
+        ('Дата релиза и метка если доступно только по предзаказу', {
+            'fields': ('d_offer_date_release', 'b_offer_is_preorder',),
+            'classes': ('collapse',),
+        }),
+        ('Дополнительные данные', {
+            'fields': (
+                'l_offer_to_format',
+                'l_offer_condition_media',
+                'l_offer_condition_sleeve',
+                'k_offer_to_article',
+                'k_offer_to_label',
+                'k_offer_to_source',
+                's_offer_catalog_num',
+                'i_offer_discogs_id',
+
+                'i_offer_discount_to_daily_sale',
+            ),
+        }),
+        ('Метаданные коммерческого предложения', {
+            'fields': ('j_offer_metadata',),
+            'classes': ('collapse',),
+        }),
+        ('Просмотры и избранное', {
+            'fields': ('i_offer_views', 'i_offer_favorites',),
+            'classes': ('collapse',),
+        }),
+        ('Служебная информация', {
+            'fields': ('t_offer_created', 't_offer_updated'),
+            'classes': ('collapse',),
+        }),
+    )
 
 
+
+
+
+# ============================================================================
+# Остальные ModelAdmin классы
+# Их еще предстоит обжужукать (натянуть CodeMirror, обвесить валидаторами, переопределить save_model и т.д.)
+# ============================================================================
 class OfferHistoryAdmin(admin.ModelAdmin):
     """Админ для истории изменений офферов"""
     list_display = ('id', 'k_history_to_offer', 'f_history_price', 'i_history_quantity', 't_history_created')

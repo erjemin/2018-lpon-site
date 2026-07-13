@@ -330,6 +330,10 @@ VALUE_IMAGE_FROM_PARSE = 'parse'  # Картинка получена через
 KEY_IMAGE_URL = 'IMG_URL'       # Ключ для хранения URL оригинальной картинки (обычно это должен прописать парсер)
 KEY_IMAGE_NOTE = 'IMG_NOTE'     # Ключ для хранения заметки о картинке
 
+# Ключи и значения для коммерческих предложений (офферов, см. TbOffer и OfferAdmin)
+KEY_OFFER_NOTE = 'OFR_NT'       # Ключ для заметок по офферу (например, "замят угол конверта" и т.д.)
+KEY_OFFER_ALL_MEDIA = 'OFR_MF'     # Ключ для хранения информации о том, какие носители входят в оффер (например, CD+2LP)
+
 
 # ДЛЯ ВАЛИДАЦИИ (поиска похожих исполнителей, стилей и т.д. (используется в TbLabel.matching_type, TbSeller.matching_type и т.д.)
 VALIDATE_KEY__MATCH_TYPE = 'MATCH_TYPE'
