@@ -311,7 +311,7 @@ class TbImageMetadata(models.Model):
     j_img_metadata = models.JSONField(
         # Гибкие дополнительные данные об изображении с предзаполненной структурой
         # Пример: {"IMG_IS": "abstract", "IMG_FROM": "ivan", "IMG_URL": None, "IMG_NOTE": "обложка"}
-        default={
+        default=lambda: {
             KEY_IMAGE_TYPE: VALUE_IMAGE_ABSTRACT,
             KEY_IMAGE_FROM: VALUE_IMAGE_FROM_USER,
             KEY_IMAGE_URL: None,
@@ -1286,7 +1286,7 @@ class TbOffer(models.Model):
     )
     j_offer_metadata = models.JSONField(
         # Метаданные оффера (сырые данные из источника, координаты в Excel и т.д.)
-        default={
+        default=lambda: {
             KEY_OFFER_NOTE: '',
             KEY_OFFER_ALL_MEDIA: [],
         },
@@ -1393,13 +1393,13 @@ class TbOffer(models.Model):
         if latest_history is None \
                 or self.f_offer_price != latest_history.f_history_price \
                 or self.i_offer_quantity != latest_history.i_history_quantity:
-            # Нет истории для этого офера, или изменилась цена/количество → создаем новую запись в истории
+            # Нет истории для этого офера, или изменилась цена/количество -> создаем новую запись в истории
             TbOfferHistory.objects.create(
                 k_history_to_offer_id=self.pk,
                 f_history_price=self.f_offer_price,
                 i_history_quantity=self.i_offer_quantity,
-                # TODO: когда появится паерсер, нужно будет добавить запись поля j_history_metadata с информацией
-                #  откуда "прилетели" изменения (координаты ячеек в EXCEL или CSS-селектор и URL
+                # TODO: когда появится парсер, нужно будет добавить и запись поля `j_history_metadata` с информацией
+                #  откуда "прилетели" изменения (или координаты ячеек в EXCEL, или CSS-селектор и URL, или что-то ещё)
             )
 
     class Meta:
