@@ -58,7 +58,7 @@ def get_related_article_description(model_class):
             f' со&nbsp;всеми SEO-атрибутами и&nbsp;slag, но&nbsp;автоматика несовершенна.<br />&nbsp;')
 
 
-def render_image_thumbnail(image_field, size=(40, 40), title='миниатюра'):
+def render_image_thumbnail(image_field, size=(40, 40), title='img'):
     """
     Универсальный хелпер для отображения миниатюры изображения в админке.
      
@@ -69,7 +69,7 @@ def render_image_thumbnail(image_field, size=(40, 40), title='миниатюра
     Args:
         image_field: Объект изображения (FilerImageField или ImageFieldFile) или None
         size: Кортеж (ширина, высота) для миниатюры. По умолчанию (40, 40)
-        title: Описание картинки в alt атрибуте (по умолчанию 'миниатюра')
+        title: Описание картинки в alt атрибуте (по умолчанию 'img')
      
     Returns:
         str: HTML-строка с тегом img или сообщение об ошибке
@@ -97,7 +97,7 @@ def render_image_thumbnail(image_field, size=(40, 40), title='миниатюра
             # format_html автоматически экранирует опасные символы
             width, height = size
             return format_html(
-                '<img src="{}" width="{}" height="{}" alt="{}" style="object-fit: cover; "/>',
+                '<img src="{}" width="{}" height="{}" title="{}" alt="" style="object-fit: cover; "/>',
                 thumbnail.url,  # ← Параметры отдельно
                 width//2,
                 height//2,
@@ -109,7 +109,7 @@ def render_image_thumbnail(image_field, size=(40, 40), title='миниатюра
             return mark_safe('<span style="color: #ccc;">(ошибка)</span>')
 
     # Если картинка не привязана
-    return mark_safe('<img width="20" height="20" alt="" style="background-color: #90909060;"/>')
+    return mark_safe('<img width="20" height="20" title="Нет изображения" alt="" style="background: #90909060;"/>')
 
 
 
@@ -337,7 +337,7 @@ class ImageMetadataAdmin(admin.ModelAdmin):
         Отображает миниатюру картинки (40x40) в списке и в list_display_links.
         Использует universal helper render_image_thumbnail().
         """
-        return render_image_thumbnail(obj.image if obj else None, size=(40, 40), title='картинка')
+        return render_image_thumbnail(obj.image if obj else None, title='картинка')
 
     # Установляем название столбца в админке
     image_thumbnail.short_description = 'img 40x40'
@@ -1151,7 +1151,7 @@ class ArticleAdmin(RequestInFormMixin, admin.ModelAdmin):
         Отображает миниатюру изображения статьи (40x40) в списке.
         Использует universal helper render_image_thumbnail().
         """
-        return render_image_thumbnail(obj.k_article_to_image if obj else None, size=(40, 40), title='статья')
+        return render_image_thumbnail(obj.k_article_to_image if obj else None, title='обложка')
 
     article_thumbnail.short_description = 'img'
 
@@ -1327,12 +1327,24 @@ class OfferAdmin(RequestInFormMixin, admin.ModelAdmin):
         verbose_name = 'Изображения и метаданные-изображений коммерческого предложения'
         verbose_name_plural = 'Изображения и метаданные-изображений коммерческих предложений'
     
-    list_display = ('id', 's_offer', 'k_offer_to_item', 'f_offer_price', 'i_offer_quantity', 'i_offer_views')
-    list_display_links = ('id', 's_offer',)
+    list_display = ('id', 'offer_thumbnail', 's_offer', 'k_offer_to_item', 'f_offer_price', 'i_offer_quantity', 'i_offer_views')
+    list_display_links = ('id', 'offer_thumbnail', 's_offer',)
     list_filter = ('l_offer_condition_media', 'l_offer_condition_sleeve', 't_offer_created', 'l_offer_to_format')
     search_fields = ('s_offer',)
     inlines = [OfferImageInline]  # Управление картинками в inline
     readonly_fields = ('s_offer_code', 't_offer_created', 't_offer_updated',)
+    
+    def offer_thumbnail(self, obj):
+        """
+        Отображает миниатюру первой картинки оффера (по i_img_sort) в списке.
+        Использует universal helper render_image_thumbnail().
+        """
+        first_meta = obj.m_image.first()
+        image = first_meta.image if first_meta else None
+        return render_image_thumbnail(image, title='Первая картинка оффера')
+    
+    offer_thumbnail.short_description = '1\'st img'
+    
     fieldsets = (
         ('Код товара в базе', {
             'fields': ('s_offer_code',),
