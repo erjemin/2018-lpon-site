@@ -246,6 +246,7 @@ import logging
 from hashids import Hashids
 from django.db import models
 from django.db.models import F
+from django.utils import timezone
 from filer.fields.image import FilerImageField
 from filer.fields.file import FilerFileField
 from frontend.utils import make_slug, update_synonyms_in_metadata, create_or_get_related_article
@@ -1549,10 +1550,12 @@ class TbOfferHistory(models.Model):
                   ' или URL + CSS-селектор для HTML-страницы и т.п.',
     )
     t_history_created = models.DateTimeField(
-        auto_now_add=True,
-        db_index=True,
-        editable=False,
-        verbose_name="Дата создания",)
+       default=timezone.now,
+       db_index=True,
+       verbose_name="Дата создания",
+       help_text="Дата создания записи истории. Автоматически устанавливается на текущее время при создании, "
+                 "но может быть отредактирована для загрузки исторических данных из Excel-файлов.",
+    )
     # Нам не нужен `t_history_updated` потому что это "снимок состояния" и его не нужно менять
     # после создания. И если вдруг понадобится, то правильнее будет добавить новую запись.
 

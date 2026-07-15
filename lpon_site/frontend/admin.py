@@ -1209,23 +1209,10 @@ class OfferAdminForm(CodeMirrorFormMixin):
     class Meta:
         model = TbOffer
         fields = (
-            's_offer',
-            'l_offer_to_format',
-            'k_offer_to_article',
-            'k_offer_to_item',
-            'k_offer_to_label',
-            'k_offer_to_source',
-            's_offer_catalog_num',
-            'b_offer_is_preorder',
-            'd_offer_date_release',
-            'i_offer_discogs_id',
-            'l_offer_condition_media',
-            'l_offer_condition_sleeve',
-            'f_offer_price',
-            'i_offer_quantity',
-            'i_offer_discount_to_daily_sale',
-            'j_offer_metadata',
-            'i_offer_views',
+            's_offer', 'l_offer_to_format', 'k_offer_to_article', 'k_offer_to_item', 'k_offer_to_label',
+            'k_offer_to_source', 's_offer_catalog_num', 'b_offer_is_preorder', 'd_offer_date_release',
+            'i_offer_discogs_id', 'l_offer_condition_media', 'l_offer_condition_sleeve', 'f_offer_price',
+            'i_offer_quantity', 'i_offer_discount_to_daily_sale', 'j_offer_metadata', 'i_offer_views',
             'i_offer_favorites',
         )
 
@@ -1306,6 +1293,8 @@ class OfferAdmin(RequestInFormMixin, admin.ModelAdmin):
     fieldsets = (
         ('Код товара в базе', {
             'fields': ('s_offer_skip32',),
+            'description': 'Уникальный код товара в базе. Используется вместо ID для генерации ссылок на оффер'
+                           ' и складского учёта с помощью QR-кодов. Не редактируется вручную.',
         }),
         ('Основная информация', {
             'fields': ('k_offer_to_item', 's_offer', 'f_offer_price', 'i_offer_quantity'),
@@ -1316,21 +1305,16 @@ class OfferAdmin(RequestInFormMixin, admin.ModelAdmin):
         }),
         ('Дополнительные данные', {
             'fields': (
-                'l_offer_to_format',
-                'l_offer_condition_media',
-                'l_offer_condition_sleeve',
-                'k_offer_to_article',
-                'k_offer_to_label',
-                'k_offer_to_source',
-                's_offer_catalog_num',
-                'i_offer_discogs_id',
-
+                'l_offer_to_format', 'l_offer_condition_media', 'l_offer_condition_sleeve', 'k_offer_to_article',
+                'k_offer_to_label', 'k_offer_to_source', 's_offer_catalog_num', 'i_offer_discogs_id',
                 'i_offer_discount_to_daily_sale',
             ),
         }),
         ('Метаданные коммерческого предложения', {
             'fields': ('j_offer_metadata',),
             'classes': ('collapse',),
+            'description': 'Метаданные коммерческого предложения в формате JSON. '
+                           'Используется для хранения дополнительных данных, которые не входят в основные поля модели.',
         }),
         ('Просмотры и избранное', {
             'fields': ('i_offer_views', 'i_offer_favorites',),
@@ -1347,14 +1331,51 @@ class OfferAdmin(RequestInFormMixin, admin.ModelAdmin):
 
 
 # ============================================================================
-# Остальные ModelAdmin классы
-# Их еще предстоит обжужукать (натянуть CodeMirror, обвесить валидаторами, переопределить save_model и т.д.)
-# ============================================================================
+# АДМИНКА ИСТОРИИ ИЗМЕНЕНИЙ ОФФЕРОВ (история цен и остатков коммерческих предложений)
+#
+# Кастомная форма
+class OfferHistoryAdminForm(CodeMirrorFormMixin):
+    """
+    Кастомная форма для админки коммерческих предложений (TbOffer).
+    Добавляет виджеты CodeMirror для текстовых полей
+    """
+    class Meta:
+        model = TbOfferHistory
+        fields = ('k_history_to_offer','f_history_price', 'i_history_quantity', 'j_history_metadata',
+                  't_history_created')
+
+    def __init__(self, *args, **kwargs):
+        """
+        При инициализации формы подгружаем CodeMirror редактор.
+        """
+        super().__init__(*args, **kwargs)
+
+        # Конфигурируем поля для CodeMirror
+        self.setup_codemirror_field('f_history_price', language='text',
+                                    css_class='codemirror-width-s codemirror-no-lines')
+        self.setup_codemirror_field('i_history_quantity', language='text',
+                                    css_class='codemirror-width-s codemirror-no-lines')
+        self.setup_codemirror_field('j_history_metadata', language='json',
+                                    css_class='codemirror-width-l codemirror-min-height-5')
+
 class OfferHistoryAdmin(admin.ModelAdmin):
     """Админ для истории изменений офферов"""
+    form = OfferHistoryAdminForm  # Используем кастомную форму с CodeMirror
     list_display = ('id', 'k_history_to_offer', 'f_history_price', 'i_history_quantity', 't_history_created')
+    list_display_links = ('id', 'k_history_to_offer',)
     list_filter = ('t_history_created',)
-    readonly_fields = ('t_history_created',)
+    fieldsets = (
+        ('Основная информация', {
+            'fields': ('k_history_to_offer', 'f_history_price', 'i_history_quantity', ),
+        }),
+        ('Метаданные истории изменений', {
+            'fields': ('j_history_metadata',),
+        }),
+        ('Служебная информация (но редактируемое, для загрузки исторических данных)', {
+            'fields': ('t_history_created',),
+            'classes': ('collapse',),
+        }),
+    )
 
 
 # ============================================================================
