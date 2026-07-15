@@ -48,7 +48,7 @@ ALLOWED_HOSTS = env.list(
 
 CSRF_TRUSTED_ORIGINS = env.list('DJANGO_CSRF_TRUSTED_ORIGINS', default=['127.0.0.1', 'localhost', 'testserver'])
 
-# ====== HASHIDS настройка для s_offer_skip32 ======
+# ====== HASHIDS настройка для s_offer_code ======
 # Криптографическое кодирование ID оферов в компактные, необратимые коды.
 # Благодаря hashids невозможно восстановить исходный ID из кода,
 # даже зная алгоритм (в отличие от простого XOR).

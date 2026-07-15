@@ -148,7 +148,7 @@
 #                │ f_offer_price                  │  Цена [indexed для сортировки]
 #                │ i_offer_quantity               │  Количество в наличии [indexed]
 #                │ i_offer_discount_to_daily_sale │  % скидка [indexed для фильтров]
-#                │ s_offer_skip32                 │  Хеш для корзины (unique)
+#                │ s_offer_code                 │  Хеш для корзины (unique)
 #                │ i_offer_views                  │  Счетчик просмотров
 #                │ i_offer_favorites              │  Счетчик в избранном
 #                │ t_offer_created                │  Timestamp
@@ -268,6 +268,34 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
+# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ DEFAULTS В МОДЕЛЯХ
+# ============================================================================
+
+def get_image_metadata_default():
+    """
+    Возвращает значение по умолчанию для j_img_metadata.
+    Используется как callable default в Django моделях (Django не может сериализовать lambda).
+    """
+    return {
+        KEY_IMAGE_TYPE: VALUE_IMAGE_ABSTRACT,
+        KEY_IMAGE_FROM: VALUE_IMAGE_FROM_USER,
+        KEY_IMAGE_URL: None,
+        KEY_IMAGE_NOTE: '???',
+    }
+
+
+def get_offer_metadata_default():
+    """
+    Возвращает значение по умолчанию для j_offer_metadata.
+    Используется как callable default в Django моделях (Django не может сериализовать lambda).
+    """
+    return {
+        KEY_OFFER_NOTE: '',
+        KEY_OFFER_ALL_MEDIA: [],
+    }
+
+
+# ============================================================================
 # МЕТАДАННЫЕ ИЗОБРАЖЕНИЙ
 # ============================================================================
 class TbImageMetadata(models.Model):
@@ -312,12 +340,7 @@ class TbImageMetadata(models.Model):
     j_img_metadata = models.JSONField(
         # Гибкие дополнительные данные об изображении с предзаполненной структурой
         # Пример: {"IMG_IS": "abstract", "IMG_FROM": "ivan", "IMG_URL": None, "IMG_NOTE": "обложка"}
-        default=lambda: {
-            KEY_IMAGE_TYPE: VALUE_IMAGE_ABSTRACT,
-            KEY_IMAGE_FROM: VALUE_IMAGE_FROM_USER,
-            KEY_IMAGE_URL: None,
-            KEY_IMAGE_NOTE: '???',   # Автогенерация через парсер или админку
-        },
+        default=get_image_metadata_default,
         blank=True,
         null=False,  # Изменено с True на False т.к. теперь всегда есть структура default
         verbose_name='Метаданные',
@@ -1287,10 +1310,7 @@ class TbOffer(models.Model):
     )
     j_offer_metadata = models.JSONField(
         # Метаданные оффера (сырые данные из источника, координаты в Excel и т.д.)
-        default=lambda: {
-            KEY_OFFER_NOTE: '',
-            KEY_OFFER_ALL_MEDIA: [],
-        },
+        default=get_offer_metadata_default,
         null=True,
         verbose_name='Дополнительные данные',
         help_text='Дополнительные данные о предложении в виде JSON-словаря. Например:<pre style=\"'
@@ -1308,13 +1328,13 @@ class TbOffer(models.Model):
                   ' \"tp\" — Tape Reel Record, \"ur\" — Used Tape Reel (для записи),'
                   ' \"??\" — Other</li></ul>',
     )
-    s_offer_skip32 = models.CharField(
+    s_offer_code = models.CharField(
         max_length=12,
         unique=True,
         verbose_name='Код товара',
         help_text='Уникальный код товара для идентификации в корзине и при заказе (чтобы не светить id).'
-                  ' Например: "4gfFCJ". Формируется автоматически связкой Skip32 (хаотичное перемешивание) и'
-                  ' Base62 (компактная упаковка) из id оффера в методе save().',
+                  ' Например: "4gfFCJ". Формируется автоматически через Hashids на основе ID оффера.'
+                  ' <b>Не редактировать вручную!</b>',
     )
     i_offer_views = models.IntegerField(
         default=0,
@@ -1332,7 +1352,7 @@ class TbOffer(models.Model):
     def __str__(self):
         seller = self.k_offer_to_source.k_source_to_seller.s_seller if (self.k_offer_to_source
                                                               and self.k_offer_to_source.k_source_to_seller) else "?"
-        return (f"[{self.s_offer_skip32:0>6}]\u00A0«{self.s_offer}»"
+        return (f"[{self.s_offer_code:0>6}]\u00A0«{self.s_offer}»"
                 f" ⟶\u00A0item\u00A0«{self.k_offer_to_item_id}»"
                 f" ⟶\u00A0seller\u00A0«{seller}»")
 
@@ -1351,10 +1371,10 @@ class TbOffer(models.Model):
     def save(self, *args, **kwargs):
         """
         Переопределенный метод save для:
-        1. Автоматического формирования s_offer_skip32 (криптографический код)
+        1. Автоматического формирования s_offer_code (криптографический код)
         2. Записи истории изменений цены и количества в TbOfferHistory
         
-        ЛОГИКА s_offer_skip32:
+        ЛОГИКА s_offer_code:
         - Для новых оферов: генерируем код после получения ID
         - Для старых оферов БЕЗ кода: кодируем существующий ID (миграция)
         - Для старых оферов С кодом: не трогаем
@@ -1364,25 +1384,25 @@ class TbOffer(models.Model):
         - При обновлении: если цена или количество изменилось → создаем новую запись
         - Это позволяет отследить полную историю изменений
         """
-        # 1. Проверяем нужно ли генерировать s_offer_skip32:
+        # 1. Проверяем нужно ли генерировать s_offer_code:
         # - ИЛИ это новый объект (self.pk == None)
-        # - ИЛИ это старый объект без s_offer_skip32 (миграция)
-        if not self.pk or not self.s_offer_skip32:
+        # - ИЛИ это старый объект без s_offer_code (миграция)
+        if not self.pk or not self.s_offer_code:
             # Если это новый оффер, сначала сохраняем, чтобы получить ID
             if not self.pk:
-                # Сохраняем БЕЗ s_offer_skip32 чтобы Django создал запись и присвоил pk
+                # Сохраняем БЕЗ s_offer_code чтобы Django создал запись и присвоил pk
                 super().save(*args, **kwargs)
                 # После save() Django автоматически заполнит self.pk
 
             # Кодируем pk в компактный, необратимый код
             # Пример: pk=42 → "QBErd8"
-            self.s_offer_skip32 = Hashids(salt=OFFER_HASHIDS_SALT, min_length=OFFER_HASHIDS_MIN_LENGTH).encode(self.pk)
+            self.s_offer_code = Hashids(salt=OFFER_HASHIDS_SALT, min_length=OFFER_HASHIDS_MIN_LENGTH).encode(self.pk)
 
-            # Сохраняем только поле s_offer_skip32 (не перезаписываем остальное)
-            super().save(update_fields=['s_offer_skip32'])
+            # Сохраняем только поле s_offer_code (не перезаписываем остальное)
+            super().save(update_fields=['s_offer_code'])
         else:
-            # Оффер существует И уже имеет s_offer_skip32: сохраняем как обычно
-            # Не трогаем s_offer_skip32, он был сформирован при создании
+            # Оффер существует И уже имеет s_offer_code: сохраняем как обычно
+            # Не трогаем s_offer_code, он был сформирован при создании
             super().save(*args, **kwargs)
 
         # 2. Записывает историю изменений цены и количества в TbOfferHistory.

@@ -1289,10 +1289,10 @@ class OfferAdmin(RequestInFormMixin, admin.ModelAdmin):
     list_filter = ('l_offer_condition_media', 'l_offer_condition_sleeve', 't_offer_created', 'l_offer_to_format')
     search_fields = ('s_offer',)
     inlines = [OfferImageInline]  # Управление картинками в inline
-    readonly_fields = ('s_offer_skip32', 't_offer_created', 't_offer_updated',)
+    readonly_fields = ('s_offer_code', 't_offer_created', 't_offer_updated',)
     fieldsets = (
         ('Код товара в базе', {
-            'fields': ('s_offer_skip32',),
+            'fields': ('s_offer_code',),
             'description': 'Уникальный код товара в базе. Используется вместо ID для генерации ссылок на оффер'
                            ' и складского учёта с помощью QR-кодов. Не редактируется вручную.',
         }),
