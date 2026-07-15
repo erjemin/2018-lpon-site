@@ -483,8 +483,8 @@ class MusicStyleAdmin(RequestInFormMixin, admin.ModelAdmin):
     # Media наследуется автоматически из CodeMirrorFormMixin
     # ...(no custom Media needed)
 
-    list_display = ('id', 's_style_name', 'j_style_metadata', 't_style_created', 't_style_updated',)
-    list_display_links = ('id', 's_style_name',)
+    list_display = ('id', 'style_thumbnail', 's_style_name', 'j_style_metadata', 't_style_created', 't_style_updated',)
+    list_display_links = ('id', 'style_thumbnail', 's_style_name',)
     search_fields = ('s_style_name', 'j_style_metadata',)
     readonly_fields = ('t_style_created', 't_style_updated',)
 
@@ -509,6 +509,14 @@ class MusicStyleAdmin(RequestInFormMixin, admin.ModelAdmin):
     class Media(MusicStyleAdminForm.Media):
         css = {'all': (*MusicStyleAdminForm.Media.css['all'], 'css/validation-override.css',)}
         js = (*MusicStyleAdminForm.Media.js, 'js/form-field-watcher.js',)
+
+    def style_thumbnail(self, obj):
+        """Миниатюра стиля через связанную статью."""
+        article = obj.k_style_to_article
+        image = article.k_article_to_image if article else None
+        return render_image_thumbnail(image, title='Логотип музыкального стиля')
+
+    style_thumbnail.short_description = 'Лого'
 
     def save_model(
        self,
@@ -602,8 +610,8 @@ class ArtistAdmin(RequestInFormMixin, admin.ModelAdmin):
     """Админ для артистов"""
     form = ArtistAdminForm  # Используем кастомную форму с CodeMirror
 
-    list_display = ('id', 's_artist', 't_artist_created')
-    list_display_links = ('id', 's_artist',)
+    list_display = ('id', 'artist_thumbnail', 's_artist', 't_artist_created')
+    list_display_links = ('id', 'artist_thumbnail', 's_artist',)
     search_fields = ('s_artist',)
     readonly_fields = ('t_artist_created', 't_artist_updated')
     fieldsets = (
@@ -627,6 +635,17 @@ class ArtistAdmin(RequestInFormMixin, admin.ModelAdmin):
     class Media(ArtistAdminForm.Media):
         css = {'all': (*ArtistAdminForm.Media.css['all'], 'css/validation-override.css', )}
         js = (*ArtistAdminForm.Media.js, 'js/form-field-watcher.js', )
+
+    def artist_thumbnail(self, obj):
+        """
+        Отображает миниатюру изображения артиста через связанную статью в списке.
+        Использует universal helper render_image_thumbnail().
+        """
+        article = obj.k_artist_to_article
+        image = article.k_article_to_image if article else None
+        return render_image_thumbnail(image, title='Фото или логотип исполнителя')
+
+    artist_thumbnail.short_description = 'Лого'
 
     def save_model(
         self,
@@ -722,8 +741,8 @@ class LabelAdmin(RequestInFormMixin, admin.ModelAdmin):
     """Админ для лейблов с поддержкой передачи request в форму"""
     form = LabelAdminForm  # Используем кастомную форму с CodeMirror
 
-    list_display = ('id', 's_label', 't_label_created')
-    list_display_links = ('id', 's_label',)
+    list_display = ('id', 'label_thumbnail', 's_label', 't_label_created')
+    list_display_links = ('id', 'label_thumbnail', 's_label',)
     search_fields = ('s_label',)
     readonly_fields = ('t_label_created', 't_label_updated')
 
@@ -748,6 +767,14 @@ class LabelAdmin(RequestInFormMixin, admin.ModelAdmin):
     class Media(LabelAdminForm.Media):
         css = {'all': (*LabelAdminForm.Media.css['all'], 'css/validation-override.css', )}
         js = (*LabelAdminForm.Media.js, 'js/form-field-watcher.js', )
+
+    def label_thumbnail(self, obj):
+        """Миниатюра лейбла через связанную статью."""
+        article = obj.k_label_to_article
+        image = article.k_article_to_image if article else None
+        return render_image_thumbnail(image, title='Логотип лейбла/издателя/производителя')
+
+    label_thumbnail.short_description = 'Лого'
 
     def save_model(
         self,
@@ -811,8 +838,8 @@ class SellerAdmin(admin.ModelAdmin):
     """Админ для продавцов"""
     form = SellerAdminForm  # Используем кастомную форму с CodeMirror
 
-    list_display = ('id', 's_seller', 'l_seller_type', 'l_seller_currency', 't_seller_created',)
-    list_display_links = ('id', 's_seller',)
+    list_display = ('id', 'seller_thumbnail', 's_seller', 'l_seller_type', 'l_seller_currency', 't_seller_created',)
+    list_display_links = ('id', 'seller_thumbnail', 's_seller',)
     list_filter = ('l_seller_type', 'l_seller_currency',)
     search_fields = ('s_seller',)
     readonly_fields = ('t_seller_created', 't_seller_updated',)
@@ -831,6 +858,14 @@ class SellerAdmin(admin.ModelAdmin):
             'classes': ('collapse',),
         }),
     )
+
+    def seller_thumbnail(self, obj):
+        """Миниатюра продавца через связанную статью."""
+        article = obj.k_seller_to_article
+        image = article.k_article_to_image if article else None
+        return render_image_thumbnail(image, title='Логотип продавца')
+
+    seller_thumbnail.short_description = 'Лого'
 
     # ВАЖНО. Так как продавцам не нужны синонимы, то CSS и JS для админки обогащать не нужно.
     def save_model(
@@ -943,12 +978,20 @@ class ItemAdmin(RequestInFormMixin, admin.ModelAdmin):
     """Админ для товаров"""
     form = ItemAdminForm  # Используем кастомную форму с CodeMirror
 
-    list_display = ('id', 's_item', 't_item_date', 't_item_created')
-    list_display_links = ('id', 's_item',)
+    list_display = ('id', 'item_thumbnail', 's_item', 't_item_date', 't_item_created')
+    list_display_links = ('id', 'item_thumbnail', 's_item',)
     list_filter = ('t_item_date', 't_item_created')
     search_fields = ('s_item',)
     filter_horizontal = ('k_item_to_artist', 'k_item_to_style')
     readonly_fields = ('t_item_created', 't_item_updated')
+
+    def item_thumbnail(self, obj):
+        """Миниатюра товара через связанную статью."""
+        article = obj.k_item_to_article
+        image = article.k_article_to_image if article else None
+        return render_image_thumbnail(image, title='Обложка товара')
+
+    item_thumbnail.short_description = 'Обложка'
 
 
 # ============================================================================
@@ -1151,7 +1194,7 @@ class ArticleAdmin(RequestInFormMixin, admin.ModelAdmin):
         Отображает миниатюру изображения статьи (40x40) в списке.
         Использует universal helper render_image_thumbnail().
         """
-        return render_image_thumbnail(obj.k_article_to_image if obj else None, title='обложка')
+        return render_image_thumbnail(obj.k_article_to_image if obj else None, title='Обложка')
 
     article_thumbnail.short_description = 'img'
 
