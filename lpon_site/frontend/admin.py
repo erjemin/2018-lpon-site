@@ -2,11 +2,13 @@
 # Регистрируем модели с удобным интерфейсом.
 
 import etpgrf
+import logging
 from typing import Any
 from django import forms
 from django.forms import Textarea
 from django.http import HttpRequest
 from django.contrib import admin
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils.html import format_html, mark_safe
 from easy_thumbnails.files import get_thumbnailer
@@ -16,6 +18,8 @@ from .models import (
 )
 from .utils_validators import validate_entity_for_admin_form, generate_admin_save_message
 from .utils import make_slug
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -52,6 +56,61 @@ def get_related_article_description(model_class):
             f' И&nbsp;ПРИВЯЗЫВАТЬ СТАТЬЮ ВРУЧНУЮ</b>. Если публикация не&nbsp;создана вручную,'
             f' то&nbsp;она будет создана автоматически (пустая) при&nbsp;сохранении <u>{verbose_name}</u>,'
             f' со&nbsp;всеми SEO-атрибутами и&nbsp;slag, но&nbsp;автоматика несовершенна.<br />&nbsp;')
+
+
+def render_image_thumbnail(image_field, size=(40, 40), title='миниатюра'):
+    """
+    Универсальный хелпер для отображения миниатюры изображения в админке.
+     
+    Используется в ModelAdmin.list_display для показа превью картинок.
+    Использует easy_thumbnails для автоматического создания и кэширования миниатюр.
+    Параметры качества и формата берутся из settings (THUMBNAIL_FORMAT, THUMBNAIL_QUALITY).
+     
+    Args:
+        image_field: Объект изображения (FilerImageField или ImageFieldFile) или None
+        size: Кортеж (ширина, высота) для миниатюры. По умолчанию (40, 40)
+        title: Описание картинки в alt атрибуте (по умолчанию 'миниатюра')
+     
+    Returns:
+        str: HTML-строка с тегом img или сообщение об ошибке
+     
+    Примеры:
+        # В методе ModelAdmin:
+        def image_thumbnail(self, obj):
+            return render_image_thumbnail(obj.image, size=(40, 40), title='Изображение')
+    """
+    if image_field:
+        try:
+            # Получаем thumbnailer для картинки через easy_thumbnails
+            thumbnailer = get_thumbnailer(image_field.file)
+
+            # Генерируем или получаем уже созданную миниатюру
+            # Параметры берутся из django.conf.settings (THUMBNAIL_FORMAT, THUMBNAIL_QUALITY)
+            # Это гарантирует единообразие со всеми остальными миниатюрами в проекте
+            thumbnail = thumbnailer.get_thumbnail({
+                'size': size,                                              # Размер миниатюры
+                'crop': 'smart',                                           # Умное обрезание для сохранения центра
+                'quality': getattr(settings, 'THUMBNAIL_QUALITY', 80),     # Качество из settings (по умолчанию 80)
+            })
+
+            # Возвращаем HTML тег img с миниатюрой
+            # format_html автоматически экранирует опасные символы
+            width, height = size
+            return format_html(
+                '<img src="{}" width="{}" height="{}" alt="{}" style="object-fit: cover; "/>',
+                thumbnail.url,  # ← Параметры отдельно
+                width//2,
+                height//2,
+                image_field.name or title
+            )
+        except Exception as e:
+            # Если ошибка при генерации миниатюры (нет файла, ошибка формата и т.д.)
+            logger.exception(f"Ошибка при генерации миниатюры изображения: {e}")
+            return mark_safe('<span style="color: #ccc;">(ошибка)</span>')
+
+    # Если картинка не привязана
+    return mark_safe('<img width="20" height="20" alt="" style="background-color: #90909060;"/>')
+
 
 
 # ============================================================================
@@ -276,37 +335,12 @@ class ImageMetadataAdmin(admin.ModelAdmin):
     def image_thumbnail(self, obj):
         """
         Отображает миниатюру картинки (40x40) в списке и в list_display_links.
-        Использует easy_thumbnails для автоматического создания и кэширования миниатюр.
+        Использует universal helper render_image_thumbnail().
         """
-        if obj and obj.image:
-            try:
-                # Получаем thumbnailer для картинки через easy_thumbnails
-                thumbnailer = get_thumbnailer(obj.image.file)
-
-                # Генерируем или получаем уже созданную миниатюру размером 40x40
-                thumbnail = thumbnailer.get_thumbnail({
-                    'size': (40, 40),            # Размер миниатюры: 40x40 пикселей
-                    'crop': 'smart',             # Умное обрезание для сохранения центра картинки
-                    'quality': 95,               # Качество JPEG/WebP (95% для хорошего вида)
-                })
-
-                # Возвращаем HTML тег img с миниатюрой
-                # format_html автоматически экранирует опасные символы
-                return format_html(
-                    '<img src="{}" width="40" height="40" alt="{}" '
-                    'style="border-radius: 4px; object-fit: cover; cursor: pointer;"/>',
-                    thumbnail.url,
-                    obj.image.name or 'картинка'  # Alt текст для доступности
-                )
-            except Exception as e:
-                # Если ошибка при генерации миниатюры (нет файла, ошибка формата и т.д.)
-                return mark_safe('<span style="color: #ccc;">(ошибка)</span>')
-
-        # Если картинка не привязана
-        return mark_safe('<span style="color: #ccc;">(нет картинки)</span>')
+        return render_image_thumbnail(obj.image if obj else None, size=(40, 40), title='картинка')
 
     # Установляем название столбца в админке
-    image_thumbnail.short_description = 'Миниатюра (40x40)'
+    image_thumbnail.short_description = 'img 40x40'
 
     def _display_alt_text(self, obj):
         """
@@ -1063,8 +1097,8 @@ class ArticleAdmin(RequestInFormMixin, admin.ModelAdmin):
     """Админ для статей с поддержкой передачи request в форму"""
     form = ArticleAdminForm  # Используем кастомную форму с CodeMirror
 
-    list_display = ('id', 's_article_title', 'l_article_type', 'b_article_published', 't_article_created')
-    list_display_links = ('id', 's_article_title',)
+    list_display = ('id', 'article_thumbnail', 's_article_title', 'l_article_type', 'b_article_published', 't_article_created')
+    list_display_links = ('id', 'article_thumbnail', 's_article_title',)
     list_filter = ('l_article_type', 'b_article_published', 't_article_created')
     search_fields = ('s_article_title', 'slug')
     prepopulated_fields = {'slug': ('s_article_title',)}
@@ -1111,6 +1145,15 @@ class ArticleAdmin(RequestInFormMixin, admin.ModelAdmin):
     class Media(ArticleAdminForm.Media):
         css = {'all': (*ArticleAdminForm.Media.css['all'], 'css/validation-override.css', )}
         js = (*ArticleAdminForm.Media.js, 'js/form-field-watcher.js', )
+
+    def article_thumbnail(self, obj):
+        """
+        Отображает миниатюру изображения статьи (40x40) в списке.
+        Использует universal helper render_image_thumbnail().
+        """
+        return render_image_thumbnail(obj.k_article_to_image if obj else None, size=(40, 40), title='статья')
+
+    article_thumbnail.short_description = 'img'
 
     def save_model(self, request, obj, form, change):
         """
