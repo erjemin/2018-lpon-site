@@ -1,236 +1,158 @@
 # LPON Store — Django E-Commerce Database Schema (SQLite optimized)
 # 
-# ╔════════════════════════════════════════════════════════════════════════════╗
-# ║                    ER-ДИАГРАММА СХЕМЫ БД (v1.0)                            ║
-# ╚════════════════════════════════════════════════════════════════════════════╝
+# ER-ДИАГРАММА СХЕМЫ БД (v2.0 - переделана правильно!)
 # 
 # Легенда:
-#   Ключи:
-#     PK = Primary Key (первичный ключ)
-#     FK = Foreign Key (внешний ключ)
-#     M2M = Many-to-Many (ключ многие-ко-многим)
-#   Связи:
-#     1:1 = OneToOne связь
-#     1:M = One-to-Many связь
-#     M:M = Many-to-Many связь
+#   PK = Primary Key        FK = Foreign Key        M2M = Many-to-Many
+#   1:1 = OneToOne связь    1:M = One-to-Many      M:M = Many-to-Many
 #
+# ВАЖНО: Диаграмма разделена по логическим секциям, см. ниже!
 #
-#  ##════════════════════════════════════════════════════════════════════════════##
-#                         МЕДИА И СПРАВОЧНИКИ
-#  ##════════════════════════════════════════════════════════════════════════════##
+# ════════════════════════════════════════════════════════════════════════════════
+# ЦЕНТР СХЕМЫ: СТАТЬИ (TbArticle) — ИНДЕКСНАЯ ТАБЛИЦА ДЛЯ ВСЕХ СПРАВОЧНИКОВ
+# ════════════════════════════════════════════════════════════════════════════════
 #
-# ┌─────────────────────┐
-# │   TbImage           │  Базовые изображения (обложки, фото и т.д.)
-# ├─────────────────────┼─────────────────────────────────────────────────────
-# │ PK: id              │  AutoField
-# │ image               │  FilerImageField
-# │ l_img_source        │  Источник (parser, manual, vendor, other)
-# │ l_img_reality       │  Тип (real, abstract)
-# │ i_img_sort          │  Порядок отображения
-# │ f_img_confidence_   │  Доверие данным (0-1)
-# │ t_img_created       │  Timestamp
-# │ t_img_updated       │  Timestamp
-# │                     │  ⬆ Индекс на: id (+), i_img_sort
-# └─────────────────────┘
-#         △
-#         │ M:M TbOffer.k_offer_to_image
-#         │ [промежуточная таблица: offer_id, image_id]
-#         │
-#         ├────┬───────────────────────────────────────────────────────────────────┐
-#         │    │
-#         │    ▼
-#         │  ┌──────────────────────┐
-#         │  │ TbArticle            │  Текстовый контент (статьи, SEO, теги)
-#         │  ├──────────────────────┼──────────────────────────────────────────────────
-#         │  │ PK: id               │  AutoField
-#         │  │ s_article_title      │  Технический заголовок
-#         │  │ l_article_type       │  Тип (artist, item, offer, seller, blog...)
-#         │  │ b_article_published  │  Опубликовано (bool)
-#         │  │ s_article_title_html │  HTML-заголовок
-#         │  │ k_article_to_image   │  FK → TbImage (обложка статьи)
-#         │  │ k_article_to_styles  │  M2M → TbMusicStyle (теги стилей)
-#         │  │ i_article_views      │  Счетчик просмотров
-#         │  │ i_article_favorites  │  Счетчик в избранном
-#         │  │ slug                 │  URL-идентификатор (уникальный)
-#         │  │ seo_title,           │  SEO метаданные
-#         │  │ seo_description      │
-#         │  │ t_article_created    │  Timestamps
-#         │  │ t_article_updated    │  Timestamps
-#         │  │                      │  ⬆ Индексы: id (+), l_article_type, b_article_published, slug,
-#         │  │                      │   k_article_to_image, (type, published, created)
-#         │  └──────────────────────┘
-#         │         △
-#         │         │ 1:1 (OneToOne обратные связи)
-#         │         │
-#         │     ┌───┴─────────┬────────────┬──────────────┐
-#         │     │             │            │              │
-#         │     ▼             ▼            ▼              ▼
-#         │  ┌─────────┐    ┌───────┐    ┌─────────┐    ┌──────────┐
-#         │  │TbArtist │    │TbItem │    │TbLabel  │    │TbSeller  │
-#         │  ├─────────┤    ├───────┤    ├─────────┤    ├──────────┤
-#         │  │PK: id   │    │PK: id │    │ PK: id  │    │ PK: id   │
-#         │  │s_artist │    │s_item │    │ s_label │    │ s_seller │
-#         │  └─────────┘    └───────┘    └─────────┘    └──────────┘
-#         │      ▲
-#         │      │ M:M TbItem.k_item_to_artist
-#         │      │ (для поддержки коллабораций)
-#         │      │
-#         └──────┘
+# TbArticle — главная таблица для всех текстовых описаний, SEO, контента:
+#   - Соединитель для Artist, Item, Label, Seller, Style (все 1:1 в статьи)
+#   - Прямая ссылка на filer.Image для обложки
+#   - M2M к TbMusicStyle (теги стилей)
 #
+# ════════════════════════════════════════════════════════════════════════════════
+# СПРАВОЧНИКИ (все связаны с TbArticle через OneToOne)
+# ════════════════════════════════════════════════════════════════════════════════
 #
-# ┌──────────────────┐
-# │ TbMusicStyle     │  Музыкальные стили (теги для категоризации - собственные статьи)
-# ├──────────────────┼────────────────────────────────────────────────────────
-# │ PK: id           │  SmallAutoField
-# │ s_style_name     │  Название (Rock, Jazz, Classical...)
-# │ k_style_to_article│ 1:1 OneToOne FK → TbArticle (для SEO, слага, контента)
-# │ j_style_metadata │  JSON синонимы из Discogs для матчинга при импорте
-# │ t_style_created  │  Timestamp
-# │ t_style_updated  │  Timestamp
-# │                  │  ⬆ Индексы: id (+), related_name→article_to_style
-# └──────────────────┘
+# TbArtist (1:1→TbArticle) + M2M←→TbItem через k_item_to_artist (коллаборации)
+# TbItem   (1:1→TbArticle) + M2M←→TbMusicStyle через k_item_to_style (жанры)
+# TbLabel  (1:1→TbArticle)
+# TbSeller (1:1→TbArticle) + 1:M→TbSource (источники данных от продавца)
+# TbMusicStyle (1:1→TbArticle) + M2M←→TbArticle через k_article_to_styles (теги статей)
 #
+# ════════════════════════════════════════════════════════════════════════════════
+# КОММЕРЧЕСКИЕ ТАБЛИЦЫ: Управление предложениями и их историей
+# ════════════════════════════════════════════════════════════════════════════════
 #
+# TbSource (1:M←TbSeller)
+#   └─→ TbOffer (1:M)
+#       ├─ 1:1→TbItem (FK что именно продавать)
+#       ├─ 1:1→TbLabel (FK от какого издателя)
+#       ├─ 1:1→TbArticle (опцион, для уникальной статьи предложения)
+#       ├─ M2M←→TbImageMetadata (картинки оффера)
+#       │   └─ TbImageMetadata (промежуточная таблица M2M offer←→Image)
+#       │       └─ 1:1→filer.Image (FK на файл из django_filer)
+#       │       └─ m_offer: FK→TbOffer (часть M2M)
+#       │       └─ i_img_sort: порядок сортировки
+#       │       └─ j_img_metadata: JSON метаданные (тип, источник и т.д.)
+#       │
+#       └─ 1:M→TbOfferHistory (история цены/кол-ва)
+#           └─ t_history_created: Timestamp (редактируется для импорта исторических данных)
 #
+# ════════════════════════════════════════════════════════════════════════════════
+# СПРАВОЧНИК ПОЛЕЙ ВСЕХ МОДЕЛЕЙ
+# ════════════════════════════════════════════════════════════════════════════════
 #
-#  ##════════════════════════════════════════════════════════════════════════════##
-#                       ПРЕДЛОЖЕНИЯ И ЦЕНЫ
-#  ##════════════════════════════════════════════════════════════════════════════##
+# TbArticle (текстовый контент и SEO):
+#   id, s_article_title (уникальный), l_article_type, b_article_published
+#   s_article_title_html, k_article_to_image (→filer.Image)
+#   k_article_to_styles (M2M→TbMusicStyle), i_article_views, i_article_favorites
+#   slug (уникальный, для URL), seo_title, seo_description, s_article_teaser_html
+#   s_article_content_html, t_article_started, t_article_ended, t_article_created, t_article_updated
 #
-# ┌──────────────────────┐
-# │  TbSeller            │  Продавцы / магазины
-# ├──────────────────────┼──────────────────────────────────────────────────────
-# │ PK: id               │  AutoField
-# │ s_seller             │  Название (уникальный)
-# │ l_seller_currency    │  (rub, usd, eur, ...)
-# │ l_seller_type        │  Тип (seller, label, diy, crowdfunding, other)
-# │ k_seller_to_article  │  1:1 FK → TbArticle (content, SEO, slug)
-# │ j_seller_metadata    │  JSON с дополнительными данными (ссылки, контакты, соцсети)
-# │ t_seller_created     │  Timestamp
-# │ t_seller_updated     │  Timestamp
-# │                      │  ⬆ Индекс: id
-# └──────────────────┬───┘
-#                    │
-#                    │ 1:M TbSource.k_source_to_seller
-#                    ▼
-#             ┌──────────────────────┐
-#             │  TbSource            │  Источники данных (Excel, URL, CSV...)
-#             ├──────────────────────┼───────────────────────────────────────
-#             │ PK: id               │  AutoField
-#             │ k_source_to_seller   │  FK → TbSeller [indexed]
-#             │ l_source_type        │  (excel, csv, url, other)
-#             │ s_source_name        │  Название источника
-#             │ source_file          │  FilerFileField
-#             │ s_source_url         │  URL источника
-#             │ t_source_data        │  Дата данных
-#             │ t_source_created     │  Timestamp
-#             │ t_source_updated     │  Timestamp
-#             │ ⬆ Индекс: k_source_to_seller
-#             └──────────────────┬───┘
-#                                │
-#                                │ 1:M TbOffer.k_offer_to_source
-#                                ▼
-#                ┌────────────────────────────────┐
-#                │  TbOffer                       │  Конкретное предложение товара
-#                ├────────────────────────────────┼───────────────────────────────
-#                │ PK: id                         │  AutoField
-#                │ s_offer                        │  Название (indexed)
-#                │ l_offer_to_format              │  Формат (CD, Vinyl, Digital...)
-#                │ k_offer_to_item                │  FK → TbItem [indexed]
-#                │ k_offer_to_label               │  FK → TbLabel [indexed]
-#                │ k_offer_to_source              │  FK → TbSource [indexed]
-#                │ k_offer_to_article             │  FK → TbArticle (опционально)
-#                │ k_offer_to_image               │  M2M → TbImage (несколько фото)
-#                │ b_offer_is_preorder            │  Предзаказ (bool, indexed)
-#                │ d_offer_date_release           │  Дата релиза/ожидаемого выхода по предзаказу [indexed]
-#                │ l_offer_condition_media        │  Состояние (s, m, nm, vg, g, f, p)
-#                │ l_offer_condition_sleeve       │  Состояние (s, m, nm, vg, g, f, p)
-#                │ f_offer_price                  │  Цена [indexed для сортировки]
-#                │ i_offer_quantity               │  Количество в наличии [indexed]
-#                │ i_offer_discount_to_daily_sale │  % скидка [indexed для фильтров]
-#                │ s_offer_code                 │  Хеш для корзины (unique)
-#                │ i_offer_views                  │  Счетчик просмотров
-#                │ i_offer_favorites              │  Счетчик в избранном
-#                │ t_offer_created                │  Timestamp
-#                │ t_offer_updated                │  Timestamp
-#                │                                │  ⬆ Индексы: (item, price↓), (item, quantity), (source, discount), (is_preorder), (date_release)
-#                │                                │  ⬆ Constraint UNIQUE: (item, source, format)
-#                └────────────────────┬───────────┘
-#                                     │
-#                                     │ 1:M TbOfferHistory.k_history_to_offer
-#                                     ▼
-#                          ┌────────────────────┐
-#                          │ TbOfferHistory     │  История изменений цены/кол-ва
-#                          ├────────────────────┼──────────────────────────────
-#                          │ PK: id             │  AutoField
-#                          │ k_history_to_offer │  FK → TbOffer [indexed]
-#                          │ f_history_price    │  Старая цена
-#                          │ i_history_quantity │  Старое количество
-#                          │ t_history_created  │  Timestamp [indexed]
-#                          │                    │  ⬆ Индекс: (offer, created↓)
-#                          └────────────────────┘
+# TbArtist (1:1→TbArticle, M2M←TbItem.k_item_to_artist):
+#   id, s_artist, k_artist_to_article (1:1→TbArticle)
+#   t_artist_created, t_artist_updated
 #
+# TbItem (1:1→TbArticle, M2M: →TbArtist, →TbMusicStyle):
+#   id, s_item, k_item_to_artist (M2M), k_item_to_style (M2M)
+#   k_item_to_article (1:1→TbArticle), s_item_date (текстовая дата)
+#   t_item_date (базовая дата), i_discogs_master_id
+#   t_item_created, t_item_updated
 #
-#  ##════════════════════════════════════════════════════════════════════════════##
-#                       КАТАЛОГ ТОВАРОВ
-#  ##════════════════════════════════════════════════════════════════════════════##
+# TbLabel (1:1→TbArticle, ←TbOffer.k_offer_to_label):
+#   id, s_label, k_label_to_article (1:1→TbArticle)
+#   t_label_created, t_label_updated
 #
-# ┌────────────────────┐
-# │ TbLabel            │  Издатели / лейблы
-# ├────────────────────┼────────────────────────────────────────────────────────
-# │ PK: id             │  AutoField
-# │ s_label            │  Название (Sony, Atlantic, Мелодия...)
-# │ k_label_to_article │  1:1 FK → TbArticle (content, SEO)
-# └────────────────────┘
-#         △
-#         │ 1:M TbOffer.k_offer_to_label
-#         │
-# ┌─────────────────────┐
-# │ TbItem              │  Товары в каталоге (релизы, носители, аксессуары)
-# ├─────────────────────┼────────────────────────────────────────────────────────
-# │ PK: id              │  AutoField
-# │ s_item              │  Название (Abbey Road (LP), TDK CDing I...)
-# │ k_item_to_artist    │  M2M → TbArtist (для коллабораций)
-# │ k_item_to_style     │  M2M → TbMusicStyle (жанры альбома)
-# │ k_item_to_article   │  1:1 FK → TbArticle (content, SEO, slug)
-# │ s_item_date         │  Дата релиза (строка, неполная/текстовая) [indexed]
-# │ t_item_date         │  Базовая дата релиза товара/альбома [indexed]
-# │ i_discogs_master_id │  ID мастер-релиза на Discogs
-# │ t_item_created      │  Timestamp
-# │ t_item_updated      │  Timestamp
-# └─────────────────────┘
-#         △
-#         │ 1:M TbOffer.k_offer_to_item
-#         │
-#         ├──────────────────── M2M → TbArtist.k_item_to_artist
-#         │                    [промежуточная таблица: item_id, artist_id]
-#         │
-#         └──────────────────── M2M → TbMusicStyle.k_item_to_style
-#                              [промежуточная таблица: item_id, musicstyle_id]
-# ┌─────────────────────┐
-# │  TbArtist           │  Исполнители / группы
-# ├─────────────────────┼─────────────────────────────────────────────────────
-# │ PK: id              │  AutoField
-# │ s_artist            │  Название (The Beatles, David Bowie...)
-# │ k_artist_to_article │  1:1 FK → TbArticle (content, SEO, slug)
-# │ t_artist_created    │  Timestamp
-# │ t_artist_updated    │  Timestamp
-# │                     │
-# │                     │  ⬆ Индекс: id, k_artist_to_article
-# └─────────────────────┘
+# TbSeller (1:1→TbArticle, 1:M→TbSource):
+#   id, s_seller (уникальный), l_seller_currency, l_seller_type
+#   k_seller_to_article (1:1→TbArticle), j_seller_metadata (JSON)
+#   t_seller_created, t_seller_updated
 #
+# TbMusicStyle (1:1→TbArticle, M2M: ←TbArticle, ←TbItem):
+#   id, s_style_name, k_style_to_article (1:1→TbArticle)
+#   j_style_metadata (JSON синонимы Discogs), t_style_created, t_style_updated
 #
-# ╔════════════════════════════════════════════════════════════════════════════╗
-# ║                           ИТОГО ТАБЛИЦ: 10                                 ║
-# ║  Справочники:  TbImage, TbArticle, TbMusicStyle (1:1→article)              ║
-# ║  Сущности:     TbSeller, TbLabel, TbArtist, TbItem                         ║
-# ║  Коммерческие: TbSource, TbOffer (format как CharField), TbOfferHistory    ║
-# ║  M2M связи:    offer←→images                                               ║
-# ║                item←→artists (для коллабораций)                            ║
-# ║                item←→styles (жанры альбома)                                ║
-# ║  OneToOne:     style→article, artist→article, item→article, label→article  ║
-# ║                seller→article (все равно связаны через TbArticle)          ║
-# ╚════════════════════════════════════════════════════════════════════════════╝
+# TbSource (1:M←TbSeller, 1:M→TbOffer):
+#   id, k_source_to_seller (1:M←), l_source_type, s_source_name
+#   source_file (FilerFileField), s_source_url, t_source_data
+#   j_source_metadata (JSON структура источника), t_source_created, t_source_updated
+#
+# TbOffer (1:M←TbSource, FK: TbItem, TbLabel, TbArticle, M2M: ←TbImageMetadata):
+#   id, s_offer (название оффера)
+#   k_offer_to_item (1:1→TbItem), k_offer_to_label (1:1→TbLabel)
+#   k_offer_to_source (1:M←TbSource), k_offer_to_article (1:1→TbArticle, опцион)
+#   m_image (M2M←TbImageMetadata)
+#   l_offer_to_format (формат: LP, CD, Vinyl и т.д.)
+#   b_offer_is_preorder, d_offer_date_release, l_offer_condition_media, l_offer_condition_sleeve
+#   f_offer_price, i_offer_quantity, i_offer_discount_to_daily_sale
+#   i_offer_discogs_id, s_offer_code (hashids, уникальный, генерируется автоматически)
+#   j_offer_metadata (JSON), i_offer_views, i_offer_favorites
+#   t_offer_created, t_offer_updated
+#
+# TbOfferHistory (1:M←TbOffer, только история цены/кол-ва):
+#   id, k_history_to_offer (1:M←TbOffer)
+#   f_history_price (старая цена), i_history_quantity (старое кол-во)
+#   j_history_metadata (JSON координаты в источнике)
+#   t_history_created (Timestamp, РЕДАКТИРУЕТСЯ ДЛЯ ИМПОРТА исторических данных!)
+#
+# TbImageMetadata (промежуточная M2M offer←→Image):
+#   id, k_image_to_image (FK→filer.Image), m_offer (FK→TbOffer)
+#   i_img_sort (порядок сортировки)
+#   j_img_metadata (JSON: тип, источник, ссылка, заметка)
+#   t_img_metadata_created, t_img_metadata_updated
+#
+# ════════════════════════════════════════════════════════════════════════════════
+# МЕТОДЫ И АВТОМАТИКА МОДЕЛЕЙ
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# TbArticle:
+#   • save(): генерирует slug автоматически (если не установлен)
+#   • increment_views(): безопасный инкремент просмотров
+#   • increment_favorites(): безопасный инкремент добавлений в избранное
+#   • Если привязана картинка без метаданных → создает TbImageMetadata
+#
+# TbArtist, TbItem, TbLabel, TbSeller, TbMusicStyle:
+#   • save(): создает/обновляет связанную TbArticle автоматически
+#   • create_or_get_related_article(): хелпер для создания статьи
+#
+# TbOffer:
+#   • save(): генерирует s_offer_code (hashids) при создании нового оффера
+#   • save(): отслеживает изменения цены/кол-ва → создает TbOfferHistory
+#   • Двухэтапное сохранение: super().save() → кодирование → update(s_offer_code=...)
+#   • Не обновляет код при изменении (только при создании)
+#
+# TbOfferHistory:
+#   • Создается автоматически в save() TbOffer
+#   • Сравнивает последнюю запись истории с текущей ценой/кол-вом
+#   • Новая запись создается ТОЛЬКО если произошли изменения
+#   • t_history_created редактируется для импорта исторических данных
+#
+# TbImageMetadata:
+#   • Промежуточная таблица M2M (не имеет собственной автоматики)
+#   • Заполняется вручную через админку или парсерами
+#
+# ════════════════════════════════════════════════════════════════════════════════
+
+# 
+# Справочники (5):
+#   TbArticle - индексная таблица для всех текстовых описаний
+#   TbArtist, TbItem, TbLabel, TbSeller - справочники (все 1:1→article)
+#   TbMusicStyle - музыкальные стили (1:1→article, M2M←article, M2M←item)
+#
+# Коммерческие (5):
+#   TbSource - источники данных (1:M←seller)
+#   TbOffer - предложения товаров (1:M←source, FK→item/label/article, M2M←imagemetadata)
+#   TbOfferHistory - история изменений цены/кол-ва (1:M←offer)
+#   TbImageMetadata - метаданные изображений (M2M offer←→Image)
+#
 #
 # ОПТИМИЗАЦИЯ ДЛЯ SQLite:
 #   - db_index=True на все FK поля (SQLite не создает их автоматически)
@@ -300,21 +222,19 @@ def get_offer_metadata_default():
 # ============================================================================
 class TbImageMetadata(models.Model):
     """
-    Метаданные к изображениям из django_filer.
-
-    Промежуточная таблица для M2M связи TbOffer ↔ filer.Image.
-    Хранит дополнительные поля:
-    - i_img_sort: порядок сортировки изображений (0=обложка, 1=задник, 2=вкладка и т.д.)
-    - j_img_metadata: JSON с гибкими данными (источник, тип, достоверность и т.д.)
-    - m_offer: FK на TbOffer (часть M2M через эту промежуточную таблицу)
-    - image: FK на filer.Image (часть M2M через эту промежуточную таблицу)
-
-    Данные можно заполнять вручную через админку или программно из парсеров.
+    Метаданные изображений для офферов (промежуточная таблица M2M).
     
-    Доступ в коде:
-    - Все картинки офера (отсортированные): offer.m_image.all().order_by('i_img_sort')
-    - Все картинки для изображения: image.m_offer.all()
-    - Прямой доступ к данным: tbimagemetadata.image, tbimagemetadata.m_offer, tbimagemetadata.i_img_sort, tbimagemetadata.j_img_metadata
+    Поля:
+      • image (FK→filer.Image): файл изображения из django_filer [indexed]
+      • m_offer (FK→TbOffer): оффер, к которому привязана картинка [nullable, indexed]
+      • i_img_sort (int): порядок сортировки (0=обложка, 1=задник и т.д.) [indexed]
+      • j_img_metadata (JSON): метаданные (тип, источник, ссылка, заметка)
+      • t_img_metadata_created, t_img_metadata_updated (Timestamps)
+    
+    Использование:
+      • offer.m_image.all() — все картинки оффера
+      • offer.m_image.all().order_by('i_img_sort') — отсортированные картинки
+      • image.metadata (через related_name) — доступ к метаданным
     """
 
     image = FilerImageField(
@@ -371,9 +291,29 @@ class TbImageMetadata(models.Model):
 # ============================================================================
 class TbArticle(models.Model):
     """
-    Статья, связанная с релизом, исполнителем, продавцом и т.д.
-    Может быть использована для хранения любой текстовой информации, например, описания релиза из Википедии или
-    Discogs, биографии исполнителя, описания продавца и т.д. Сохранение типографирования и спецсимволов в HTML.
+    Центральная таблица текстового контента, SEO и описаний.
+    
+    Поля:
+      • id (PK), s_article_title (str, уникальный): технический заголовок
+      • l_article_type (choice): тип статьи (artist, item, offer, seller, style, blog и т.д.)
+      • b_article_published (bool): опубликовано ли [indexed]
+      • s_article_title_html (str): HTML-заголовок для отображения
+      • k_article_to_image (FK→filer.Image): обложка статьи [nullable, indexed]
+      • k_article_to_styles (M2M→TbMusicStyle): теги стилей статьи
+      • slug (str, уникальный): URL-идентификатор [indexed]
+      • seo_title, seo_description (str): SEO метаданные
+      • s_article_teaser_html, s_article_content_html (text): тизер и полный текст статьи
+      • i_article_views, i_article_favorites (int): счётчики [indexed]
+      • t_article_started, t_article_ended, t_article_created, t_article_updated (datetime)
+    
+    Методы:
+      • save(): генерирует slug автоматически из s_article_title (если не установлен)
+      • increment_views(): безопасный инкремент просмотров (F-выражение)
+      • increment_favorites(): безопасный инкремент добавлений в избранное
+    
+    Использование:
+      • Соединитель для Artist, Item, Label, Seller, Style (все 1:1→article)
+      • Хранит текстовый контент, SEO, изображения справочников
     """
     class ArticleType(models.TextChoices):
         ARTIST = 'artist', 'Artis: артист, группа или бренд'
@@ -435,8 +375,8 @@ class TbArticle(models.Model):
                   ' будет отображаться без заголовка.'
     )
     k_article_to_image = FilerImageField(
-        # Метаданные изображения (сортировка, источник, тип и т.д.) находятся в TbImageMetadata.
-        # Если нужно получить метаданные изображения, можно использовать `article.k_article_to_image.metadata`.
+        # Прямая ссылка на файл изображения из django_filer.
+        # Метаданные об этом изображении (сортировка, источник, тип и т.д.) хранятся в TbImageMetadata.k_image_to_image
         on_delete=models.SET_NULL,
         related_name='image_to_article',
         blank=True,
@@ -444,10 +384,10 @@ class TbArticle(models.Model):
         db_index=True,
         verbose_name='Изображение для статьи',
         help_text='Обложка или иллюстрация статьи из файлового хранилища (django_filer).'
-                  ' Метаданные: image.metadata.i_img_sort и image.metadata.j_img_metadata.<br/>'
-                  '<b>ВАЖНО</b>: Так как статья призывается к исполнителям, лейблам, продавцам, музыкальным стилям,'
-                  ' её можно использовать как логотип-пкитограмму или баннер этих сущностей. В этом случае '
-                  ' рекомендуется использовать изображение с прозрачным фоном (движок поддерживает SVG, WebP и PNG).'
+                  ' Для получения метаданных: TbImageMetadata.objects.filter(k_image_to_image=article.k_article_to_image).<br/>'
+                  '<b>ВАЖНО</b>: Так как статья привязывается к исполнителям, лейблам, продавцам, музыкальным стилям,'
+                  ' её изображение можно использовать как логотип, пиктограмму или баннер этих сущностей. '
+                  'Рекомендуется использовать прозрачный фон (движок поддерживает SVG, WebP и PNG).'
     )
     s_article_teaser_html = models.TextField(
         blank=True,
@@ -630,15 +570,18 @@ class TbArticle(models.Model):
 # ============================================================================
 class TbMusicStyle(models.Model):
     """
-    Музыкальный стиль (канонический / опорный).
-
-    Один главный стиль может иметь несколько синонимов (из Discogs).
-    Пример:
-    - Главный: "Rock"
-    - Синонимы: ["rock", "Rock Music", "Rock & Roll", "Hard Rock", ...]
-
-    Примечание:
-    - Slug автоматически генерируется из s_style_name в методе save()
+    Музыкальные стили и жанры.
+    
+    Поля:
+      • id (SmallPK): оптимизировано (до ~32k стилей)
+      • s_style_name (str, уникальный): название стиля (Rock, Jazz и т.д.)
+      • k_style_to_article (1:1→TbArticle): связанная статья (SEO, слаг, картинка)
+      • j_style_metadata (JSON): синонимы из Discogs для матчинга при импорте
+      • t_style_created, t_style_updated (datetime)
+    
+    Связи:
+      • M2M←TbArticle.k_article_to_styles: теги стилей к статьям
+      • M2M←TbItem.k_item_to_style: жанры альбомов
     """
     # Используем SmallAutoField для оптимизации (макс ~32k)
     # Стилей обычно 100-1000, поэтому 2 байта достаточно
@@ -722,7 +665,18 @@ class TbMusicStyle(models.Model):
 # ИСПОЛНИТЕЛИ
 # ============================================================================
 class TbArtist(models.Model):
-    """Исполнитель или музыкальная группа."""
+    """
+    Исполнители и музыкальные группы.
+    
+    Поля:
+      • id (SmallPK): оптимизировано
+      • s_artist (str, уникальный): название исполнителя
+      • k_artist_to_article (1:1→TbArticle): связанная статья (SEO, слаг, картинка)
+      • t_artist_created, t_artist_updated (datetime)
+    
+    Связи:
+      • M2M←TbItem.k_item_to_artist: коллаборации (артист может быть на нескольких альбомах)
+    """
     # Используем SmallAutoField для оптимизации (макс ~32k)
     # Артистов в базе может быть несколько тысяч, достаточно
     id = models.SmallAutoField(primary_key=True)
@@ -806,9 +760,22 @@ class TbArtist(models.Model):
 
 class TbItem(models.Model):
     """
-    Товар в каталоге: релиз (альбом, сингл, компиляция), носитель (кассета для записи),
-    аксессуар (щётка для виниловых пластинок) и т.д.
-    Может быть представлен в виде одного или нескольких предложений от разных продавцов.
+    Товары в каталоге: релизы (альбомы, синглы), носители, аксессуары.
+    
+    Поля:
+      • id (PK), s_item (str, уникальный): название товара
+      • k_item_to_artist (M2M→TbArtist): исполнители (коллаборации)
+      • k_item_to_style (M2M→TbMusicStyle): жанры альбома
+      • k_item_to_article (1:1→TbArticle): связанная статья (SEO, слаг, картинка)
+      • s_item_date (str): дата релиза (текстовая, неполная) [indexed]
+      • t_item_date (date): нормализованная дата релиза [indexed]
+      • i_discogs_master_id (int): ID мастер-релиза на Discogs
+      • t_item_created, t_item_updated (datetime)
+    
+    Использование:
+      • Один товар может быть в нескольких TbOffer от разных продавцов
+      • M2M с TbArtist для поддержки коллабораций
+      • M2M с TbMusicStyle для жанров
     """
     s_item = models.CharField(
         max_length=128,
@@ -936,10 +903,16 @@ class TbItem(models.Model):
 # ============================================================================
 class TbLabel(models.Model):
     """
-    Лейбл или издатель релиза.
-    Примеры: для винила, CD, Blu-Ray это: Sony, Мелодия, Atlantic, EMI ...
-             для кассет под запись это: TDK, AXIA, Maxell, JVC ...
-             для hi-fi это: Sony, Pioneer, Technics, Marantz ...
+    Лейблы и издатели релизов.
+    
+    Поля:
+      • id (SmallPK): оптимизировано
+      • s_label (str, уникальный): название лейбла (Sony, Мелодия, TDK, Pioneer и т.д.)
+      • k_label_to_article (1:1→TbArticle): связанная статья (SEO, слаг, картинка)
+      • t_label_created, t_label_updated (datetime)
+    
+    Связи:
+      • 1:M←TbOffer.k_offer_to_label: предложения от этого лейбла
     """
     # Используем SmallAutoField для оптимизации (макс ~32k)
     # Лейблов обычно несколько сотен-тысяч, достаточно
@@ -1028,7 +1001,22 @@ class TbLabel(models.Model):
 #       создаем несколько продавцов с разными валютами.
 # ============================================================================
 class TbSeller(models.Model):
-    """Продавец или магазин, который продаёт товары."""
+    """
+    Продавцы и магазины.
+    
+    Поля:
+      • id (SmallPK): оптимизировано
+      • s_seller (str, уникальный): название продавца [indexed]
+      • l_seller_type (choice): тип (seller, label, diy, crowdfunding, other)
+      • l_seller_currency (choice): валюта (RUB, USD, EUR, JPY и т.д.)
+      • k_seller_to_article (1:1→TbArticle): связанная статья (SEO, слаг, картинка, контакты)
+      • j_seller_metadata (JSON): доп. данные (ссылки, контакты, соцсети)
+      • t_seller_created, t_seller_updated (datetime)
+    
+    Связи:
+      • 1:M→TbSource.k_source_to_seller: источники данных от этого продавца
+      • 1:M→TbOffer (через TbSource): предложения товаров
+    """
     class SellerType(models.TextChoices):
         SELLER = 'seller', 'Продавец'
         LABEL = 'label', 'Лейбл (издатель)'
@@ -1134,12 +1122,34 @@ class TbOffer(models.Model):
     Конкретное предложение от продавца.
     Один и тот же релиз может быть несколько раз в системе от разных продавцов.
     
-    СВЯЗЬ С КАРТИНКАМИ:
-    Картинки к офферу управляются через TbImageMetadata.offer (M2M):
-    - offer.image_metadata.all() — все картинки этого офера (упорядочены по i_img_sort)
-    - TbImageMetadata(offer=self, image=<картинка>, i_img_sort=0, j_img_metadata={...})
+    УНИКАЛЬНЫЙ КОД (s_offer_code):
+    Генерируется автоматически при создании нового оффера с помощью hashids-кодирования:
+    - При первом сохранении: рассчитывается из id через Skip32 + Base62/Base64 обфускацию
+    - При обновлении: код НЕ изменяется (используется для отслеживания в корзине и заказах)
+    - Уникален в пределах системы (UNIQUE constraint)
+    - Используется в QR-кодах и ссылках (вместо прямого id для конфиденциальности)
     
-    В админке это выглядит как M2M с дополнительными полями (сортировка, метаданные).
+    ИСТОРИЯ ЦЕНЫ И КОЛИЧЕСТВА (TbOfferHistory):
+    При каждом сохранении оффера система автоматически отслеживает изменения:
+    - Если это новый оффер: создаёт первую запись истории с текущей ценой/количеством
+    - Если цена или количество изменились: создаёт новую запись истории
+    - История помогает отслеживать динамику наличия и ценообразования
+    - Поле t_history_created можно редактировать для импорта исторических данных
+    
+    СВЯЗЬ С КАРТИНКАМИ:
+    Картинки к офферу управляются через TbImageMetadata (промежуточная таблица M2M):
+    - offer.m_image.all() — все картинки этого офера (упорядочены по i_img_sort)
+    - Каждая запись TbImageMetadata содержит: k_image_to_image (FK на Image), i_img_sort, j_img_metadata
+    - Метаданные: порядок сортировки, тип изображения, источник, заметки и т.д.
+    
+    МЕТОДЫ:
+    • save(): двухэтапное сохранение:
+      1. Вызывает super().save() чтобы получить id для кодирования
+      2. Кодирует id в s_offer_code через hashids (только для новых офферов!)
+      3. Вызывает update(s_offer_code=...) чтобы обновить БД с кодом
+    • save(): отслеживает изменения цены/кол-ва → создает TbOfferHistory
+    
+    В админке M2M выглядит как список картинок с сортировкой и метаданными.
     """
     class Condition(models.TextChoices):
         S = 's', 'Still Sealed (новое, запечатано)'
@@ -1442,9 +1452,21 @@ class TbOffer(models.Model):
 # ============================================================================
 class TbSource(models.Model):
     """
-        Источник данных, из которого был импортирован оффер.
-        Например, это может быть Excel-файл от продавца или издателя, CSV-файл, URL страницы с данными
-        (например, HTML-страница с каталогом товаров) и т.д.
+    Источники данных для импорта офферов (Excel, CSV, URL, ручной ввод).
+    
+    Поля:
+      • id (SmallPK): оптимизировано
+      • k_source_to_seller (FK→TbSeller): от какого продавца это данные [indexed]
+      • l_source_type (choice): тип источника (excel, csv, url, other)
+      • s_source_name (str): название источника для удобства
+      • source_file (FilerFileField): загруженный файл (если Excel/CSV)
+      • s_source_url (str): URL источника (если URL)
+      • t_source_data (date): дата данных (когда их получили)
+      • j_source_metadata (JSON): структура источника (вкладки, столбцы, CSS-селекторы и т.д.)
+      • t_source_created, t_source_updated (datetime)
+    
+    Связи:
+      • 1:M→TbOffer.k_offer_to_source: офферы из этого источника
     """
     class SourceType(models.TextChoices):
         EXCEL = 'excel', 'Excel-файл от продавца или издателя'
@@ -1537,7 +1559,17 @@ class TbSource(models.Model):
 class TbOfferHistory(models.Model):
     """
     История изменений оффера (снапшот цены, количества, наличия).
-    Создаётся при каждом импорте, если что-то изменилось.
+    Создаётся автоматически при каждом сохранении оффера, если цена или количество изменились.
+    
+    АВТОМАТИЧЕСКОЕ СОЗДАНИЕ:
+    - При создании нового оффера: создаёт первую запись с текущей ценой/количеством
+    - При обновлении оффера: сравнивает последнюю запись истории с текущими значениями
+    - Новая запись создаётся только если произошли изменения в цене ИЛИ количестве
+    
+    РЕДАКТИРОВАНИЕ ИСТОРИЧЕСКИХ ДАННЫХ:
+    - Поле t_history_created можно редактировать (editable=True)
+    - Используется для импорта исторических данных из Excel-файлов и других источников
+    - Позволяет восстановить временную линию цены/наличия для аналитики
     """
     k_history_to_offer = models.ForeignKey(
         TbOffer,
