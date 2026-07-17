@@ -1,0 +1,13 @@
+{
+  "name": "lpon-alpine",
+  "version": "1.0.0",
+  "description": "Alpine.js build for LPON.RU Django Frontend",
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/alpine.js --bundle --minify --outfile=../../public/static/js/alpine.min.js"
+  },
+  "devDependencies": {
+    "alpinejs": "^3.14.3",
+    "esbuild": "^0.28.0"
+  }
+}
