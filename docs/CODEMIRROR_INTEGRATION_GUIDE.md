@@ -2,29 +2,29 @@
 
 ## Обзор
 
-Это руководство описывает, как использовать и обновлять сборку CodeMirror 6, которая используется для редактирования текстовых полей в админке Django.
+Это руководство описывает, как использовать и обновлять сборку CodeMirror 6, которая используется для редактирования
+текстовых полей в админке Django.
 
 ## Структура проекта
 
-- `frontend-assembly/`: Исходные файлы и скрипты для сборки.
+- `frontend-assembly/codemirror/`: Исходные файлы и конфиг для CodeMirror.
   - `package.json`: Список зависимостей CodeMirror 6.
   - `package-lock.json`: Файл с зафиксированными версиями зависимостей. **Не редактировать вручную!**
-  - `build-codemirror6.sh`: Скрипт, который генерирует и собирает финальный JS-бандл.
+- `scripts/`: Скрипты для сборки компонентов CodeMirror.
+  - `build-codemirror.sh`: Скрипт, который генерирует и собирает финальный JS-бандл.
 - `public/static/codemirror/`: Каталог с готовыми файлами для Django.
   - `editor.js`: Финальный, минифицированный JS-бандл. **Не редактировать вручную!**
-  - `codemirror-styles.css`: Кастомные стили для интеграции с админкой.
-  - `codemirror-patch.js`: JS-патч для управления размерами редактора.
+  - `codemirror-styles.css`: Кастомные стили для интеграции с админкой (_приготовлено отдельно, не входят
+    в сборку CodeMirror_).
+  - `codemirror-patch.js`: JS-патч для управления размерами редактора (_приготовлено отдельно, не входит
+    в сборку CodeMirror_).
 
 ## Как собрать бандл
 
-После клонирования репозитория или обновления зависимостей, выполните:
+После клонирования репозитория или обновления зависимостей, выполните из корня проекта:
 
 ```bash
-# Перейдите в каталог сборки
-cd frontend-assembly
-
-# Установите зависимости и соберите бандл
-bash ./build-codemirror6.sh
+bash ./scripts/build-codemirror.sh
 ```
 
 ## Как использовать в Django Admin
@@ -104,7 +104,7 @@ class YourModelAdmin(admin.ModelAdmin):
 
 ## Как добавить новый язык (например, jinja2 или xml)
 
-1.  **Добавить зависимость**: Откройте `frontend-assembly/package.json` и добавьте в `devDependencies` новый языковой пакет. Версию выбирайте близкую к другим пакетам `@codemirror/lang-*`.
+1.  **Добавить зависимость**: Откройте `frontend-assembly/codemirror/package.json` и добавьте в `devDependencies` новый языковой пакет. Версию выбирайте близкую к другим пакетам `@codemirror/lang-*`.
 
     ```json
     // package.json
@@ -115,7 +115,7 @@ class YourModelAdmin(admin.ModelAdmin):
     ...
     ```
 
-2.  **Обновить скрипт сборки**: Откройте `frontend-assembly/build-codemirror6.sh` и внесите два изменения в секцию `cat > "$WORK_DIR/src/editor.js" <<'EOF'`:
+2.  **Обновить скрипт сборки**: Откройте `scripts/build-codemirror.sh` и внесите два изменения в секцию `cat > "$CODEMIRROR_DIR/src/editor.js" <<'EOF'`:
     -   Добавьте импорт:
         ```javascript
         import { xml } from '@codemirror/lang-xml';
@@ -129,9 +129,7 @@ class YourModelAdmin(admin.ModelAdmin):
 
 3.  **Пересобрать бандл**:
     ```bash
-    cd frontend-assembly
-    npm install  # Установит новый пакет и обновит package-lock.json
-    bash build-codemirror6.sh # Пересоберет editor.js с поддержкой XML
+    bash ./scripts/build-codemirror.sh
     ```
 
 4.  **Использовать в админке**: Теперь вы можете использовать `data-language="xml"` для любого поля.
@@ -140,13 +138,15 @@ class YourModelAdmin(admin.ModelAdmin):
 
 1.  **Проверить устаревшие пакеты**:
     ```bash
-    cd frontend-assembly
+    cd frontend-assembly/codemirror
     npm outdated
     ```
-2.  **Обновить версии**: Аккуратно обновите номера версий в `package.json`.
+2.  **Обновить версии**: Аккуратно обновите номера версий в `frontend-assembly/codemirror/package.json`.
 3.  **Установить обновления и пересобрать**:
     ```bash
+    cd frontend-assembly/codemirror
     npm install
-    bash build-codemirror6.sh
+    cd ../../
+    bash ./scripts/build-codemirror.sh
     ```
-4.  **Закоммитить изменения**: Добавьте в коммит обновленные `package.json`, `package-lock.json` и `public/static/codemirror/editor.js`.
+4.  **Закоммитить изменения**: Добавьте в коммит обновленные `frontend-assembly/codemirror/package.json`, `frontend-assembly/codemirror/package-lock.json` и `public/static/codemirror/editor.js`.

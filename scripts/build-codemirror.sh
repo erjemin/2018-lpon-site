@@ -1,17 +1,12 @@
 #!/usr/bin/env bash
-# Скрипт создаёт временную рабочую папку, ставит зависимости через `npm ci`, собирает
-# минимизированный бандл и затем сам удаляет временные `src/` и `node_modules/`.
-# В проекте остаётся только готовая статика:
-# * `public/static/codemirror/editor.js`
-#
-# Запуск:
-# bash ./frontend-assembly/build-codemirror6.sh
+# Сборка CodeMirror 6 для админки Django
+# Запуск из корня проекта: bash ./scripts/build-codemirror.sh
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUTPUT_DIR="$ROOT_DIR/../public/static/codemirror"
-WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/codemirror6.XXXXXX")"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CODEMIRROR_DIR="$PROJECT_ROOT/frontend-assembly/codemirror"
+OUTPUT_DIR="$PROJECT_ROOT/public/static/codemirror"
 
 log() {
   printf '[codemirror6] %s\n' "$*"
@@ -22,29 +17,25 @@ fail() {
   exit 1
 }
 
-cleanup() {
-  rm -rf "$WORK_DIR"
-  rm -rf "$ROOT_DIR/src" "$ROOT_DIR/node_modules"
-}
-
-trap cleanup EXIT INT TERM
-
 if ! command -v npm >/dev/null 2>&1; then
   fail 'Не найден `npm`. Установи Node.js и повтори сборку.'
 fi
 
-if [[ ! -f "$ROOT_DIR/package.json" ]]; then
-  fail "Не найден package.json: $ROOT_DIR/package.json"
+if [[ ! -f "$CODEMIRROR_DIR/package.json" ]]; then
+  fail "Не найден package.json: $CODEMIRROR_DIR/package.json"
 fi
 
-if [[ ! -f "$ROOT_DIR/package-lock.json" ]]; then
-  fail "Не найден package-lock.json: $ROOT_DIR/package-lock.json"
+if [[ ! -f "$CODEMIRROR_DIR/package-lock.json" ]]; then
+  fail "Не найден package-lock.json: $CODEMIRROR_DIR/package-lock.json"
 fi
 
-mkdir -p "$WORK_DIR/src" "$OUTPUT_DIR"
-cp "$ROOT_DIR/package.json" "$ROOT_DIR/package-lock.json" "$WORK_DIR/"
+mkdir -p "$OUTPUT_DIR"
 
-cat > "$WORK_DIR/src/editor.js" <<'EOF'
+# Создаём src/editor.js для CodeMirror
+mkdir -p "$CODEMIRROR_DIR/src"
+
+log "Создаю src/editor.js в $CODEMIRROR_DIR"
+cat > "$CODEMIRROR_DIR/src/editor.js" <<'EOF'
 import { Compartment, EditorState } from '@codemirror/state';
 import { EditorView, lineNumbers, placeholder } from '@codemirror/view';
 import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
@@ -169,9 +160,8 @@ if (document.readyState === 'loading') {
 }
 EOF
 
-log "СОБИРАЮ CodeMirror 6 ДЛЯ ФРОНТЕНДА АДМИНКИ ПРОЕКТА"
-log "Временная рабочая папка: $WORK_DIR"
-cd "$WORK_DIR"
+log "СОБИРАЮ CodeMirror 6"
+cd "$CODEMIRROR_DIR"
 
 log 'Устанавливаю зависимости через npm ci'
 npm ci
@@ -180,4 +170,7 @@ log 'Собираю CodeMirror 6'
 export CM6_OUTPUT_DIR="$OUTPUT_DIR"
 npm run build
 
-log 'ГОТОВО'
+log 'Удаляю временные файлы (src/ и node_modules/)'
+rm -rf src node_modules
+
+log 'ГОТОВО! Результат: '"$OUTPUT_DIR/editor.js"
