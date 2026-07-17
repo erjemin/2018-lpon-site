@@ -368,3 +368,8 @@ public/static_collected/
 
 # Data Backup
 database/
+
+# Frontend assembly builds
+frontend-assembly/*/node_modules/
+frontend-assembly/*/src/
+frontend-assembly/*/.env
