@@ -1,0 +1,13 @@
+{
+  "name": "lpon-htmx",
+  "version": "1.0.0",
+  "description": "HTMX build for LPON.RU Django Frontend",
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/htmx.js --bundle --minify --outfile=../../public/static/js/htmx.min.js"
+  },
+  "devDependencies": {
+    "htmx.org": "^1.9.12",
+    "esbuild": "^0.28.0"
+  }
+}
