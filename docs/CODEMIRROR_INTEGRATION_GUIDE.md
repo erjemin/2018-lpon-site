@@ -29,7 +29,7 @@ bash ./scripts/build-codemirror.sh
 
 ## Как использовать в Django Admin
 
-### 1. Подключение в ModelAdmin
+### 1. Стандартное подключение через Media класс
 
 В вашем `admin.py` используйте `Media` класс для подключения необходимых файлов.
 
@@ -47,9 +47,9 @@ class YourModelAdmin(admin.ModelAdmin):
         )
 ```
 
-### 2. Активация для полей
+### 1.1 Активация для полей (стандартная)
 
-Чтобы превратить стандартный `Textarea` в редактор CodeMirror, используйте кастомную форму или метод `formfield_for_dbfield` и добавьте к виджету специальные `data-` атрибуты.
+Чтобы превратить стандартный `Textarea` в редактор CodeMirror, используйте метод `formfield_for_dbfield` и добавьте к виджету специальные `data-` атрибуты.
 
 ```python
 # frontend/admin.py
@@ -80,7 +80,37 @@ class YourModelAdmin(admin.ModelAdmin):
         return formfield
 ```
 
-### 3. Поддерживаемые языки
+### 1.2 Подключение с помощью CodeMirrorFormMixin (рекомендуется)
+
+Для удобства используйте готовый миксин `CodeMirrorFormMixin` из `frontend/admin.py`. Он автоматически подключает Media и предоставляет helper метод для конфигурации полей.
+
+```python
+# frontend/admin.py
+
+from frontend.admin import CodeMirrorFormMixin
+
+class MyModelForm(CodeMirrorFormMixin):
+    """Форма с поддержкой CodeMirror"""
+    class Meta:
+        model = MyModel
+        fields = ('field1', 'field2', 'j_metadata')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Helper метод для быстрой конфигурации поля
+        self.setup_codemirror_field('j_metadata', 'json', 'codemirror-width-l')
+
+class MyModelAdmin(admin.ModelAdmin):
+    form = MyModelForm
+    # Media автоматически наследуется из MyModelForm!
+```
+
+**Преимущества миксина:**
+- ✅ Media подключается автоматически
+- ✅ Helper метод `setup_codemirror_field()` упрощает конфигурацию
+- ✅ Используется во всех админ-формах LPON (TbOffer, TbArtist, TbLabel, и т.д.)
+
+### 2. Поддерживаемые языки
 
 - `javascript`
 - `css`
