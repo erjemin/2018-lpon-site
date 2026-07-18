@@ -18,7 +18,7 @@ fail() {
 }
 
 cleanup() {
-  rm -rf "$TAILWIND_DIR/src" "$TAILWIND_DIR/node_modules" "$TAILWIND_DIR/tailwind.config.js"
+  rm -rf "$TAILWIND_DIR/src" "$TAILWIND_DIR/node_modules" "$TAILWIND_DIR/tailwind.config.js" "$TAILWIND_DIR/input.css"
 }
 
 trap cleanup EXIT INT TERM
@@ -37,31 +37,21 @@ fi
 
 mkdir -p "$OUTPUT_DIR"
 
-log "Создаю конфиги и entry point для Tailwind"
+log "Создаю entry point для Tailwind"
 
-# tailwind.config.js
-cat > "$TAILWIND_DIR/tailwind.config.js" <<'EOF'
-/** @type {import('tailwindcss').Config} */
-module.exports = {
-  content: [
-    '../../lpon_site/templates/**/*.html',
-  ],
-  theme: {
-    extend: {},
-  },
-  plugins: [
-    require('@tailwindcss/forms'),
-    require('@tailwindcss/typography'),
-  ],
-}
-EOF
+# input.css (entry point)
+# Проверяем: если input.css вообще нет, только тогда создаем базовый
+# ВАЖНО: Tailwind так устроен, что он собирает в CSS только те классы, которые реально используются в исходниках (HTML,
+#        Python и т.д.) Это очень круто, т.к. финальный CSS проекта будет минимальным по размеру!
+#        Чтобы Tailwind знал, где искать классы, нужно указать ему исходники через директиву @source в input.css.
+#        @source "../../lpon_site/templates/**/*.html"; <-- ищем все HTML-шаблоны в проекте
+#        @source "../../lpon_site/frontend/**/*.py";    <-- ищем все Python-файлы в проекте (например, там могут
+#                                                           генерироваться классы, которые генерируют HTML)
+cat > "$TAILWIND_DIR/input.css" <<'EOF'
+@import "tailwindcss";
 
-# src/tailwind.css (entry point)
-mkdir -p "$TAILWIND_DIR/src"
-cat > "$TAILWIND_DIR/src/tailwind.css" <<'EOF'
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@source "../../lpon_site/templates/**/*.html";
+@source "../../lpon_site/frontend/**/*.py";
 EOF
 
 log "СОБИРАЮ Tailwind CSS"
