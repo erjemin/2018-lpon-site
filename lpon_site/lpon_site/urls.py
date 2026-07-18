@@ -15,13 +15,17 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include, re_path
 from django.conf import settings
 from django.conf.urls.static import static
+
+from frontend import views
 
 urlpatterns = [
     # Админ-сайт с переименованными приложениями (переопределен в frontend/apps.py)
     path(settings.ADMIN_URL, admin.site.urls),
+
+    re_path(r'^$', views.index),
 ]
 
 # Сервировать медиа-файлы в разработке (в production использовать nginx/Apache)

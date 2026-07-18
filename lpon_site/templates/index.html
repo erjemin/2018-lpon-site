@@ -1,0 +1,50 @@
+{% load static %}<!DOCTYPE html>
+<html lang="ru" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LPON.ru — Виниловые пластинки и кассеты</title>{% comment %}
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ВАЖНО! В prod будет использоваться tailwind.min.css. Его собирет webpack специально под проект.
+         Для этого у него в input.css прописаны пути к шаблонам, на которые ему надо посмостеть, и он соберет только
+         используемые классы и сгенерирует уникальный tailwind.min.css проекта.
+  <link rel="stylesheet" href="{% static 'css/tailwind.min.css' %}">{# <-- ДОБАВИТЬ В ПРОДАКШЕНЕ #}
+
+  В dev используем tailwindcss из CDN. В нем есть все, но он неимоверно грузит браузер.{% endcomment %}
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>{# <-- УБРАТЬ В ПРОДАКШЕНЕ #}
+</head>
+<body class="bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+
+<!-- HERO -->
+<section class="relative w-full h-screen flex items-center justify-center overflow-hidden">
+  
+  <!-- Фон из двух картинок -->
+  <div class="absolute inset-0">
+    <div class="absolute top-0 left-0 w-full h-1/2 bg-[url({% static 'svgs/lp.svg' %})] bg-bottom-right bg-no-repeat border-purple-950 border-b-1 border-dotted"></div>
+    <div class="absolute bottom-0 left-0 w-full h-1/2 bg-[url({% static 'svgs/cc.svg' %})] bg-top-right bg-no-repeat rotate-180  border-orange-950 border-b-1 border-dotted"></div>
+  </div>
+  
+  <!-- Содержимое поверх фона -->
+  <div class="relative z-10 text-center max-w-2xl mx-auto px-6 bg-[#c0c0c0e0] dark:bg-[#303030e0] shadow-lg shadow-gray-300 dark:shadow-gray-900 px-40 py-20 rounded-4xl border-gray-300 dark:border-gray-700 border-2">
+    <picture>
+      <source srcset="{% static 'svgs/logo-lpon-d.svg' %}" media="(prefers-color-scheme: dark)" class="h-32 mx-auto mb-8">
+      <img src="{% static 'svgs/logo-lpon-l.svg' %}" alt="Логотип lpon.ru" class="h-32 mx-auto mb-8">
+    </picture>
+
+    <h1 class="text-6xl font-bold mb-4 drop-shadow-lg font-serif">ДЕМО-РЕЖИМ</h1>
+    <p class="text-2xl mb-8 drop-shadow font-serif">Виниловые пластинки и&nbsp;не&nbsp;только…</p>
+    <button class="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold drop-shadow-lg">
+      Посмотреть демо-каталог
+    </button>
+  </div>
+
+  <div class="absolute bottom-4 right-4 text-s text-gray-600 dark:text-gray-400 font-serif">
+    &copy; 2026, Sergei Erjemin
+  </div>
+</section>
+
+<script src="{% static 'js/alpine.min.js' %}"></script>
+<script src="{% static 'js/htmx.min.js' %}"></script>
+
+</body>
+</html>
