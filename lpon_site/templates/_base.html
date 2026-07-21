@@ -1,0 +1,59 @@
+<!DOCTYPE html>{% load static %}<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="{% block DESCRIPTION %}LPON — Магазин виниловых пластинок и аудиокассет{% endblock %}" />
+  <meta name="keywords" content="{% block KEYWORDS %}vinyl, audio, music, LPON{% endblock %}" />
+  <meta name="copyright" lang="ru" content="Sergei Erjemin{% block META_COPYRIGHT_AUTHOR %}{% endblock %}." />
+  <meta name="robots" content="{% block ROBOTS %}index,follow{% endblock %}" />
+  <meta name="format-detection" content="telephone=no" />
+  <title>{% block PAGE_TITLE %}LPON.RU{% endblock %}</title>
+  <meta name="meta-title" content="{% block META_TITLE %}LPON.RU{% endblock %}" />
+  <meta name="meta-description" content="{% block META_DESCRIPTION %}LPON — Магазин виниловых пластинок и аудиокассет{% endblock %}" />
+  <link rel="canonical" href="{% block CANONICAL %}{{ request.scheme }}://{{ request.get_host }}{{ request.path }}{% endblock %}" />
+  <meta property="og:site_name" content="LPON.RU" />
+  <meta property="og:locale" content="ru_RU" />
+  <meta property="og:title" content="{% block OG_TITLE %}LPON.RU{% endblock %}" />
+  <meta property="og:description" content="{% block OG_DESCRIPTION %}LPON — Магазин виниловых пластинок и аудиокассет{% endblock %}" />
+  <meta property="og:url" content="{% block OG_URL %}{{ request.scheme }}://{{ request.get_host }}{{ request.path }}{% endblock %}" />
+  <meta property="og:type" content="{% block OG_TYPE %}website{% endblock %}" />
+  <meta property="og:image" content="{% block OG_IMAGE %}{% static 'img/og-lpon-default.png' %}{% endblock %}" />
+  <meta property="og:image:alt" content="{% block OG_IMAGE_ALT %}LPON.RU{% endblock %}" />
+  <meta name="twitter:card" content="{% block TWITTER_CARD %}summary_large_image{% endblock %}" />
+  <meta name="twitter:title" content="{% block TWITTER_TITLE %}LPON.RU{% endblock %}" />
+  <meta name="twitter:description" content="{% block TWITTER_DESCRIPTION %}LPON — Магазин виниловых пластинок и аудиокассет{% endblock %}" />
+  <meta name="twitter:image" content="{% block TWITTER_IMAGE %}{% static 'img/og-lpon-default.png' %}{% endblock %}" />
+  <meta name="theme-color" content="#F5F5F5" />
+  {# Шутка #}<meta name="generator" content="Microsoft FrontPage 1.0"/>
+  <link rel="icon" type="image/svg+xml" href="{% static 'svgs/favicon.svg' %}" />
+  <link rel="icon" type="image/png" href="{% static 'img/favicon.png' %}" />
+  <link rel="shortcut icon" type="image/x-icon" href="{% static 'img/favicon.ico' %}" />{% comment %}
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ВАЖНО! В prod будет использоваться tailwind.min.css. Его собирет webpack специально под проект.
+         Для этого у него в input.css прописаны пути к шаблонам, на которые ему надо посмостеть, и он соберет только
+         используемые классы и сгенерирует уникальный tailwind.min.css проекта.
+  <link rel="stylesheet" href="{% static 'css/tailwind.min.css' %}">{# <-- ДОБАВИТЬ В ПРОДАКШЕНЕ #}
+
+  В dev используем tailwindcss из CDN. В нем есть все, но он неимоверно грузит браузер.{% endcomment %}
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>{# <-- УБРАТЬ В ПРОДАКШЕНЕ #}
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "LPON.RU",
+    "url": "{{ request.scheme }}://{{ request.get_host }}/"
+  }
+  </script>{% block EXTRAHEAD %}
+{% endblock %}
+  <link rel="stylesheet" href="{% static 'css/lpon.css' %}" />
+</head>
+<body class="bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">{% block ADD_CSS1 %}{% endblock %}{% block ADD_CSS2 %}{% endblock %}{% block ADD_CSS3 %}{% endblock %}{% block BODY %}
+{#  {% include "blocks/header_nav.jinja2" %}#}
+  <main id="main-content">{% block CONTENT %}{% endblock %}</main>
+{#  {% include "blocks/footer.jinja2" %}{% if COOKIES %}#}
+{#  {% include "blocks/accept-cookies.jinja2" %}{% endif %}#}
+{% endblock BODY %}
+  <script src="{% static 'js/alpine.min.js' %}"></script>
+  <script src="{% static 'js/htmx.min.js' %}"></script> {% block ADD_JS1 %}{% endblock %}{% block ADD_JS2 %}{% endblock %}{% block ADD_JS3 %}
+{% endblock %}</body>
+</html>
