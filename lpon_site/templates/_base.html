@@ -43,17 +43,17 @@
     "name": "LPON.RU",
     "url": "{{ request.scheme }}://{{ request.get_host }}/"
   }
-  </script>{% block EXTRAHEAD %}
-{% endblock %}
+  </script>{% block EXTRAHEAD %}{% endblock EXTRAHEAD %}
   <link rel="stylesheet" href="{% static 'css/lpon.css' %}" />
 </head>
 <body class="bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">{% block ADD_CSS1 %}{% endblock %}{% block ADD_CSS2 %}{% endblock %}{% block ADD_CSS3 %}{% endblock %}{% block BODY %}
-{#  {% include "blocks/header_nav.jinja2" %}#}
-  <main id="main-content">{% block CONTENT %}{% endblock %}</main>
+  {% include "block/header.html" %}
+  <main id="main-content">{% block CONTENT %}{% endblock CONTENT %}
+  </main>
 {#  {% include "blocks/footer.jinja2" %}{% if COOKIES %}#}
 {#  {% include "blocks/accept-cookies.jinja2" %}{% endif %}#}
 {% endblock BODY %}
   <script src="{% static 'js/alpine.min.js' %}"></script>
-  <script src="{% static 'js/htmx.min.js' %}"></script> {% block ADD_JS1 %}{% endblock %}{% block ADD_JS2 %}{% endblock %}{% block ADD_JS3 %}
-{% endblock %}</body>
+  <script src="{% static 'js/htmx.min.js' %}"></script> {% block ADD_JS1 %}{% endblock ADD_JS1 %}{% block ADD_JS2 %}{% endblock ADD_JS2 %}{% block ADD_JS3 %}{% endblock ADD_JS3 %}
+</body>
 </html>

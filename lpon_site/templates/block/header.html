@@ -1,0 +1,21 @@
+{% load static %}<header class="sticky top-0 z-50 bg-white/90 dark:bg-slate-800/70 backdrop-blur border-b border-gray-200 dark:border-gray-800 bg-[url({% static 'svgs/cc.svg' %})] bg-bottom-right bg-no-repeat grid grid-cols-[1fr_auto_1fr] items-center  content-center gap-x-4 px-4 py-0">
+  {# ЛЕВОЕ МЕНЮ #}<menu class="flex items-center gap-x-4 justify-self-end text-xl font-semibold text-slate-900 dark:text-slate-100">
+    <a href="#" class="px-4 py-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg">ВИНИЛ</a>
+    <span class="px-4 py-2 bg-gray-300 dark:bg-gray-600 rounded-lg hidden md:block">КАССЕТЫ</span>
+    <a href="#" class="px-4 py-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg hidden md:block">MD</a>
+  </menu>{# /ЛЕВОЕ МЕНЮ #}
+  {# ЛОГОТИП В ЦЕНТРЕ #}<div class="flex flex-col items-center justify-self-center px-6">
+    <a href="/" class="block leading-none">
+      <picture id="logo" class="block px-6 mb-0 mt-2 leading-none">
+        <source srcset="{% static 'svgs/logo-lpon-d.svg' %}" media="(prefers-color-scheme: dark)" class="mx-auto h-16">
+        <img src="{% static 'svgs/logo-lpon-l.svg' %}" alt="Логотип lpon.ru" class="mx-auto h-16 block">
+      </picture>
+    </a>
+  </div>{# /ЛОГОТИП В ЦЕНТРЕ #}
+  {# ПРАВОЕ МЕНЮ #}<menu class="flex items-center gap-x-4 justify-self-start text-xl font-semibold text-slate-900 dark:text-slate-100">
+    <a href="#" class="px-4 py-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg">CD</a>
+    <a href="#" class="px-4 py-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg hidden md:block hyphens-none">BLU-RAY</a>
+    <a href="#" class="px-4 py-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg hidden lg:block">АКСЕССУАРЫ</a>
+  </menu>{# /ПРАВОЕ МЕНЮ #}
+  {# СЛОГАН #}<p id="slogan" class="col-span-3 text-xs tracking-widest text-gray-300 bg-black/80 dark:text-gray-300 dark:bg-gray-400/80 px-6 pt-1 pb-1 mt-2 mb-4 leading-none rounded-lg justify-self-center">Живой звук C-46, C-60, C-90 и&nbsp;далее…</p>{# /СЛОГАН #}
+</header>

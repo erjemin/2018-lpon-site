@@ -26,6 +26,7 @@ urlpatterns = [
     path(settings.ADMIN_URL, admin.site.urls),
 
     re_path(r'^$', views.index),
+    re_path(r'^catalog/$', views.catalog),
 ]
 
 # Сервировать медиа-файлы в разработке (в production использовать nginx/Apache)

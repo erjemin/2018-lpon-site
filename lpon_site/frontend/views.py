@@ -7,3 +7,7 @@ from django.http import HttpRequest, HttpResponse
 
 def index(request: HttpRequest | None) -> HttpResponse:
     return render(request, 'index.html', {})
+
+
+def catalog(request: HttpRequest | None) -> HttpResponse:
+    return render(request, 'catalog.html', {})
