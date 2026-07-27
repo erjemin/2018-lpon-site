@@ -1,0 +1,10 @@
+/*
+  lpon.css — обычный (не Tailwind-специфичный) CSS сайта lpon.ru
+  (c) 2026, Sergei Erjemin, https://lpon.ru
+
+  ВАЖНО: этот файл подключается напрямую через <link rel="stylesheet">
+         и НЕ проходит через компилятор Tailwind.
+         Tailwind-директивы (@theme, @layer, @apply) здесь работать НЕ БУДУТ!
+
+  Сейчас таких стилей нет, файл пуст.
+*/

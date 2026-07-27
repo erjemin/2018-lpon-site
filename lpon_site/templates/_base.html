@@ -27,22 +27,44 @@
   {# Шутка #}<meta name="generator" content="Microsoft FrontPage 1.0"/>
   <link rel="icon" type="image/svg+xml" href="{% static 'svgs/favicon.svg' %}" />
   <link rel="icon" type="image/png" href="{% static 'img/favicon.png' %}" />
-  <link rel="shortcut icon" type="image/x-icon" href="{% static 'img/favicon.ico' %}" />{% comment %}
-  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  ВАЖНО! В prod будет использоваться tailwind.min.css. Его собирет webpack специально под проект.
-         Для этого у него в input.css прописаны пути к шаблонам, на которые ему надо посмостеть, и он соберет только
-         используемые классы и сгенерирует уникальный tailwind.min.css проекта.
-  <link rel="stylesheet" href="{% static 'css/tailwind.min.css' %}">{# <-- ДОБАВИТЬ В ПРОДАКШЕНЕ #}
+  <link rel="shortcut icon" type="image/x-icon" href="{% static 'img/favicon.ico' %}" />
+  {% if IS_DEBUG %}{% comment %}
+    Переключение dev/prod стилей Tailwind CSS происходит АВТОМАТИЧЕСКИ через
+    переменную IS_DEBUG (см. контексный-процессор frontend/context_processors.py),
 
-  В dev используем tailwindcss из CDN. В нем есть все, но он неимоверно грузит браузер.{% endcomment %}
-  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>{# <-- УБРАТЬ В ПРОДАКШЕНЕ #}
+    DEV: tailwindcss из CDN, компилируется прямо в браузере. Удобно для
+         разработки (не нужна сборка), но грузит браузер и prod не используется.
+    {% endcomment %}<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>{% comment %}
+
+      Кастомные @theme/@layer директивы проекта (токены цвета, типовой стиль
+      ссылок) лежат в css/tailwind-custom.css. @tailwindcss/browser сканирует
+      и компилирует ТОЛЬКО то, что видит в финальном DOM — то есть только
+      содержимое тегов style с type text/tailwindcss, а не внешние .css,
+      подключённые через link. Поэтому файл вставляется сюда через include,
+      а не подключается отдельным link.
+
+      Строка "@import tailwindcss" ниже ОБЯЗАТЕЛЬНА (проверено на практике):
+      без неё @apply в css/tailwind-custom.css не может найти стандартные
+      классы Tailwind (border-slate-500 и т.п.), браузерный компилятор
+      падает с ошибкой уже на этапе разбора — и из-за этого перестаёт
+      генерироваться ВООБЩЕ ВСЯ Tailwind-разметка на странице (не только
+      кастомные стили), верстка превращается в неоформленный HTML.{% endcomment %}
+    <style type="text/tailwindcss">
+      @import "tailwindcss";
+      {% include "css/tailwind-custom.css" %}
+    </style>{% else %}{% comment %}
+    PROD: заранее собранный Tailwind CLI файл (см. frontend-assembly/tailwind/input.css
+          и package.json). CLI сканирует шаблоны проекта и генерирует только реально
+          используемые классы, включая кастомные @theme/@layer директивы из того же
+          самого файла css/tailwind-custom.css (подключён в input.css через @import).{% endcomment %}
+    <link rel="stylesheet" href="{% static 'css/tailwind.min.css' %}">{% endif %}
   <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "WebSite",
-    "name": "LPON.RU",
-    "url": "{{ request.scheme }}://{{ request.get_host }}/"
-  }
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "LPON.RU",
+      "url": "{{ request.scheme }}://{{ request.get_host }}/"
+    }
   </script>{% block EXTRAHEAD %}{% endblock EXTRAHEAD %}
   <link rel="stylesheet" href="{% static 'css/lpon.css' %}" />
 </head>
