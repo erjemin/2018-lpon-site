@@ -72,9 +72,9 @@
   {% include "block/header.html" %}
   <main id="main-content">{% block CONTENT %}{% endblock CONTENT %}
   </main>
-{#  {% include "blocks/footer.jinja2" %}{% if COOKIES %}#}
-{#  {% include "blocks/accept-cookies.jinja2" %}{% endif %}#}
-{% endblock BODY %}
+{#  {% include "blocks/footer.jinja2" %} #}
+{% endblock BODY %}{% if not ALLOW_TRACKING %}
+  {% include "block/allow-tracking.html" %}{% endif %}
   <script src="{% static 'js/alpine.min.js' %}"></script>
   <script src="{% static 'js/htmx.min.js' %}"></script> {% block ADD_JS1 %}{% endblock ADD_JS1 %}{% block ADD_JS2 %}{% endblock ADD_JS2 %}{% block ADD_JS3 %}{% endblock ADD_JS3 %}
 </body>
