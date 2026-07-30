@@ -3,6 +3,10 @@
 {% block DESCRIPTION %}LPON — Магазин виниловых пластинок и аудиокассет{% endblock %}
 
 {% block CONTENT %}
+{# Хлебные крошки. Переменная `breadcrumbs` передаётся из вьюхи catalog() #}
+{# (см. lpon_site/frontend/views.py, класс BreadcrumbItem и docstring вьюхи) #}
+{% include "block/breadcrumbs.html" %}
+
 <div class="grid grid-cols-6 gap-4 h-lvh">
   <div class="col-span-4 col-start-2 bg-blue-500 ...">01 Каталог</div>
   <div class="col-start-1 col-end-3 bg-blue-600 ...">02 Блок</div>
