@@ -41,16 +41,8 @@
       и компилирует ТОЛЬКО то, что видит в финальном DOM — то есть только
       содержимое тегов style с type text/tailwindcss, а не внешние .css,
       подключённые через link. Поэтому файл вставляется сюда через include,
-      а не подключается отдельным link.
-
-      Строка "@import tailwindcss" ниже ОБЯЗАТЕЛЬНА (проверено на практике):
-      без неё @apply в css/tailwind-custom.css не может найти стандартные
-      классы Tailwind (border-slate-500 и т.п.), браузерный компилятор
-      падает с ошибкой уже на этапе разбора — и из-за этого перестаёт
-      генерироваться ВООБЩЕ ВСЯ Tailwind-разметка на странице (не только
-      кастомные стили), верстка превращается в неоформленный HTML.{% endcomment %}
+      а не подключается отдельным link.{% endcomment %}
     <style type="text/tailwindcss">
-      @import "tailwindcss";
       {% include "css/tailwind-custom.css" %}
     </style>{% else %}{% comment %}
     PROD: заранее собранный Tailwind CLI файл (см. frontend-assembly/tailwind/input.css
@@ -74,7 +66,8 @@
   </main>
 {#  {% include "blocks/footer.jinja2" %} #}
 {% endblock BODY %}{% if not ALLOW_TRACKING %}
-  {% include "block/allow-tracking.html" %}{% endif %}
+  {# Если клиент еще не согласился на отслеживание покажем ему уведомление #}{% include "block/allow-tracking.html" %}{% else %}
+  {# Если согласился -- отслеживаем#}<script src="{% static 'js/analytics.js' %}"></script>{% endif %}
   <script src="{% static 'js/alpine.min.js' %}"></script>
   <script src="{% static 'js/htmx.min.js' %}"></script> {% block ADD_JS1 %}{% endblock ADD_JS1 %}{% block ADD_JS2 %}{% endblock ADD_JS2 %}{% block ADD_JS3 %}{% endblock ADD_JS3 %}
 </body>
