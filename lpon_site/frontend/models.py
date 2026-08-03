@@ -1,5 +1,4 @@
 # LPON Store — Django E-Commerce Database Schema (SQLite optimized)
-# 
 # ER-ДИАГРАММА СХЕМЫ БД (v2.0 - переделана правильно!)
 # 
 # Легенда:
@@ -52,7 +51,7 @@
 #
 # TbArticle (текстовый контент и SEO):
 #   id, s_article_title (уникальный), l_article_type, b_article_published
-#   s_article_title_html, k_article_to_image (→filer.Image)
+#   s_article_title_html, k_article_to_image (→filer.Image), i_article_sort, j_article_metadata (JSON)
 #   k_article_to_styles (M2M→TbMusicStyle), i_article_views, i_article_favorites
 #   slug (уникальный, для URL), seo_title, seo_description, s_article_teaser_html
 #   s_article_content_html, t_article_started, t_article_ended, t_article_created, t_article_updated
@@ -327,9 +326,10 @@ class TbArticle(models.Model):
         SELLER = 'seller', 'Seller: продавец или магазин'
         BLOG = 'blog', 'Новость или блог'
         ACTION = 'action', 'Спецпредложение, акция, распродажа и т.д.'
-        TO_MAIN = 'to_main', 'Текст/Блок для главной страницы'
         ADV = 'adv', 'Реклама или баннер'
-        OTHER = '???', 'Другое'
+        HUB = 'HUB', 'СТАТЬЯ-ХАБ (использует DSL для отображения контента)'
+        TXT = 'txt', 'Текстовый контент (для условий конфиденциальности, правил, соглашений и т.д.)'
+        OTHER = '?¿?', 'Другое'
 
     s_article_title = models.CharField(
         max_length=255,
@@ -367,6 +367,14 @@ class TbArticle(models.Model):
         help_text='Если указано, статья будет отображаться только между датой начала и датой окончания публикации.'
                   ' Если не указано, статья будет отображаться всегда (или до тех пор, пока не будет удалена '
                   ' или снята с публикации через `b_article_published`)',
+    )
+    i_article_sort = models.IntegerField(
+        default=0,
+        db_index=True,
+        verbose_name='Приоритет',
+        help_text='Сортировка/Приоритет для HUB. Статьи-хабы (и, возможно, обычные статьи) будут сортироваться'
+                  ' в первую очередь по этому полю. Чем меньше число, тем выше приоритет. Используется для'
+                  ' формирования меню, навигации, разделов и т.д.'
     )
     s_article_title_html = models.CharField(
         max_length=255,
@@ -427,6 +435,14 @@ class TbArticle(models.Model):
         unique=True,
         db_index=True,
         verbose_name='Слаг статьи',
+    )
+    j_article_metadata = models.JSONField(
+        blank=True,
+        null=True,
+        default=dict,
+        verbose_name='Метаданные статьи',
+        help_text='JSON с дополнительными данными статьи. Может быть понадобится. Например, можно хранить информацию'
+                  ' об источнике данных, авторе статьи, ссылках на внешние ресурсы, историю переименований slug и т.д.',
     )
     seo_title = models.CharField(
         max_length=255,
