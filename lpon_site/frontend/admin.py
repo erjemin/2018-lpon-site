@@ -1065,6 +1065,7 @@ class ArticleAdminForm(CodeMirrorFormMixin):
             's_article_title', 'slug', 'l_article_type', 'b_article_published', 'k_article_to_image',
             's_article_title_html', 's_article_teaser_html', 's_article_content_html', 'seo_title',
             'seo_description', 'seo_keywords', 't_article_ended', 'i_article_views', 'i_article_favorites',
+            'i_article_sort', 'j_article_metadata',
         )
 
     def __init__(self, *args, **kwargs):
@@ -1098,6 +1099,10 @@ class ArticleAdminForm(CodeMirrorFormMixin):
                                     css_class='codemirror-width-s codemirror-no-lines')
         self.setup_codemirror_field('i_article_favorites', language='text',
                                     css_class='codemirror-width-s codemirror-no-lines')
+        self.setup_codemirror_field('i_article_sort', language='text',
+                                    css_class='codemirror-width-s codemirror-no-lines')
+        self.setup_codemirror_field('j_article_metadata', language='json',
+                                    css_class='codemirror-width-xl codemirror-min-height-5')
 
     def clean(self):
         """
@@ -1140,7 +1145,8 @@ class ArticleAdmin(RequestInFormMixin, admin.ModelAdmin):
     """Админ для статей с поддержкой передачи request в форму"""
     form = ArticleAdminForm  # Используем кастомную форму с CodeMirror
 
-    list_display = ('id', 'article_thumbnail', 's_article_title', 'l_article_type', 'b_article_published', 't_article_created')
+    list_display = ('id', 'article_thumbnail', 's_article_title', 'l_article_type', 'i_article_sort',
+                    'b_article_published', 't_article_created')
     list_display_links = ('id', 'article_thumbnail', 's_article_title',)
     list_filter = ('l_article_type', 'b_article_published', 't_article_created')
     search_fields = ('s_article_title', 'slug')
@@ -1150,7 +1156,7 @@ class ArticleAdmin(RequestInFormMixin, admin.ModelAdmin):
 
     fieldsets = (
         ('Основная информация', {
-            'fields': ('s_article_title', 'slug', 'l_article_type', 'b_article_published'),
+            'fields': ('s_article_title', 'slug', 'l_article_type', 'b_article_published', 'i_article_sort',),
         }),
         ('Изображение', {
             'fields': ('k_article_to_image',),
@@ -1173,8 +1179,8 @@ class ArticleAdmin(RequestInFormMixin, admin.ModelAdmin):
             'fields': ('i_article_views', 'i_article_favorites',),
             'classes': ('collapse',),
         }),
-        ('SEO и метаданные', {
-            'fields': ('seo_title', 'seo_description', 'seo_keywords'),
+        ('Метаданные и SEO', {
+            'fields': ('j_article_metadata', 'seo_title', 'seo_description', 'seo_keywords'),
             'classes': ('collapse',),
         }),
         ('Служебная информация', {
