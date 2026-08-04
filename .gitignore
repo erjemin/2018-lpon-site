@@ -367,9 +367,12 @@ public/static_collected/
 .github/
 
 # Data Backup
-database/
+*.sql
+**.sql.gz
+*.sqlite*
 
 # Frontend assembly builds
 frontend-assembly/*/node_modules/
 frontend-assembly/*/src/
 frontend-assembly/*/.env
+
