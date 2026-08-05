@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from django.shortcuts import render
 from django.http import HttpRequest, HttpResponse
 
+from frontend.models import TbArticle
+
 # Create your views here.
 
 
@@ -106,3 +108,46 @@ def catalog(request: HttpRequest | None) -> HttpResponse:
         BreadcrumbItem(title="Для перезаписи" ),  # url передан -> обычный пункт со ссылкой
     ]
     return render(request, 'catalog.html', {"breadcrumbs": breadcrumbs})
+
+
+def txt_articles_list(request: HttpRequest | None) -> HttpResponse:
+    """
+    Представление (View) для отображения списка текстовых статей (тип ArticleType.TXT).
+
+    Функциональность:
+    -----------------
+    1. Выбирает из БД все опубликованные статьи (b_article_published=True) с типом 'txt'.
+    2. Сортирует их по полю приоритета i_article_sort (по возрастанию, чем меньше число —
+       тем выше в списке), затем по дате создания (-t_article_created) и названию.
+    3. Оптимизирует выборку связанного файла обложки (k_article_to_image) через select_related,
+       чтобы избежать N+1 запросов при рендеринге изображений в списке.
+    4. Формирует хлебные крошки (BreadcrumbItem) с элементом "Инструкции".
+    5. Рендерит шаблон `txt_list.html`, передавая в контекст список статей и хлебные крошки.
+
+    Аргументы:
+        request (HttpRequest | None): Объект HTTP-запроса Django.
+
+    Возвращает:
+        HttpResponse: Сформированная HTML-страница со списком текстовых статей.
+    """
+    # Выбираем опубликованные текстовые статьи из базы данных с правильной сортировкой
+    articles = (
+        TbArticle.objects.filter(
+            l_article_type=TbArticle.ArticleType.TXT,
+            b_article_published=True,
+        )
+        .select_related('k_article_to_image')
+        .order_by('i_article_sort', '-t_article_created', 's_article_title')
+    )
+
+    # Формируем цепочку хлебных крошек (пункт "Главная" добавляется автоматически в шаблоне)
+    breadcrumbs = [
+        BreadcrumbItem(title="Инструкции"),
+    ]
+
+    # Передаём контекст в шаблон списка текстовых статей
+    context = {
+        "articles": articles,
+        "breadcrumbs": breadcrumbs,
+    }
+    return render(request, "roll/txt_list.html", context)
