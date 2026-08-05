@@ -62,7 +62,8 @@
 </head>
 <body class="bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">{% block ADD_CSS1 %}{% endblock %}{% block ADD_CSS2 %}{% endblock %}{% block ADD_CSS3 %}{% endblock %}{% block BODY %}
   {% include "block/header.html" %}
-  <main id="main-content">{% block CONTENT %}{% endblock CONTENT %}
+  <main id="main-content" class="max-w-7xl min-h-screen mx-auto px-4 py-8">
+    {% block CONTENT %}{% endblock CONTENT %}
   </main>
 {#  {% include "blocks/footer.jinja2" %} #}
 {% endblock BODY %}{% if not ALLOW_TRACKING %}
