@@ -1,6 +1,0 @@
-{
-  "devDependencies": {
-    "prettier": "^3.9.6",
-    "prettier-plugin-tailwindcss": "^0.8.1"
-  }
-}
