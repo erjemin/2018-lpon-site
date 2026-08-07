@@ -375,4 +375,5 @@ public/static_collected/
 frontend-assembly/*/node_modules/
 frontend-assembly/*/src/
 frontend-assembly/*/.env
+node_modules/
 
