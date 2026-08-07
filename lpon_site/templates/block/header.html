@@ -1,29 +1,29 @@
 {% load static %}<header x-data="{scrolled:false}" @scroll.window="scrolled=(window.scrollY>50)" class="sticky top-0
-   z-50 bg-white/90 dark:bg-slate-800/70 backdrop-blur border-b border-gray-200 dark:border-gray-800
-   bg-[url({% static 'svgs/cc.svg' %})] bg-bottom-right bg-no-repeat grid grid-cols-[1fr_auto_1fr] items-center
-   content-center gap-x-4 px-4 py-0">{% comment %}
-      Пункты меню — ссылки-кнопки, а не типовой текст, поэтому у каждой <a> явно
-      заданы border-0 (отключает пунктирное подчёркивание из общего стиля ссылок) и свой
-      цвет text-slate-900/dark:text-slate-100 (см. пояснение в css/tailwind-custom.css).{% endcomment %}
-    {# ЛЕВОЕ МЕНЮ #}<menu class="flex items-center gap-x-4 justify-self-end text-xl font-semibold text-slate-900 dark:text-slate-100">
-      <a href="#" class="px-4 py-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg border-0 text-slate-900 dark:text-slate-100">ВИНИЛ</a>
-      <span class="px-4 py-2 bg-gray-300 dark:bg-gray-600 rounded-lg hidden md:block">КАССЕТЫ</span>
-      <a href="#" class="px-4 py-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg hidden md:block border-0 text-slate-900 dark:text-slate-100">MD</a>
-    </menu>{# /ЛЕВОЕ МЕНЮ #}
-    {# ЛОГОТИП В ЦЕНТРЕ #}<div class="flex flex-col items-center justify-self-center px-6">{% comment %}
-      border-0 — логотип оборачивается в ссылку без текста, отключаем типовое
-      пунктирное подчёркивание ссылки, которое иначе появится под картинкой.{% endcomment %}
-      <a href="/" class="block leading-none border-0">
-        <picture id="logo" class="block my-2 leading-none" :class="scrolled?'px-0':'px-6'">
-          <source srcset="{% static 'svgs/logo-lpon-d.svg' %}" media="(prefers-color-scheme: dark)" class="mx-auto transition-all duration-300" :class="scrolled?'h-12':'h-18'">
-          <img src="{% static 'svgs/logo-lpon-l.svg' %}" alt="Логотип lpon.ru" class="mx-auto block transition-all duration-300" :class="scrolled?'h-12':'h-18'">
-        </picture>
-      </a>
-    </div>{# /ЛОГОТИП В ЦЕНТРЕ #}
-    {# ПРАВОЕ МЕНЮ #}<menu class="flex items-center gap-x-4 justify-self-start text-xl font-semibold text-slate-900 dark:text-slate-100">
-      <a href="#" class="px-4 py-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg border-0 text-slate-900 dark:text-slate-100">CD</a>
-      <a href="#" class="px-4 py-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg hidden md:block hyphens-none border-0 text-slate-900 dark:text-slate-100">BLU-RAY</a>
-      <a href="#" class="px-4 py-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg hidden lg:block border-0 text-slate-900 dark:text-slate-100">АКСЕССУАРЫ</a>
-    </menu>{# /ПРАВОЕ МЕНЮ #}
-    {# СЛОГАН #}<p id="slogan" x-show="!scrolled" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="col-span-3 text-xs tracking-widest text-gray-300 bg-black/80 dark:text-gray-300 dark:bg-gray-400/80 px-6 pt-1 pb-1 mb-4 leading-none rounded-lg justify-self-center">Живой звук C-46, C-60, C-90 и&nbsp;далее…</p>{# /СЛОГАН #}
-  </header>
+      z-50 bg-gray-100/90 dark:bg-slate-800/70 backdrop-blur border-b border-gray-200 dark:border-gray-800
+      bg-[url({% static 'svgs/cc.svg' %})] bg-bottom-right bg-no-repeat grid grid-cols-[1fr_auto_1fr] items-center
+      content-center gap-x-4 px-4 py-0">{% comment %}
+        Пункты меню — ссылки-кнопки, а не типовой текст, поэтому у каждой <a> явно
+        заданы border-0 (отключает пунктирное подчёркивание из общего стиля ссылок) и свой
+        цвет text-slate-900/dark:text-slate-100 (см. пояснение в css/tailwind-custom.css).{% endcomment %}
+      {# ЛЕВОЕ МЕНЮ #}<menu class="flex items-center gap-x-4 justify-self-end text-xl font-semibold text-slate-900 dark:text-slate-100">
+        <a href="#" class="px-4 py-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg border-0 text-slate-900 dark:text-slate-100">ВИНИЛ</a>
+        <span class="px-4 py-2 bg-gray-300 dark:bg-gray-600 rounded-lg hidden md:block">КАССЕТЫ</span>
+        <a href="#" class="px-4 py-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg hidden md:block border-0 text-slate-900 dark:text-slate-100">MD</a>
+      </menu>{# /ЛЕВОЕ МЕНЮ #}
+      {# ЛОГОТИП В ЦЕНТРЕ #}<div class="flex flex-col items-center justify-self-center px-6">{% comment %}
+        border-0 — логотип оборачивается в ссылку без текста, отключаем типовое
+        пунктирное подчёркивание ссылки, которое иначе появится под картинкой.{% endcomment %}
+        <a href="/" class="block leading-none border-0">
+          <picture id="logo" class="block my-2 leading-none" :class="scrolled?'px-0':'px-6'">
+            <source srcset="{% static 'svgs/logo-lpon-d.svg' %}" media="(prefers-color-scheme: dark)" class="mx-auto transition-all duration-300" :class="scrolled?'h-12':'h-18'">
+            <img src="{% static 'svgs/logo-lpon-l.svg' %}" alt="Логотип lpon.ru" class="mx-auto block transition-all duration-300" :class="scrolled?'h-12':'h-18'">
+         </picture>
+        </a>
+      </div>{# /ЛОГОТИП В ЦЕНТРЕ #}
+      {# ПРАВОЕ МЕНЮ #}<menu class="flex items-center gap-x-4 justify-self-start text-xl font-semibold text-slate-900 dark:text-slate-100">
+        <a href="#" class="px-4 py-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg border-0 text-slate-900 dark:text-slate-100">CD</a>
+        <a href="#" class="px-4 py-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg hidden md:block hyphens-none border-0 text-slate-900 dark:text-slate-100">BLU-RAY</a>
+        <a href="#" class="px-4 py-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg hidden lg:block border-0 text-slate-900 dark:text-slate-100">АКСЕССУАРЫ</a>
+      </menu>{# /ПРАВОЕ МЕНЮ #}
+      {# СЛОГАН #}<p id="slogan" x-show="!scrolled" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="col-span-3 text-xs tracking-widest text-gray-300 bg-black/80 dark:text-gray-300 dark:bg-gray-400/80 px-6 pt-1 pb-1 mb-4 leading-none rounded-lg justify-self-center">Живой звук C-46, C-60, C-90 и&nbsp;далее…</p>{# /СЛОГАН #}
+    </header>

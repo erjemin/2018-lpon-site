@@ -44,34 +44,30 @@
     просто объект с нужными атрибутами — главное, чтобы у каждого элемента были
     поля `title` и `url`.
 
-{% endcomment %}{% if breadcrumbs %}<nav aria-label="Хлебные крошки" class="px-4 py-2 text-sm text-slate-500 dark:text-slate-100 hidden md:block bg-slate-50 dark:bg-slate-900 rounded-xl">
+{% endcomment %}{% if breadcrumbs %}<nav aria-label="Хлебные крошки" class="px-4 py-2 text-sm text-slate-500 dark:text-slate-100 hidden md:block bg-slate-50 dark:bg-slate-900 rounded-xl">{% comment %}
   {# aria-label="Хлебные крошки" — для доступности, чтобы скринридеры озвучивали #}
   {# пользователю, что это именно хлебные крошки, а не просто список ссылок. #}
-  {# hidden md:block — скрываем на маленьких экранах (мобильных) #}
-  <ol class="flex flex-wrap items-center gap-x-2">{% comment %}
-  	    ol вместо ul — потому что это упорядоченный список, а не просто
-        набор ссылок. Важный момент для доступности и SEO.{% endcomment %}
-    <li class="flex items-center gap-x-2">{# Ссылка на главную (домик) #}
-      {# пунктирное подчёркивание и цвет теперь задаются типовым стилем #}
-      {# ссылок (см. css/tailwind-custom.css, @layer base { a {...} }); #}
-      {# opacity-70/hover/transition — собственный эффект именно для иконки-домика. #}
-      <a href="/" aria-label="Главная" class="opacity-70 hover:opacity-100 transition-opacity py-0.5">
-        <img src="{% static 'svgs/ico-home.svg' %}" alt="" aria-hidden="true" class="w-5 h-4 dark:invert">
-      </a>
-    </li>
-    {% for crumb in breadcrumbs %}
-      <li class="flex items-center gap-x-2">
-        {# Разделитель перед пунктом #}<span aria-hidden="true" class="text-slate-400 dark:text-slate-600">/</span>
-        {% if crumb.url and not forloop.last %}
-          {# Обычный пункт со ссылкой (не последний и с заданным url). #}
-          {# Класс не нужен — типовое оформление ссылки (пунктир, цвет, ховер) #}
-          {# задаётся автоматически через css/tailwind-custom.css, @layer base { a {...} }. #}
-          <a href="{{ crumb.url }}">{{ crumb.title }}</a>
-        {% else %}
-          {# Текущая страница: без ссылки, с aria-current="page" для доступности и SEO #}
-          <span aria-current="page" class="font-medium">{{ crumb.title }}</span>
-        {% endif %}
-      </li>
-    {% endfor %}
-  </ol>
-</nav>{% endif %}
+  {# hidden md:block — скрываем на маленьких экранах (мобильных) #}{% endcomment %}
+        <ol class="flex flex-wrap items-center gap-x-2">{% comment %}
+              {# ol вместо ul — потому что это упорядоченный список, а не просто #}
+              {# набор ссылок. Важный момент для доступности и SEO. #}{% endcomment %}
+          <li class="flex items-center gap-x-2">{% comment %}{# Ссылка на главную (домик) #}
+            {# пунктирное подчёркивание и цвет теперь задаются типовым стилем #}
+            {# ссылок (см. css/tailwind-custom.css, @layer base { a {...} }); #}
+            {# opacity-70/hover/transition — собственный эффект именно для иконки-домика. #}{% endcomment %}
+            <a href="/" aria-label="Главная" class="opacity-70 hover:opacity-100 transition-opacity py-0.5">
+              <img src="{% static 'svgs/ico-home.svg' %}" alt="" aria-hidden="true" class="w-5 h-4 dark:invert">
+            </a>
+          </li>{% for crumb in breadcrumbs %}
+          <li class="flex items-center gap-x-2">
+            {# Разделитель перед пунктом #}<span aria-hidden="true" class="text-slate-400 dark:text-slate-600">/</span>
+            {% if crumb.url and not forloop.last %}{% comment %}
+              {# Обычный пункт со ссылкой (не последний и с заданным url). #}
+              {# Класс не нужен — типовое оформление ссылки (пунктир, цвет, ховер) #}
+              {# задаётся автоматически через css/tailwind-custom.css, @layer base { a {...} }. #}
+              {% endcomment %}<a href="{{ crumb.url }}">{{ crumb.title }}</a>{% else %}{% comment %}
+              {# Текущая страница: без ссылки, с aria-current="page" для доступности и SEO #}
+              {% endcomment %}<span aria-current="page" class="font-medium">{{ crumb.title|safe }}</span>{% endif %}
+          </li>{% endfor %}
+        </ol>
+      </nav>{% endif %}

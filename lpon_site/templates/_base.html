@@ -1,75 +1,69 @@
-<!DOCTYPE html>{% load static %}<html lang="ru">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="{% block DESCRIPTION %}LPON — Магазин виниловых пластинок и аудиокассет{% endblock %}" />
-  <meta name="keywords" content="{% block KEYWORDS %}vinyl, audio, music, LPON{% endblock %}" />
-  <meta name="copyright" lang="ru" content="Sergei Erjemin{% block META_COPYRIGHT_AUTHOR %}{% endblock %}." />
-  <meta name="robots" content="{% block ROBOTS %}index,follow{% endblock %}" />
-  <meta name="format-detection" content="telephone=no" />
-  <title>{% block PAGE_TITLE %}LPON.RU{% endblock %}</title>
-  <meta name="meta-title" content="{% block META_TITLE %}LPON.RU{% endblock %}" />
-  <meta name="meta-description" content="{% block META_DESCRIPTION %}LPON — Магазин виниловых пластинок и аудиокассет{% endblock %}" />
-  <link rel="canonical" href="{% block CANONICAL %}{{ request.scheme }}://{{ request.get_host }}{{ request.path }}{% endblock %}" />
-  <meta property="og:site_name" content="LPON.RU" />
-  <meta property="og:locale" content="ru_RU" />
-  <meta property="og:title" content="{% block OG_TITLE %}LPON.RU{% endblock %}" />
-  <meta property="og:description" content="{% block OG_DESCRIPTION %}LPON — Магазин виниловых пластинок и аудиокассет{% endblock %}" />
-  <meta property="og:url" content="{% block OG_URL %}{{ request.scheme }}://{{ request.get_host }}{{ request.path }}{% endblock %}" />
-  <meta property="og:type" content="{% block OG_TYPE %}website{% endblock %}" />
-  <meta property="og:image" content="{% block OG_IMAGE %}{% static 'img/og-lpon-default.png' %}{% endblock %}" />
-  <meta property="og:image:alt" content="{% block OG_IMAGE_ALT %}LPON.RU{% endblock %}" />
-  <meta name="twitter:card" content="{% block TWITTER_CARD %}summary_large_image{% endblock %}" />
-  <meta name="twitter:title" content="{% block TWITTER_TITLE %}LPON.RU{% endblock %}" />
-  <meta name="twitter:description" content="{% block TWITTER_DESCRIPTION %}LPON — Магазин виниловых пластинок и аудиокассет{% endblock %}" />
-  <meta name="twitter:image" content="{% block TWITTER_IMAGE %}{% static 'img/og-lpon-default.png' %}{% endblock %}" />
-  <meta name="theme-color" content="#F5F5F5" />
-  {# Шутка #}<meta name="generator" content="Microsoft FrontPage 1.0"/>
-  <link rel="icon" type="image/svg+xml" href="{% static 'svgs/favicon.svg' %}" />
-  <link rel="icon" type="image/png" href="{% static 'img/favicon.png' %}" />
-  <link rel="shortcut icon" type="image/x-icon" href="{% static 'img/favicon.ico' %}" />
-  {% if IS_DEBUG %}{% comment %}
-    Переключение dev/prod стилей Tailwind CSS происходит АВТОМАТИЧЕСКИ через
-    переменную IS_DEBUG (см. контексный-процессор frontend/context_processors.py),
-
-    DEV: tailwindcss из CDN, компилируется прямо в браузере. Удобно для
-         разработки (не нужна сборка), но грузит браузер и prod не используется.
-    {% endcomment %}<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>{% comment %}
-
-      Кастомные @theme/@layer директивы проекта (токены цвета, типовой стиль
-      ссылок) лежат в css/tailwind-custom.css. @tailwindcss/browser сканирует
-      и компилирует ТОЛЬКО то, что видит в финальном DOM — то есть только
-      содержимое тегов style с type text/tailwindcss, а не внешние .css,
-      подключённые через link. Поэтому файл вставляется сюда через include,
-      а не подключается отдельным link.{% endcomment %}
+<!doctype html>{% load static %}
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="{% block DESCRIPTION %}LPON — Магазин виниловых пластинок и аудиокассет{% endblock %}" />
+    <meta name="keywords" content="{% block KEYWORDS %}vinyl, audio, music, LPON{% endblock %}" />
+    <meta name="copyright" lang="ru" content="Sergei Erjemin{% block META_COPYRIGHT_AUTHOR %}{% endblock %}." />
+    <meta name="robots" content="{% block ROBOTS %}index,follow{% endblock %}" />
+    <meta name="format-detection" content="telephone=no" />
+    <title>{% block PAGE_TITLE %}LPON.RU{% endblock %}</title>
+    <meta name="meta-title" content="{% block META_TITLE %}LPON.RU{% endblock %}" />
+    <meta name="meta-description" content="{% block META_DESCRIPTION %}LPON — Магазин виниловых пластинок и аудиокассет{% endblock %}" />
+    <link rel="canonical" href="{% block CANONICAL %}{{ request.scheme }}://{{ request.get_host }}{{ request.path }}{% endblock %}" />
+    <meta property="og:site_name" content="LPON.RU" />
+    <meta property="og:locale" content="ru_RU" />
+    <meta property="og:title" content="{% block OG_TITLE %}LPON.RU{% endblock %}" />
+    <meta property="og:description" content="{% block OG_DESCRIPTION %}LPON — Магазин виниловых пластинок и аудиокассет{% endblock %}" />
+    <meta property="og:url" content="{% block OG_URL %}{{ request.scheme }}://{{ request.get_host }}{{ request.path }}{% endblock %}" />
+    <meta property="og:type" content="{% block OG_TYPE %}website{% endblock %}" />
+    <meta property="og:image" content="{% block OG_IMAGE %}{% static 'img/og-lpon-default.png' %}{% endblock %}" />
+    <meta property="og:image:alt" content="{% block OG_IMAGE_ALT %}LPON.RU{% endblock %}" />
+    <meta name="twitter:card" content="{% block TWITTER_CARD %}summary_large_image{% endblock %}" />
+    <meta name="twitter:title" content="{% block TWITTER_TITLE %}LPON.RU{% endblock %}" />
+    <meta name="twitter:description" content="{% block TWITTER_DESCRIPTION %}LPON — Магазин виниловых пластинок и аудиокассет{% endblock %}" />
+    <meta name="twitter:image" content="{% block TWITTER_IMAGE %}{% static 'img/og-lpon-default.png' %}{% endblock %}" />
+    <meta name="theme-color" content="#F5F5F5" />
+    {# Шутка #}<meta name="generator" content="Microsoft FrontPage 1.0" />
+    <link rel="icon" type="image/svg+xml" href="{% static 'svgs/favicon.svg' %}" />
+    <link rel="icon" type="image/png" href="{% static 'img/favicon.png' %}" />
+    <link rel="shortcut icon" type="image/x-icon" href="{% static 'img/favicon.ico' %}" />{% if IS_DEBUG %}{% comment %}
+    Переключение dev/prod стилей Tailwind CSS происходит
+    АВТОМАТИЧЕСКИ через переменную IS_DEBUG (см. контексный-процессор
+    frontend/context_processors.py), DEV: tailwindcss из CDN, компилируется прямо в браузере. Удобно
+    для разработки (не нужна сборка), но грузит браузер и prod не используется. {% endcomment %}
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>{% comment %}
+    Кастомные @theme/@layer директивы проекта (токены цвета, типовой стиль ссылок)
+    лежат в css/tailwind-custom.css. @tailwindcss/browser сканирует и компилирует ТОЛЬКО то, что
+    видит в финальном DOM — то есть только содержимое тегов style с type text/tailwindcss, а не
+    внешние .css, подключённые через link. Поэтому файл вставляется сюда через include, а не
+    подключается отдельным link.{% endcomment %}
     <style type="text/tailwindcss">
       {% include "css/tailwind-custom.css" %}
-    </style>{% else %}{% comment %}
-    PROD: заранее собранный Tailwind CLI файл (см. frontend-assembly/tailwind/input.css
-          и package.json). CLI сканирует шаблоны проекта и генерирует только реально
-          используемые классы, включая кастомные @theme/@layer директивы из того же
-          самого файла css/tailwind-custom.css (подключён в input.css через @import).{% endcomment %}
-    <link rel="stylesheet" href="{% static 'css/tailwind.min.css' %}">{% endif %}
-  <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "WebSite",
-      "name": "LPON.RU",
-      "url": "{{ request.scheme }}://{{ request.get_host }}/"
-    }
-  </script>{% block EXTRAHEAD %}{% endblock EXTRAHEAD %}
-  <link rel="stylesheet" href="{% static 'css/lpon.css' %}" />
-</head>
-<body class="bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">{% block ADD_CSS1 %}{% endblock %}{% block ADD_CSS2 %}{% endblock %}{% block ADD_CSS3 %}{% endblock %}{% block BODY %}
-  {% include "block/header.html" %}
-  <main id="main-content" class="max-w-7xl min-h-screen mx-auto px-4 py-8">
-    {% block CONTENT %}{% endblock CONTENT %}
-  </main>
-{#  {% include "blocks/footer.jinja2" %} #}
-{% endblock BODY %}{% if not ALLOW_TRACKING %}
-  {# Если клиент еще не согласился на отслеживание покажем ему уведомление #}{% include "block/allow-tracking.html" %}{% else %}
-  {# Если согласился -- отслеживаем#}<script src="{% static 'js/analytics.js' %}"></script>{% endif %}
-  <script src="{% static 'js/alpine.min.js' %}"></script>
-  <script src="{% static 'js/htmx.min.js' %}"></script> {% block ADD_JS1 %}{% endblock ADD_JS1 %}{% block ADD_JS2 %}{% endblock ADD_JS2 %}{% block ADD_JS3 %}{% endblock ADD_JS3 %}
-</body>
+    </style>{% else %}{% comment %} PROD: заранее собранный Tailwind CLI файл (см.
+    frontend-assembly/tailwind/input.css и package.json). CLI сканирует шаблоны проекта и генерирует
+    только реально используемые классы, включая кастомные @theme/@layer директивы из того же самого
+    файла css/tailwind-custom.css (подключён в input.css через @import).{% endcomment %}
+    <link rel="stylesheet" href="{% static 'css/tailwind.min.css' %}" />{% endif %}
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "LPON.RU",
+        "url": "{{ request.scheme }}://{{ request.get_host }}/"
+      }
+    </script>{% block EXTRAHEAD %}{% endblock EXTRAHEAD %}
+    <link rel="stylesheet" href="{% static 'css/lpon.css' %}" />
+  </head>
+  <body class="bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    {% block ADD_CSS1 %}{% endblock %}{% block ADD_CSS2 %}{% endblock %}{% block ADD_CSS3 %}{% endblock %}{% block BODY %}{% include "block/header.html" %}
+    <main id="main-content" class="mx-auto min-h-screen max-w-7xl px-4 py-8 font-serif">
+      {% block CONTENT %}{% endblock CONTENT %}
+    </main>
+    {# {% include "blocks/footer.jinja2" %} #}{% endblock BODY %}{% if not ALLOW_TRACKING %}{# Если клиент еще не согласился на отслеживание покажем ему уведомление #}{% include "block/allow-tracking.html" %}{% else %}{# Если согласился -- отслеживаем#}
+    <script src="{% static 'js/analytics.js' %}"></script>{% endif %}
+    <script src="{% static 'js/alpine.min.js' %}"></script>
+    <script src="{% static 'js/htmx.min.js' %}"></script>{% block ADD_JS1 %}{% endblock ADD_JS1 %}{% block ADD_JS2 %}{% endblock ADD_JS2 %}{% block ADD_JS3 %}{% endblock ADD_JS3 %}
+  </body>
 </html>
