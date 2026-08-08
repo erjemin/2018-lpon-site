@@ -3,13 +3,11 @@
 {% block PAGE_TITLE %}Инструкции — LPON.RU{% endblock %}
 {% block DESCRIPTION %}Информационные и текстовые материалы, правила, условия и справка LPON.RU{% endblock %}
 
-{% block CONTENT %}
-{# Подключение блока хлебных крошек #}
-{% include "block/breadcrumbs.html" %}
+{% block CONTENT %}{# Подключение блока хлебных крошек #}{% include "block/breadcrumbs.html" %}
 
 <div class="py-6">
   {# Заголовок страницы #}
-  <h1 class="text-3xl font-bold mb-6 text-slate-900 dark:text-slate-100 font-serif px-4">
+  <h1 class="text-3xl font-bold mb-6 text-slate-900 dark:text-slate-100 px-4">
     Инструкции
   </h1>
 
@@ -30,7 +28,7 @@
           {% endif %}
 
           {# Заголовок статьи со ссылкой #}
-          <h2 class="text-xl font-semibold mb-2 text-slate-900 dark:text-slate-100 font-serif">
+          <h2 class="text-xl font-semibold mb-2 text-slate-900 dark:text-slate-100">
             <a href="/info/{{ article.slug }}/" class="text-slate-900 dark:text-slate-100 hover:text-blue-500">
               {% if article.s_article_title_html %}
                 {{ article.s_article_title_html|safe }}
@@ -42,13 +40,13 @@
 
           {# Тизер / анонс статьи #}
           {% if article.s_article_teaser_html %}
-            <div class="text-slate-600 dark:text-slate-400 mb-4 grow leading-relaxed font-serif">
+            <div class="text-slate-600 dark:text-slate-400 mb-4 grow leading-relaxed">
               {{ article.s_article_teaser_html|safe }}
             </div>
           {% endif %}
 
           {# Подвал карточки с датой и кнопкой перехода #}
-          <div class="mt-auto pt-4 border-t border-slate-200/60 dark:border-slate-800 flex items-center justify-between text-sm text-slate-500 dark:text-slate-400 font-serif">
+          <div class="mt-auto pt-4 border-t border-slate-200/60 dark:border-slate-800 flex items-center justify-between text-sm text-slate-500 dark:text-slate-40">
             <span>{{ article.t_article_created|date:"Y.m.d" }}</span>
             <a href="/info/{{ article.slug }}/" class="font-medium">
               Читать полностью &rarr;
