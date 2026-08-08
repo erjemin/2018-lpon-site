@@ -1010,7 +1010,7 @@ class ArticleAdminForm(CodeMirrorFormMixin):
     # Виртуальные поля для настройки типографа
     etp_enable = forms.BooleanField(
         label="Включить типограф",
-        initial=True,
+        initial=False,
         required=False,
         help_text="Включить автоматическую типографику для HTML полей (заголовок, тизер, контент)&nbsp;&nbsp;&nbsp;"
     )
