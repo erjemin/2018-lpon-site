@@ -27,7 +27,8 @@ urlpatterns = [
 
     re_path(r'^$', views.index),
     re_path(r'^catalog/$', views.catalog),
-    re_path(r'^info/?$', views.txt_articles_list, name='txt_articles_list'),
+    re_path(r'^info/?$', views.info_articles_list, name='info_articles_list'),
+    re_path(r'^info/(?P<slug>[-a-zA-Z0-9_]+)/?$', views.info_article_detail, name='info_article_detail'),
 ]
 
 # Сервировать медиа-файлы в разработке (в production использовать nginx/Apache)

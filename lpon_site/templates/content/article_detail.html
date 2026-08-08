@@ -1,0 +1,39 @@
+{% extends "_base.html" %} {% load static %}
+{# SEO Мета-данные статьи #}
+{% block PAGE_TITLE %}{{ article.seo_title|default:article.s_article_title_html|striptags|default:article.s_article_title }} — LPON.RU{% endblock %}
+
+{% block DESCRIPTION %}{{ article.seo_description|default:article.s_article_teaser_html|striptags|default:"" }}{% endblock %}
+
+{% block CONTENT %}{# Подключение блока хлебных крошек #}{% include "block/breadcrumbs.html" %}{% comment %}
+ КОНТЕНТ НАЧАЛО
+
+{% endcomment %}      <article class="mx-auto grid grid-cols-3 gap-8 py-6">
+        {# ПРАВАЯ КОЛОНКА / Обложка / Иллюстрация статьи, если есть #}{% if article.k_article_to_image %}<div class="mb-8 max-h-[480px] overflow-hidden">
+          <img src="{{ article.k_article_to_image.url }}" alt="{{ article.k_article_to_image.default_alt_text|default:article.s_article_title }}" class="h-auto w-full rounded-xl border border-slate-200 object-cover dark:border-slate-800" />
+        </div>{% endif %}
+        {# ЛЕВАЯ КОЛОНКА / Основной текст статьи #}<div class="col-span-2">
+          <!-- Заголовл -->
+          <h1 class="mb-4 text-3xl leading-tight font-bold text-slate-900 dark:text-slate-100">{% if article.s_article_title_html %}{{ article.s_article_title_html|safe }}{% else %}{{ article.s_article_title }}{% endif %}</h1>
+          <!-- /Заголовок -->
+          <!-- Мета-данные -->
+         <div class="mb-6 items-center gap-4 border-b border-slate-200 pb-4 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
+           <time datetime="{{ article.t_article_created|date:'Y-m-d' }}">{{ article.t_article_created|date:"d.m.Y" }}</time>
+         </div>
+         <!-- /Мета-данные -->
+         <!-- Тизер -->{% if article.s_article_teaser_html %}
+         <div class="mb-6 rounded-r-lg border-l-4 border-slate-400 bg-slate-50 p-4 text-lg leading-relaxed text-slate-700 italic md:text-xl dark:border-slate-600 dark:bg-slate-900/60 dark:text-slate-300">
+           {{ article.s_article_teaser_html|safe }}
+         </div>{% endif %}
+         <!-- /Тизер -->
+         <!-- Основное содержимое -->{% if article.s_article_content_html %}
+         <div class="article-content max-w-none">
+ {{ article.s_article_content_html|safe }}
+         </div>
+         <!-- /Основное содержимое -->{% endif %}
+         <!-- Кнопка возврата к списку -->
+        <div class="mt-10 border-t border-slate-200 pt-6 dark:border-slate-800">
+          <a href="{% url 'info_articles_list' %}" class="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100">&larr; Назад к списку материалов</a>
+        </div>
+        <!-- /Кнопка возврата к списку -->
+      </div>
+    </article>{% endblock CONTENT %}

@@ -79,3 +79,71 @@
                  hover:border-solid transition-colors;
         }
       }
+
+     @layer components { /* -- СЛОЙ COMPONENTS для компонентов и HTML-контента из БД -- {% comment %}
+        Стили для форматированного HTML-контента статей (из БД).
+
+        Поскольку HTML-текст статьи (s_article_content_html) приходит из CodeMirror-редактора
+        и с высокой вероятностью не содержит явных Tailwind-классов на каждом p, h2, ul, blockquote,
+        мы оборачиваем контент в шаблонный контейнер <div class="article-content">...</div>,
+        а здесь через @apply и каскадные селекторы задаем правила оформления элементов.
+        {% endcomment %} */
+
+        /* Контейнер форматированного текста статьи */
+        .article-content {
+          @apply text-slate-800 dark:text-slate-200 leading-relaxed text-base md:text-lg;
+
+          /* Заголовки внутри контента статьи */
+          h1, h2, h3, h4 {
+            @apply font-bold text-slate-900 dark:text-slate-100 mt-8 mb-4 leading-snug;
+          }
+          h1 { @apply text-3xl md:text-3xl border-b border-slate-200 dark:border-slate-800 pb-2; }
+          h2 { @apply text-xl md:text-2xl; }
+          h3 { @apply text-lg md:text-xl; }
+          h4 { @apply text-base md:text-lg text-slate-700 dark:text-slate-300; }
+
+          /* Параграфы и текстовые блоки */
+          p {
+            @apply my-4 leading-relaxed;
+          }
+
+          /* Списки (маркированные и нумерованные) */
+          ul {
+            @apply list-disc list-outside space-y-2 pl-4;
+          }
+          ol {
+            @apply list-decimal list-outside space-y-2 pl-4;
+          }
+          li {
+            @apply leading-normal;
+          }
+
+          /* Цитаты и выделенные блоки */
+          blockquote {
+            @apply border-l-4 border-indigo-500 bg-slate-100 dark:bg-slate-900/80
+                   px-4 py-3 my-6 italic text-slate-700 dark:text-slate-300 rounded-r-lg;
+          }
+
+          /* Изображения внутри контента */
+          img {
+            @apply my-6 rounded-xl border border-slate-200 dark:border-slate-800 h-auto max-w-full mx-auto;
+          }
+
+          /* Инлайновый код и блоки кода */
+          code {
+            @apply bg-slate-200 dark:bg-slate-800 text-indigo-700 dark:text-indigo-300
+                   px-1.5 py-0.5 rounded text-sm font-mono;
+          }
+          pre {
+            @apply bg-slate-900 text-slate-100 p-4 rounded-xl my-6 overflow-x-auto text-sm font-mono;
+          }
+          pre code {
+            @apply bg-transparent text-inherit p-0;
+          }
+
+          /* Горизонтальный разделитель */
+          hr {
+            @apply my-8 border-t border-slate-200 dark:border-slate-800;
+          }
+        }
+      }

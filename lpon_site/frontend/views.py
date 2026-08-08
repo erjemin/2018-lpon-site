@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.http import HttpRequest, HttpResponse
 
 from frontend.models import TbArticle
@@ -110,7 +110,7 @@ def catalog(request: HttpRequest | None) -> HttpResponse:
     return render(request, 'catalog.html', {"breadcrumbs": breadcrumbs})
 
 
-def txt_articles_list(request: HttpRequest | None) -> HttpResponse:
+def info_articles_list(request: HttpRequest | None) -> HttpResponse:
     """
     Представление (View) для отображения списка текстовых статей (тип ArticleType.TXT).
 
@@ -122,7 +122,7 @@ def txt_articles_list(request: HttpRequest | None) -> HttpResponse:
     3. Оптимизирует выборку связанного файла обложки (k_article_to_image) через select_related,
        чтобы избежать N+1 запросов при рендеринге изображений в списке.
     4. Формирует хлебные крошки (BreadcrumbItem) с элементом "Инструкции".
-    5. Рендерит шаблон `txt_list.html`, передавая в контекст список статей и хлебные крошки.
+    5. Рендерит шаблон `info_list.html`, передавая в контекст список статей и хлебные крошки.
 
     Аргументы:
         request (HttpRequest | None): Объект HTTP-запроса Django.
@@ -133,7 +133,7 @@ def txt_articles_list(request: HttpRequest | None) -> HttpResponse:
     # Выбираем опубликованные текстовые статьи из базы данных с правильной сортировкой
     articles = (
         TbArticle.objects.filter(
-            l_article_type=TbArticle.ArticleType.TXT,
+            l_article_type=TbArticle.ArticleType.INFO,
             b_article_published=True,
         )
         .select_related('k_article_to_image')
@@ -150,4 +150,51 @@ def txt_articles_list(request: HttpRequest | None) -> HttpResponse:
         "articles": articles,
         "breadcrumbs": breadcrumbs,
     }
-    return render(request, "roll/txt_list.html", context)
+    return render(request, "roll/info_list.html", context)
+
+
+def info_article_detail(request: HttpRequest | None, slug: str) -> HttpResponse:
+    """
+    Представление (View) для детального отображения отдельной текстовой статьи (тип ArticleType.INFO).
+
+    Функциональность:
+    -----------------
+    1. Ищет опубликованную статью (b_article_published=True) по её слагу (slug).
+       Если статья не найдена или не опубликована — возвращает HTTP 404 (Page Not Found).
+    2. Вызывает метод `increment_views()` у объекта статьи для атомарного увеличения
+       счётчика просмотров `i_article_views`.
+    3. Формирует цепочку хлебных крошек (BreadcrumbItem):
+       - "Инструкции" (со ссылкой на /info/);
+       - Заголовок текущей статьи (без ссылки, текущий пункт).
+    4. Рендерит шаблон `content/article_detail.html`, передавая объект статьи и крошки.
+
+    Аргументы:
+        request (HttpRequest | None): Объект HTTP-запроса Django.
+        slug (str): Уникальный URL-слаг статьи.
+
+    Возвращает:
+        HttpResponse: Сформированная HTML-страница детального просмотра статьи.
+    """
+    # Получаем опубликованную статью по слагу или отдаем 404 Not Found
+    article = get_object_or_404(
+        TbArticle,
+        slug=slug,
+        b_article_published=True,
+    )
+
+    # Безопасно инкрементируем счетчик просмотров статьи
+    article.increment_views()
+
+    # Формируем цепочку хлебных крошек (пункт "Главная" добавляется автоматически в шаблоне)
+    article_title = article.s_article_title_html or article.s_article_title
+    breadcrumbs = [
+        BreadcrumbItem(title="Инструкции", url="/info/"),
+        BreadcrumbItem(title=article_title),
+    ]
+
+    # Передаем объект статьи и крошки в шаблон детального просмотра
+    context = {
+        "article": article,
+        "breadcrumbs": breadcrumbs,
+    }
+    return render(request, "content/article_detail.html", context)
