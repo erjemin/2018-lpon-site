@@ -29,6 +29,9 @@ urlpatterns = [
     re_path(r'^catalog/$', views.catalog),
     re_path(r'^info/?$', views.info_articles_list, name='info_articles_list'),
     re_path(r'^info/(?P<slug>[-a-zA-Z0-9_]+)/?$', views.info_article_detail, name='info_article_detail'),
+
+    # Универсальный роут для хабов и страниц из корня (должен идти ПОСЛЕДНИМ!)
+    re_path(r'^(?P<slug>[-a-zA-Z0-9_]+)/?$', views.hub_detail, name='hub_detail'),
 ]
 
 # Сервировать медиа-файлы в разработке (в production использовать nginx/Apache)

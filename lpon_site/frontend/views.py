@@ -2,8 +2,8 @@
 
 from dataclasses import dataclass
 
-from django.shortcuts import render, get_object_or_404
-from django.http import HttpRequest, HttpResponse
+from django.shortcuts import render, get_object_or_404, redirect
+from django.http import HttpRequest, HttpResponse, Http404
 
 from frontend.models import TbArticle
 
@@ -198,3 +198,54 @@ def info_article_detail(request: HttpRequest | None, slug: str) -> HttpResponse:
         "breadcrumbs": breadcrumbs,
     }
     return render(request, "content/article_detail.html", context)
+
+
+def hub_detail(request: HttpRequest, slug: str) -> HttpResponse:
+    """
+    Универсальное представление (View) для хабов (включая страницы, запрашиваемые из корня сайта /<slug>).
+
+    Функциональность:
+    -----------------
+    1. Ищет опубликованную статью (b_article_published=True) по её слагу (slug).
+    2. Если статья принадлежит к каноническому типу с отдельным роутом (например, ArticleType.INFO),
+       выполняет HTTP 301 Permanent Redirect на её канонический адрес (/info/<slug>/).
+    3. Если статья не найдена — отдаёт честный HTTP 404 status (с отображением страницы 404,
+       где для авторизованного администратора request.user.is_staff выводится блок-подсказка).
+    4. Увеличивает счётчик просмотров статьи, формирует хлебные крошки и рендерит шаблон хаба.
+
+    Аргументы:
+        request (HttpRequest): Объект HTTP-запроса Django.
+        slug (str): Уникальный URL-слаг хаба или страницы.
+
+    Возвращает:
+        HttpResponse: Сформированная HTML-страница хаба либо страница ошибки 404.
+    """
+    # Ищем опубликованную статью по запрошенному слагу
+    article = TbArticle.objects.filter(
+        slug=slug,
+        b_article_published=True,
+    ).first()
+
+    # Если статья не найдена — отдаём честный статус 404
+    if not article:
+        return render(request, "404.html", {"requested_slug": slug}, status=404)
+    # Если нашлась статья с таким слагом и она не HUB, то делаем канонический 301-редирект на собственную ветку роутинга
+    # Предполагается, что у всех статей с типом ArticleType.INFO, ArticleType.TXT и т.д. есть роутинг в urls.py
+    elif article and article.l_article_type != TbArticle.ArticleType.HUB:
+        return redirect(article.get_absolute_url(), permanent=True)
+
+    # Это статья-ХАБ!! ТУТ будет сложный код, над которым я думаю.
+    context = {}
+    pass
+
+    # Формирование хлебных крошек
+    # article_title = article.s_article_title_html or article.s_article_title
+    # breadcrumbs = [
+    #     BreadcrumbItem(title=article_title),
+    # ]
+    #
+    # context = {
+    #     "article": article,
+    #     "breadcrumbs": breadcrumbs,
+    # }
+    return render(request, "content/hub.html", context)
