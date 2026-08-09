@@ -1,0 +1,67 @@
+<!doctype html>{% load static %}
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Ошибка 404 — LPON — Магазин виниловых пластинок и аудиокассет" />
+    <meta name="keywords" content="vinyl, audio, music, LPON" />
+    <meta name="copyright" lang="ru" content="Sergei Erjemin" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>ОШИБКА 404 — LPON.RU</title>
+    <meta name="meta-title" content="ОШИБКА 404 — LPON.RU" />
+    <link rel="canonical" href="{{ request.scheme }}://{{ request.get_host }}{{ request.path }}" />
+    {# Шутка #}<meta name="generator" content="Microsoft FrontPage 1.0" />
+    <link rel="icon" type="image/svg+xml" href="{% static 'svgs/favicon.svg' %}" />
+    <link rel="icon" type="image/png" href="{% static 'img/favicon.png' %}" />
+    <link rel="shortcut icon" type="image/x-icon" href="{% static 'img/favicon.ico' %}" />{% if IS_DEBUG %}{% comment %}
+    Переключение dev/prod стилей Tailwind CSS происходит
+    АВТОМАТИЧЕСКИ через переменную IS_DEBUG (см. контексный-процессор
+    frontend/context_processors.py), DEV: tailwindcss из CDN, компилируется прямо в браузере. Удобно
+    для разработки (не нужна сборка), но грузит браузер и prod не используется. {% endcomment %}
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>{% comment %}
+    Кастомные @theme/@layer директивы проекта (токены цвета, типовой стиль ссылок)
+    лежат в css/tailwind-custom.css. @tailwindcss/browser сканирует и компилирует ТОЛЬКО то, что
+    видит в финальном DOM — то есть только содержимое тегов style с type text/tailwindcss, а не
+    внешние .css, подключённые через link. Поэтому файл вставляется сюда через include, а не
+    подключается отдельным link.{% endcomment %}
+    <style type="text/tailwindcss">
+      {% include "css/tailwind-custom.css" %}
+    </style>{% else %}{% comment %} PROD: заранее собранный Tailwind CLI файл (см.
+    frontend-assembly/tailwind/input.css и package.json). CLI сканирует шаблоны проекта и генерирует
+    только реально используемые классы, включая кастомные @theme/@layer директивы из того же самого
+    файла css/tailwind-custom.css (подключён в input.css через @import).{% endcomment %}
+    <link rel="stylesheet" href="{% static 'css/tailwind.min.css' %}" />{% endif %}
+    <link rel="stylesheet" href="{% static 'css/lpon.css' %}" />
+  </head>
+  <body class="bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <!-- HERO -->
+    <section class="relative w-full h-screen flex items-center justify-center overflow-hidden">
+      <!-- Фон из двух картинок -->
+      <div class="absolute inset-0 blur-[1px]">
+        <div class="absolute top-0 left-0 w-full h-1/2 bg-[url({% static 'svgs/lp.svg' %})] bg-bottom-right bg-no-repeat border-purple-950 border-b-1 border-dotted"></div>
+        <div class="absolute bottom-0 right-0 w-full h-1/2 bg-[url({% static 'svgs/cc.svg' %})] bg-bottom-right bg-no-repeat  border-orange-950 border-b-1 border-dotted rotate-180"></div>
+      </div>
+      <!-- Содержимое поверх фона -->
+      <div class="relative z-10 text-center max-w-2xl mx-auto px-6 bg-[#c0c0c0e0] dark:bg-[#303030e0] shadow-lg shadow-gray-300 dark:shadow-gray-900 px-40 py-20 rounded-4xl border-gray-300 dark:border-gray-700 border-2">
+        <picture>
+          <source srcset="{% static 'svgs/logo-lpon-d.svg' %}" media="(prefers-color-scheme: dark)" class="h-32 mx-auto mb-8">
+          <img src="{% static 'svgs/logo-lpon-l.svg' %}" alt="Логотип lpon.ru" class="h-32 mx-auto mb-8">
+        </picture>
+        <h1 class="text-5xl font-bold mb-4 drop-shadow-lg font-serif">Ошибка&nbsp;404</h1>
+        <p class="text-2xl drop-shadow font-serif">Страница не&nbsp;найдена…</p>
+        <p class="my-10 text-slate-500 dark:text-slate-500">Запрошенная страница не&nbsp;существует или&nbsp;была перемещена.</p>
+        {% if user.is_staff and admin_hint %}
+        <div class="mb-18 rounded-xl border border-amber-300 bg-amber-50 p-6 text-left text-amber-900 dark:border-amber-700 dark:bg-amber-950/80 dark:text-amber-200">
+          <div class="font-bold text-amber-800 dark:text-amber-300">Администратор!</div>
+          <p class="mt-2 leading-relaxed">{{ admin_hint }}</p>
+        </div>{% endif %}
+        <a href="/" class="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold drop-shadow-lg">
+          &larr; На главную страницу
+        </a>
+      </div>
+      <div class="absolute bottom-4 right-4 text-s text-gray-600 dark:text-gray-400 font-serif">
+        &copy; 2026, Sergei Erjemin
+      </div>
+    </section>
+  </body>
+</html>
