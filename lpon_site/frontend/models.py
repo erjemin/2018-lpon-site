@@ -318,18 +318,29 @@ class TbArticle(models.Model):
       • Хранит текстовый контент, SEO, изображения справочников
     """
     class ArticleType(models.TextChoices):
-        ARTIST = 'artist', 'Artis: артист, группа или бренд'
-        STYLE = 'style', 'Slyle: музыкальный стиль'
+        """
+        Типы статей и контентных разделов.
+
+        ВАЖНО ДЛЯ РОУТИНГА И URL:
+        Значение каждого элемента (например, 'info', 'blog', 'artist', 'item' и т.д.)
+        используется напрямую как первый сегмент канонического URL-пути статьи:
+            /<l_article_type>/<slug>/   (например: /info/privacy-policy/, /blog/new-release-2026-september/)
+
+        Исключения:
+            - HUB ('HUB'): статьи-хабы публикуются напрямую в корне сайта (/<slug>/).
+        """
+        ARTIST = 'artist', 'Artist: артист, группа или бренд'
+        STYLE = 'style', 'Style: музыкальный стиль'
         ITEM = 'item', 'Item: Альбом, релиз или товар (кассета, hifi, аксессуар)'
         LABEL = 'label', 'Label: Лейбл, издатель или компания'
         OFFER = 'offer', 'Offer: конкретное предложение от продавца'
         SELLER = 'seller', 'Seller: продавец или магазин'
-        BLOG = 'blog', 'blog: Новость или блог'
-        ACTION = 'action', 'action: Спецпредложение, акция, распродажа и т.д.'
-        ADV = 'adv', 'adv: Реклама или баннер'
-        HUB = 'HUB', 'hub: СТАТЬЯ-ХАБ (использует DSL для отображения контента)'
-        INFO = 'info', 'info: Текстовый контент (для условий конфиденциальности, правил, соглашений и т.д.)'
-        OTHER = '?¿?', '?¿?: Другое'
+        BLOG = 'blog', 'Blog: Новость или блог'
+        ACTION = 'action', 'Action: Спецпредложение, акция, распродажа и т.п.'
+        ADV = 'adv', 'Adv: Реклама или баннер'
+        HUB = 'HUB', 'HUB: СТАТЬЯ-ХАБ (использует DSL для отображения контента)'
+        INFO = 'info', 'Info: Текстовый контент (для FAQ, условий конфиденциальности, правил/соглашений и т.д.)'
+        OTHER = '--', '?¿?: Другое'
 
     s_article_title = models.CharField(
         max_length=255,
@@ -473,6 +484,16 @@ class TbArticle(models.Model):
 
     def __str__(self):
         return f"article {self.id:0>4}: {self.s_article_title}"
+
+    def get_absolute_url(self) -> str:
+        """
+        Возвращает канонический URL статьи.
+        Если тип статьи HUB -- статья живет в корне (/<slug>/).
+        Для остальных типов статей возвращает канонический путь вида /<l_article_type>/<slug>/.
+        """
+        if self.l_article_type == self.ArticleType.HUB:
+            return f"/{self.slug}/"
+        return f"/{self.l_article_type}/{self.slug}/"
 
     def increment_views(self):
         """Безопасный инкремент просмотров (статьи, артиста, лейбла, продавца, товара/релиза/альбома...)"""
