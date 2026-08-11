@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpRequest, HttpResponse, Http404
 from frontend.models import TbArticle
+from frontend.utils import get_hub_context, parse_article_metadata
 from lpon_site.settings import *
 import json
 
@@ -190,11 +191,10 @@ def info_article_detail(request: HttpRequest | None, slug: str) -> HttpResponse:
         BreadcrumbItem(title=article_title),
     ]
 
-    # Передаем объект статьи и крошки в шаблон детального просмотра
-    context = {
-        "article": article,
-        "breadcrumbs": breadcrumbs,
-    }
+    # Получаем контекст с учетом возможных блоков HUB DSL
+    context = get_hub_context(article)
+    context["breadcrumbs"] = breadcrumbs
+
     return render(request, "content/article_detail.html", context)
 
 
@@ -205,10 +205,10 @@ def hub_detail(request: HttpRequest, slug: str) -> HttpResponse:
     Функциональность:
     -----------------
     1. Ищет опубликованную статью (b_article_published=True) по её слагу (slug).
-    2. Если статья принадлежит к каноническому типу с отдельным роутом (например, ArticleType.INFO),
-       выполняет HTTP 301 Permanent Redirect на её канонический адрес (/info/<slug>/).
-    3. Если статья не найдена — отдаёт честный HTTP 404 status (с отображением страницы 404,
-       где для авторизованного администратора request.user.is_staff выводится блок-подсказка).
+    2. Если статья принадлежит к каноническому типу с отдельным роутом (не HUB и не OTHER),
+       выполняет HTTP 301 Permanent Redirect на её канонический адрес (article.get_absolute_url()).
+    3. Валидирует j_article_metadata и наличие ключа HUB. Если статья — хаб, но метаданные
+       невалидны или ключ HUB отсутствует — отдаёт HTTP 404 status с подсказкой для администратора.
     4. Увеличивает счётчик просмотров статьи, формирует хлебные крошки и рендерит шаблон хаба.
 
     Аргументы:
@@ -225,45 +225,41 @@ def hub_detail(request: HttpRequest, slug: str) -> HttpResponse:
     ).first()
 
     # Если статья не найдена — отдаём честный статус 404
-    if not article:
-        amin_hint = (f"Статья или хаб со&nbsp;слагом «<strong>{ slug }</strong>» отсутствует в&nbsp;базе данных."
-                     f" Создайте статью со&nbsp;слагом «<strong>{ slug }</strong>» (тип&nbsp;<code>HUB</code>)"
-                     " в&nbsp;админис&shy;тративной панели.")
-        return render(request, "404.html", {"amin_hint": amin_hint}, status=404)
-    # Если нашлась статья с таким слагом и она не HUB, то делаем канонический 301-редирект на собственную ветку роутинга
-    # Предполагается, что у всех статей с типом ArticleType.INFO, ArticleType.TXT и т.д. есть роутинг в urls.py
-    elif article and article.l_article_type != TbArticle.ArticleType.HUB:
+    if article is None:
+        admin_hint = (f"Статья или хаб со&nbsp;слагом «<strong>{ slug }</strong>» отсутствует в&nbsp;базе данных."
+                      f" Создайте статью со&nbsp;слагом «<strong>{ slug }</strong>» (тип&nbsp;<code>HUB</code>)"
+                      " в&nbsp;админис&shy;тративной панели.")
+        return render(request, "404.html", {"admin_hint": admin_hint}, status=404)
+
+    # Если нашлась статья с таким слагом и у неё каноническая ветка роутинга — 301-редирект
+    if article.l_article_type not in (TbArticle.ArticleType.HUB, TbArticle.ArticleType.OTHER):
         return redirect(article.get_absolute_url(), permanent=True)
 
-    # Проверяем, что в мета-данных j_article_metadata JSON-объект
-    try:
-        metadata = json.loads(article.j_article_metadata)
-    except json.JSONDecodeError:
-        amin_hint = (f"Статья со&nbsp;слагом «<strong>{ slug }</strong>» (<code>id={ article.id }</code>) объявлена"
-                     f" как&nbsp;хаб, но&nbsp;в&nbsp;её&nbsp;мета-данных j_article_metadata не&nbsp;валидный JSON."
-                     " Исправьте данные в&nbsp;административной панели.")
-        return render(request, "404.html", {"amin_hint": amin_hint}, status=404)
+    # Проверяем и валидируем метаданные j_article_metadata
+    metadata, error_msg = parse_article_metadata(article)
+    if error_msg or not metadata:
+        admin_hint = (f"Статья со&nbsp;слагом «<strong>{ slug }</strong>» (<code>id={ article.id }</code>) объявлена"
+                      f" как&nbsp;хаб, но&nbsp;у&nbsp;неё <u>{ error_msg }</u>. Добавьте описание хаба (ключ"
+                      f" <code>{ KEY_ARTICLE_HUB }</code>) в&nbsp;метаданные через&nbsp;<a  target='_blank'"
+                      f" href='/{ADMIN_URL}frontend/tbarticle/{ article.id }/change/'>адми&shy;нистра&shy;тивную панель</a>.")
+        return render(request, "404.html", {"admin_hint": admin_hint}, status=404)
 
-    # Проверяем, что в мета-данных есть ключ HUB.
+    # Проверяем, что в метаданных есть ключ HUB
     if KEY_ARTICLE_HUB not in metadata:
-        amin_hint = (f"Статья со&nbsp;слагом «<strong>{ slug }</strong>» (<code>id={ article.id }</code>) объявлена"
-                     f" как&nbsp;хаб, но&nbsp;в&nbsp;её&nbsp;мета-данных нет ключа <code>{ KEY_ARTICLE_HUB }</code>"
-                     " с&nbsp;описанием хаба. Внесите изменения в&nbsp;административной панели.")
-        return render(request, "404.html", {"amin_hint": amin_hint}, status=404)
+        admin_hint = (f"Статья со&nbsp;слагом «<strong>{ slug }</strong>» (<code>id={ article.id }</code>) объявлена"
+                      f" как&nbsp;хаб, но&nbsp;в&nbsp;её&nbsp;мета-данных нет ключа <code>{ KEY_ARTICLE_HUB }</code>"
+                      " с&nbsp;описанием хаба. Внесите изменения в&nbsp;<a  target='_blank'"
+                      f" href='/{ADMIN_URL}frontend/tbarticle/{ article.id }/change/'>адми&shy;нистра&shy;тивную панели</a>.")
+        return render(request, "404.html", {"admin_hint": admin_hint}, status=404)
 
-    # Это статья-ХАБ!! ТУТ будет сложный код, над которым я думаю.
+    # Формируем контекст с данными хаба и хлебными крошками
+    context = get_hub_context(article, metadata)
+    article_title = article.s_article_title_html or article.s_article_title
+    context["breadcrumbs"] = [
+        BreadcrumbItem(title=article_title),
+    ]
 
-    context = {}
-    pass
+    # Безопасно увеличиваем счетчик просмотров
+    article.increment_views()
 
-    # Формирование хлебных крошек
-    # article_title = article.s_article_title_html or article.s_article_title
-    # breadcrumbs = [
-    #     BreadcrumbItem(title=article_title),
-    # ]
-    #
-    # context = {
-    #     "article": article,
-    #     "breadcrumbs": breadcrumbs,
-    # }
     return render(request, "content/hub.html", context)

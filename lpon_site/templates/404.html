@@ -50,10 +50,10 @@
         <h1 class="text-5xl font-bold mb-4 drop-shadow-lg font-serif">Ошибка&nbsp;404</h1>
         <p class="text-2xl drop-shadow font-serif">Страница не&nbsp;найдена…</p>
         <p class="my-10 text-slate-500 dark:text-slate-500">Запрошенная страница не&nbsp;существует или&nbsp;была перемещена.</p>
-        {% if user.is_staff and amin_hint %}
+        {% if user.is_staff and admin_hint %}
         <div class="mb-18 rounded-xl border border-amber-300 bg-amber-50 p-6 text-left text-amber-900 dark:border-amber-700 dark:bg-amber-950/80 dark:text-amber-200">
           <div class="font-bold text-amber-800 dark:text-amber-300">Администратор!</div>
-          <p class="mt-2 leading-relaxed">{{ amin_hint|safe }}</p>
+          <p class="mt-2 leading-relaxed">{{ admin_hint|safe }}</p>
         </div>{% endif %}
         <a href="/" class="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold drop-shadow-lg">
           &larr; На главную страницу

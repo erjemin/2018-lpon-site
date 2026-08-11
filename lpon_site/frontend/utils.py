@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import re
+import json
 import pytils
 import random
 import logging
@@ -16,7 +17,7 @@ from django.utils.html import mark_safe
 from django.http import HttpRequest
 from django.db.models import Model
 from lpon_site.settings import (
-    SLUG_MAX_LENGTH, KEY_SYNONYM_EN,
+    SLUG_MAX_LENGTH, KEY_SYNONYM_EN, KEY_ARTICLE_HUB,
 )
 
 
@@ -417,3 +418,60 @@ def create_or_get_related_article(
     # }))
 
     return article
+
+
+def parse_article_metadata(article: Model) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """
+    Парсит и валидирует метаданные статьи (поле `j_article_metadata`).
+
+    Служебный хелпер для безопасного извлечения JSON-объекта метаданных.
+
+    Args:
+        article (TbArticle): Объект статьи.
+
+    Returns:
+        tuple[dict | None, str | None]:
+            - (metadata_dict, None) — при успешном парсинге JSON-объекта;
+            - (None, error_message) — если поле пустое, содержит невалидный JSON
+              или данные не являются словарем.
+    """
+    raw_metadata = getattr(article, "j_article_metadata", None)
+    if not raw_metadata:
+        return None, "отсутствуют мата-данные"
+
+    try:
+        data = json.loads(raw_metadata)
+        if not isinstance(data, dict):
+            return None, "метаданные j_article_metadata не являются JSON-объектом (словарём)"
+        return data, None
+    except (json.JSONDecodeError, TypeError) as e:
+        return None, f"невалидный JSON в j_article_metadata ({e})"
+
+
+def get_hub_context(article: Model, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Универсальный хелпер для формирования контекста шаблона статьи или хаба (DSL).
+
+    Принимает статью (TbArticle) и опционально предварительно распарсенные метаданные.
+    Если у статьи в метаданных есть ключ KEY_ARTICLE_HUB ('HUB'), подмешивает в контекст
+    данные хаба (`hub_data`) для рендеринга визуальных блоков.
+
+    Args:
+        article (TbArticle): Объект статьи.
+        metadata (dict | None): Предварительно распарсенный словарь j_article_metadata.
+
+    Returns:
+        dict: Словарь контекста для передачи в render().
+    """
+    if metadata is None:
+        metadata, _ = parse_article_metadata(article)
+
+    context: Dict[str, Any] = {
+        "article": article,
+    }
+
+    if metadata and isinstance(metadata, dict) and KEY_ARTICLE_HUB in metadata:
+        # Заглушка под будущий рендеринг блоков HUB DSL через DSLQueryRegistry
+        context["hub_data"] = metadata.get(KEY_ARTICLE_HUB)
+
+    return context

@@ -33,6 +33,13 @@
  {{ article.s_article_content_html|safe }}
          </div>
          <!-- /Основное содержимое -->{% endif %}
+         {# Блоки HUB DSL, если статья содержит расширенную структуру #}
+         {% if hub_data %}
+           <div class="my-8 rounded-xl border border-dashed border-slate-300 p-6 dark:border-slate-700">
+             <h2 class="mb-2 text-lg font-semibold text-slate-800 dark:text-slate-200">Дополнительные блоки (HUB DSL):</h2>
+             <pre class="overflow-x-auto text-xs text-slate-600 dark:text-slate-400">{{ hub_data }}</pre>
+           </div>
+         {% endif %}
          <!-- Кнопка возврата к списку -->
         <div class="mt-10 border-t border-slate-200 pt-6 dark:border-slate-800">
           <a href="{% url 'info_articles_list' %}" class="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100">&larr; Назад к списку материалов</a>
