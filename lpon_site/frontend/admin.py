@@ -1145,7 +1145,7 @@ class ArticleAdmin(RequestInFormMixin, admin.ModelAdmin):
     """Админ для статей с поддержкой передачи request в форму"""
     form = ArticleAdminForm  # Используем кастомную форму с CodeMirror
 
-    list_display = ('id', 'article_thumbnail', 's_article_title', 'l_article_type', 'i_article_sort',
+    list_display = ('id', 'article_thumbnail', 's_article_title', 'l_article_type', 'i_article_sort', 'slug',
                     'b_article_published', 't_article_created')
     list_display_links = ('id', 'article_thumbnail', 's_article_title',)
     list_filter = ('l_article_type', 'b_article_published', 't_article_created')
