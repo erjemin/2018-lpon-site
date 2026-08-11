@@ -1,15 +1,13 @@
 #
 
 from dataclasses import dataclass
-
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpRequest, HttpResponse, Http404
-
 from frontend.models import TbArticle
+from lpon_site.settings import *
+import json
 
 # Create your views here.
-
-
 @dataclass(frozen=True)
 class BreadcrumbItem:
     """
@@ -228,13 +226,33 @@ def hub_detail(request: HttpRequest, slug: str) -> HttpResponse:
 
     # Если статья не найдена — отдаём честный статус 404
     if not article:
-        return render(request, "404.html", {"requested_slug": slug}, status=404)
+        amin_hint = (f"Статья или хаб со&nbsp;слагом «<strong>{ slug }</strong>» отсутствует в&nbsp;базе данных."
+                     f" Создайте статью со&nbsp;слагом «<strong>{ slug }</strong>» (тип&nbsp;<code>HUB</code>)"
+                     " в&nbsp;админис&shy;тративной панели.")
+        return render(request, "404.html", {"amin_hint": amin_hint}, status=404)
     # Если нашлась статья с таким слагом и она не HUB, то делаем канонический 301-редирект на собственную ветку роутинга
     # Предполагается, что у всех статей с типом ArticleType.INFO, ArticleType.TXT и т.д. есть роутинг в urls.py
     elif article and article.l_article_type != TbArticle.ArticleType.HUB:
         return redirect(article.get_absolute_url(), permanent=True)
 
+    # Проверяем, что в мета-данных j_article_metadata JSON-объект
+    try:
+        metadata = json.loads(article.j_article_metadata)
+    except json.JSONDecodeError:
+        amin_hint = (f"Статья со&nbsp;слагом «<strong>{ slug }</strong>» (<code>id={ article.id }</code>) объявлена"
+                     f" как&nbsp;хаб, но&nbsp;в&nbsp;её&nbsp;мета-данных j_article_metadata не&nbsp;валидный JSON."
+                     " Исправьте данные в&nbsp;административной панели.")
+        return render(request, "404.html", {"amin_hint": amin_hint}, status=404)
+
+    # Проверяем, что в мета-данных есть ключ HUB.
+    if KEY_ARTICLE_HUB not in metadata:
+        amin_hint = (f"Статья со&nbsp;слагом «<strong>{ slug }</strong>» (<code>id={ article.id }</code>) объявлена"
+                     f" как&nbsp;хаб, но&nbsp;в&nbsp;её&nbsp;мета-данных нет ключа <code>{ KEY_ARTICLE_HUB }</code>"
+                     " с&nbsp;описанием хаба. Внесите изменения в&nbsp;административной панели.")
+        return render(request, "404.html", {"amin_hint": amin_hint}, status=404)
+
     # Это статья-ХАБ!! ТУТ будет сложный код, над которым я думаю.
+
     context = {}
     pass
 
