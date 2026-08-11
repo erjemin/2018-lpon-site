@@ -95,17 +95,17 @@
 
           /* Заголовки внутри контента статьи */
           h1, h2, h3, h4 {
-            @apply font-bold text-slate-900 dark:text-slate-100 mt-8 mb-4 leading-snug;
+            @apply font-light text-slate-900 dark:text-slate-100 mt-8 mb-4 leading-snug;
           }
-          h1 { @apply text-3xl md:text-4xl border-b border-slate-200 dark:border-slate-800 pb-2; }
-          h2 { @apply text-2xl md:text-3xl; }
-          h3 { @apply text-xl md:text-2xl; }
+          h1 { @apply text-4xl md:text-5xl border-b border-slate-200 dark:border-slate-800 pb-2; }
+          h2 { @apply text-3xl md:text-4xl; }
+          h3 { @apply text-2xl md:text-3xl; }
           h4 { @apply text-lg md:text-xl; }
           h5 { @apply text-base md:text-lg text-slate-700 dark:text-slate-300; }
 
           /* Параграфы и текстовые блоки */
           p {
-            @apply my-4 leading-relaxed;
+            @apply my-4 leading-8;
           }
 
           /* Списки (маркированные и нумерованные) */
@@ -116,7 +116,7 @@
             @apply list-decimal list-outside space-y-2 pl-4 ml-4;
           }
           li {
-            @apply leading-normal;
+            @apply leading-8;
           }
 
           /* Цитаты и выделенные блоки */
