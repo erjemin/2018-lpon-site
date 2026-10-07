@@ -225,7 +225,7 @@ def hub_detail(request: HttpRequest, slug: str) -> HttpResponse:
     ).first()
 
     # Если статья не найдена — отдаём честный статус 404
-    if article is None:
+    if not article:
         admin_hint = (f"Статья или хаб со&nbsp;слагом «<strong>{ slug }</strong>» отсутствует в&nbsp;базе данных."
                       f" Создайте статью со&nbsp;слагом «<strong>{ slug }</strong>» (тип&nbsp;<code>HUB</code>)"
                       " в&nbsp;админис&shy;тративной панели.")
