@@ -18,10 +18,20 @@ from django.contrib import admin
 from django.urls import path, include, re_path
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.static import serve
 
 from frontend import views
 
 urlpatterns = [
+    # Раздача статических файлов из корня каталога PUBLIC_DIR (favicon.ico, favicon.png, favicon.svg, robots.txt и др.)
+    # Роут с точкой в имени файла строго отделяет файлы от слагов хабов/статей.
+    re_path(
+        r'^(?P<path>[-a-zA-Z0-9_]+\.[a-zA-Z0-9]+)$',
+        serve,
+        {'document_root': settings.PUBLIC_DIR},
+        name='public_root_files',
+    ),
+
     # Админ-сайт с переименованными приложениями (переопределен в frontend/apps.py)
     path(settings.ADMIN_URL, admin.site.urls),
 

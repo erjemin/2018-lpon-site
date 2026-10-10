@@ -11,9 +11,9 @@
     <meta name="meta-title" content="ОШИБКА 404 — LPON.RU" />
     <link rel="canonical" href="{{ request.scheme }}://{{ request.get_host }}{{ request.path }}" />
     {# Шутка #}<meta name="generator" content="Microsoft FrontPage 1.0" />
-    <link rel="icon" type="image/svg+xml" href="{% static 'svgs/favicon.svg' %}" />
-    <link rel="icon" type="image/png" href="{% static 'img/favicon.png' %}" />
-    <link rel="shortcut icon" type="image/x-icon" href="{% static 'img/favicon.ico' %}" />{% if IS_DEBUG %}{% comment %}
+    <link rel="icon" type="image/svg+xml" href="{% static '/favicon.svg' %}" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" />{% if IS_DEBUG %}{% comment %}
     Переключение dev/prod стилей Tailwind CSS происходит
     АВТОМАТИЧЕСКИ через переменную IS_DEBUG (см. контексный-процессор
     frontend/context_processors.py), DEV: tailwindcss из CDN, компилируется прямо в браузере. Удобно

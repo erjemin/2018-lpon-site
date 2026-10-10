@@ -26,9 +26,12 @@
     <meta name="twitter:image" content="{% block TWITTER_IMAGE %}{% static 'img/og-lpon-default.png' %}{% endblock %}" />
     <meta name="theme-color" content="#F5F5F5" />
     {# Шутка #}<meta name="generator" content="Microsoft FrontPage 1.0" />
-    <link rel="icon" type="image/svg+xml" href="{% static 'svgs/favicon.svg' %}" />
-    <link rel="icon" type="image/png" href="{% static 'img/favicon.png' %}" />
-    <link rel="shortcut icon" type="image/x-icon" href="{% static 'img/favicon.ico' %}" />{% if IS_DEBUG %}{% comment %}
+    <meta name="apple-mobile-web-app-title" content="LPON" />
+    <link rel="icon" type="image/png" href="/favicon.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />{% if IS_DEBUG %}{% comment %}
     Переключение dev/prod стилей Tailwind CSS происходит
     АВТОМАТИЧЕСКИ через переменную IS_DEBUG (см. контексный-процессор
     frontend/context_processors.py), DEV: tailwindcss из CDN, компилируется прямо в браузере. Удобно
