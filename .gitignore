@@ -347,6 +347,10 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 .idea/
 
+# ИИ
+.junie
+.copolot
+
 # База данных SQLite
 # Никогда не копировать локальную базу в образ!
 db.sqlite3-shm
