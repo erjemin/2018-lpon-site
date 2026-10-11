@@ -172,48 +172,39 @@ from filer.fields.image import FilerImageField
 from filer.fields.file import FilerFileField
 from frontend.utils import make_slug, update_synonyms_in_metadata, create_or_get_related_article
 from frontend.utils_validators import validate_and_raise_for_duplicates
+from lpon_site.constants import (
+    KEY_IMAGE_TYPE,
+    VALUE_IMAGE_ABSTRACT,
+    KEY_IMAGE_FROM,
+    VALUE_IMAGE_FROM_USER,
+    KEY_IMAGE_URL,
+    KEY_IMAGE_NOTE,
+    KEY_OFFER_NOTE,
+    KEY_OFFER_ALL_MEDIA,
+    get_image_metadata_default,
+    get_offer_metadata_default,
+    get_item_metadata_default,
+    ArticleType,
+    SellerType,
+    Currency,
+    Condition,
+    Format,
+    SourceType,
+    MediaType,
+    Market,
+    TapeType,
+    MediaLength,
+    ShellColor,
+    WriteProtectTabs,
+    InlayCondition,
+    Packaging,
+)
 from lpon_site.settings import (
-    KEY_IMAGE_TYPE,                 # Ключ, о том, какой тип изображения (реальное или абстрактное)
-    VALUE_IMAGE_ABSTRACT,             # Реальная картинка (актуально, для фото товаров в TbOffer)
-    KEY_IMAGE_FROM,               # Ключ, о том, как получено изображение
-    VALUE_IMAGE_FROM_USER,          # Картинка загружена пользователем через админку
-    KEY_IMAGE_URL,                  # Ключ, о том, откуда получена картинка (URL источника)
-    KEY_IMAGE_NOTE,                 # Ключ, для заметок о картинке (например, "обложка", "задник", "вкладка" и т.д.)
-    KEY_OFFER_NOTE,                 # Ключ, для заметок о коммерческом предложении (например, "замят угол конверта" и т.д.)
-    KEY_OFFER_ALL_MEDIA,             # Ключ, для хранения информации о том, какие носители входят в оффер (например, CD+2LP)
     OFFER_HASHIDS_SALT,             # Соль для криптографического кодирования ID оферов
     OFFER_HASHIDS_MIN_LENGTH,       # Минимальная длина кода
 )
 
 logger = logging.getLogger(__name__)
-
-
-# ============================================================================
-# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ DEFAULTS В МОДЕЛЯХ
-# ============================================================================
-
-def get_image_metadata_default():
-    """
-    Возвращает значение по умолчанию для j_img_metadata.
-    Используется как callable default в Django моделях (Django не может сериализовать lambda).
-    """
-    return {
-        KEY_IMAGE_TYPE: VALUE_IMAGE_ABSTRACT,
-        KEY_IMAGE_FROM: VALUE_IMAGE_FROM_USER,
-        KEY_IMAGE_URL: None,
-        KEY_IMAGE_NOTE: '???',
-    }
-
-
-def get_offer_metadata_default():
-    """
-    Возвращает значение по умолчанию для j_offer_metadata.
-    Используется как callable default в Django моделях (Django не может сериализовать lambda).
-    """
-    return {
-        KEY_OFFER_NOTE: '',
-        KEY_OFFER_ALL_MEDIA: [],
-    }
 
 
 # ============================================================================
@@ -317,30 +308,8 @@ class TbArticle(models.Model):
       • Соединитель для Artist, Item, Label, Seller, Style (все 1:1→article)
       • Хранит текстовый контент, SEO, изображения справочников
     """
-    class ArticleType(models.TextChoices):
-        """
-        Типы статей и контентных разделов.
-
-        ВАЖНО ДЛЯ РОУТИНГА И URL:
-        Значение каждого элемента (например, 'info', 'blog', 'artist', 'item' и т.д.)
-        используется напрямую как первый сегмент канонического URL-пути статьи:
-            /<l_article_type>/<slug>/   (например: /info/privacy-policy/, /blog/new-release-2026-september/)
-
-        Исключения:
-            - HUB ('HUB'): статьи-хабы публикуются напрямую в корне сайта (/<slug>/).
-        """
-        ARTIST = 'artist', 'Artist: артист, группа или бренд'
-        STYLE = 'style', 'Style: музыкальный стиль'
-        ITEM = 'item', 'Item: Альбом, релиз или товар (кассета, hifi, аксессуар)'
-        LABEL = 'label', 'Label: Лейбл, издатель или компания'
-        OFFER = 'offer', 'Offer: конкретное предложение от продавца'
-        SELLER = 'seller', 'Seller: продавец или магазин'
-        BLOG = 'blog', 'Blog: Новость или блог'
-        ACTION = 'action', 'Action: Спецпредложение, акция, распродажа и т.п.'
-        ADV = 'adv', 'Adv: Реклама или баннер'
-        HUB = 'HUB', 'HUB: СТАТЬЯ-ХАБ (использует DSL для отображения контента)'
-        INFO = 'info', 'Info: Текстовый контент (для FAQ, условий конфиденциальности, правил/соглашений и т.д.)'
-        OTHER = '--', '?¿?: Другое'
+    # Алиас на перечисление типов статей из constants.py (для обратной совместимости)
+    ArticleType = ArticleType
 
     s_article_title = models.CharField(
         max_length=255,
@@ -1081,25 +1050,9 @@ class TbSeller(models.Model):
     • save(): создаёт связанную статью автоматически (синонимы не используются)
       - Если статья не привязана: создаёт новую через create_or_get_related_article()
     """
-    class SellerType(models.TextChoices):
-        SELLER = 'seller', 'Продавец'
-        LABEL = 'label', 'Лейбл (издатель)'
-        DIY = 'diy', 'Самиздат группы'
-        CROWD = 'crowd', 'Краудфандинг'
-        OTHER = '???', 'Другое'
-
-    class Currency(models.TextChoices):
-        RUB = 'rub', 'RUB: российский рубль'
-        USD = 'usd', 'USD: американский доллар'
-        EUR = 'eur', 'EUR: евро'
-        AMD = 'amd', 'AMD: армянских драм'
-        TRY = 'try', 'TRY: турецкая лира'
-        JPY = 'jpy', 'JPY: японская иена'
-        GBP = 'gbp', 'GBP: британский фунт'
-        CNY = 'cny', 'CNY: китайский юань'
-        BYN = 'byn', 'BYN: белорусский рубль'
-        TON = 'ton', 'TON: криптовалюта TON'
-        OTHER = '??', 'Other'
+    # Алиасы на перечисления из constants.py (для обратной совместимости)
+    SellerType = SellerType
+    Currency = Currency
 
     # Используем SmallAutoField для оптимизации (макс ~32k)
     # Продавцов обычно до 1000-10000, поэтому достаточно
@@ -1215,29 +1168,9 @@ class TbOffer(models.Model):
     
     В админке M2M выглядит как список картинок с сортировкой и метаданными.
     """
-    class Condition(models.TextChoices):
-        S = 's', 'Still Sealed (новое, запечатано)'
-        M = 'm', 'Mint (новое, распакованное)'
-        NM = 'nm', 'Near Mint (почти новое)'
-        VG = 'vg', 'Very Good (очень хорошее)'
-        G = 'g', 'Good (хорошее)'
-        F = 'f', 'Fair (удовлетворительное)'
-        P = 'p', 'Poor (плохое)'
-        OTHER = '??', 'Other'
-
-    class Format(models.TextChoices):
-        LP = 'lp', 'Vinyl Long-Play (12")'
-        EP = 'ep', 'Vinyl Extended-Play (12", 10", 7")'
-        V45 = '45', 'Vinyl 7" (45 rpm)'
-        CD = 'cd', 'Compact Disc'
-        LD = 'ld', 'LaserDisc'
-        REC_MD = 'md', 'MiniDisc Record'
-        USE_MD = 'ms', 'Used MiniDisc (для записи)'
-        REC_CS = 'cs', 'Cassette Record'
-        USE_CS = 'uc', 'Used Cassette (для записи)'
-        REC_RR = 'tp', 'Tape Reel Record'
-        USE_RR = 'ur', 'Used Tape Reel (для записи)'
-        OTHER = '??', 'Other'
+    # Алиасы на перечисления из constants.py (для обратной совместимости)
+    Condition = Condition
+    Format = Format
 
     s_offer = models.CharField(
         max_length=128,
@@ -1535,11 +1468,8 @@ class TbSource(models.Model):
     МЕТОДЫ:
     • Нет переопределённых методов save(). Используется стандартное поведение Django.
     """
-    class SourceType(models.TextChoices):
-        EXCEL = 'excel', 'Excel-файл от продавца или издателя'
-        CSV = 'csv', 'CSV-файл от продавца или издателя'
-        URL = 'url', 'URL страницы с данными (например, HTML-страница с каталогом товаров)'
-        OTHER = '??', 'Другое (включая ручной ввод)'
+    # Алиас на перечисление из constants.py (для обратной совместимости)
+    SourceType = SourceType
 
     # Используем SmallAutoField для оптимизации (макс ~32k)
     # Источников обычно до 1000, достаточно
