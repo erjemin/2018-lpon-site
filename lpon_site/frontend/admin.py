@@ -10,7 +10,8 @@ from django.http import HttpRequest
 from django.contrib import admin
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.utils.html import format_html, mark_safe
+from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 from easy_thumbnails.files import get_thumbnailer
 from .models import (
     TbImageMetadata, TbArticle, TbArtist, TbItem, TbLabel, TbSeller,
