@@ -42,7 +42,7 @@
 * Структура полей `j_item_metadata` (для `TbItem`):
   * `media_type`: `blank_media`, `music_album`, `audio_recording`, `equipment`;
   * `tape_type`: `type_1`, `type_2`, `type_3`, `type_4`;
-  * `length`: `46`, `50`, `54`, `60`, `74`, `80`, `90`, `100`, `110`, `120`;
+  * `length`: `10`, `20`, `30`, `40`, `46`, `50`, `54`, `60`, `65`, `70`, `74`, `80`, `90`, `100`, `110`, `120`, `180`;
   * `release_year`: год или диапазон годов выпуска;
   * `market`: `jp`, `us`, `eu`, `uk`, `su`, `global`;
   * `gallery_model`: список ID эталонных фото модели в `django-filer`.
