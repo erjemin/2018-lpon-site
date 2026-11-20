@@ -381,3 +381,11 @@ frontend-assembly/*/src/
 frontend-assembly/*/.env
 node_modules/
 
+
+# Конфиг метаданных LPON: рабочие редакции (ACTIVE, revisions/, journal.jsonl, .lock) не хранятся в git.
+# Базовый конфиг default.toml остаётся в репозитории.
+config/metadata-toml/*
+!config/metadata-toml/default.toml
+
+# Служебные файлы macOS
+.DS_Store

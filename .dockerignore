@@ -44,3 +44,7 @@ logs/
 Dockerfile
 .dockerignore
 README.md
+
+# Конфиг метаданных LPON: в образ идёт только базовый default.toml, рабочие редакции исключены.
+config/metadata-toml/*
+!config/metadata-toml/default.toml
