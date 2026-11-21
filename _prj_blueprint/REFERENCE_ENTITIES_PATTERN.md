@@ -1,7 +1,10 @@
 # Паттерн создания справочников: автоматизация статей, синонимов и валидации
 
 **Дата:** 2026-07-15  
-**Статус:** Актуально ✓
+**Дата и время проверки:** 2026-11-21 01:30
+**Статус проверки:** сверено с `models.py`, `utils.py`, `utils_validators.py`, `constants.py`, `admin.py` (имена, поля, алгоритмы); блоки про парсер, `ValidatorQueue`, Celery и внешние метаданные в коде отсутствуют (план); тексты сообщений админки и работа форм в браузере не проверялись.
+
+**Что изменилось по итогам проверки:** исправлены имена типов совпадений (`EXACT_MATCH` на самом деле `IS_DUPLICATE`), алгоритм поиска и создания статьи, формат технического заголовка статьи, описание обновления синонимов, пути файлов. Парсерные части помечены как план; примеры метаданных для `TbItem` помечены устаревшими (ключи теперь описывает конфиг TOML). Автотестов на этот паттерн нет (`frontend/tests.py` пустой).
 
 ## Обзор
 
@@ -19,7 +22,9 @@
 1. Автоматическое создание связанной статьи (если нет)
 2. Управление синонимами в метаданных
 3. Валидация дубликатов через админку
-4. Подготовка к парсингу с очередью конфликтов
+4. Подготовка к парсингу с очередью конфликтов (план, в коде нет: очереди конфликтов, парсера и `ValidatorQueue` нет)
+
+Уточнение по коду: пункты 2 и 3 (синонимы и валидация) реализованы для `TbLabel`, `TbArtist`, `TbItem`, `TbMusicStyle`. У `TbSeller` в `save()` синонимов и валидации нет, только автоматическое создание статьи.
 
 ## Архитектура: TbArticle как связующее звено
 
@@ -51,6 +56,8 @@
 TbSeller аналогично, без синонимов (используется редко)
 ```
 
+> Уточнение: заголовок и slug на схеме иллюстративные. В коде технический заголовок статьи строится как `[<verbose_name модели>] <значение поля> (auto-make)` (например `[Лейбл] Sony (auto-make)`), поле `s_article_title` уникально. Slug строится через `make_slug()` из значения основного поля (транслитерация `pytils`, без префикса типа); значение по умолчанию берётся из транслитерации `verbose_name`. Тип статьи (`ArticleType`) определён в `lpon_site/lpon_site/constants.py` и доступен как `TbArticle.ArticleType`. При удалении справочника статья остаётся; при удалении статьи FK справочника обнуляется (`on_delete=SET_NULL`).
+
 ## Жизненный цикл справочника (на примере TbLabel)
 
 ### Фаза 1: Создание в админке
@@ -65,9 +72,15 @@ TbSeller аналогично, без синонимов (используетс
 ### Фаза 2: Валидация синонимов (админка)
 
 ```python
-# Функция validate_for_duplicates() проверяет:
+# Функция validate_for_duplicates() проверяет по порядку (на проверках 1 и 2 останавливается и
+# возвращает результат сразу). Возвращает не список, а словарь:
+# {MODEL: имя модели, MATCH_TYPE: ValidateMatchType, MATCH_VALUE: QuerySet найденных записей}.
+# Типы: IS_DUPLICATE=1, FIND_IN_SYNONYM=2, EXACT_SYNONYM_MATCH=3, PARTIAL_MATCH=4,
+# PARTIAL_MATCH__RISK_SHORT_WORDS=5 (константы в lpon_site/constants.py).
+# Админка вызывает validate_entity_for_admin_form(), а save() модели повторно проверяет через
+# validate_and_raise_for_duplicates() как страховку.
 
-# 1. EXACT_MATCH: s_label == s_label в других записях?
+# 1. IS_DUPLICATE (ранее в документе EXACT_MATCH): s_label == s_label в других записях (без учёта регистра)?
 #    Результат: "Sony Music" уже есть в базе
 #    Действие: Форма показывает ошибку, блокирует сохранение
 
@@ -77,12 +90,16 @@ TbSeller аналогично, без синонимов (используетс
 
 # 3. EXACT_SYNONYM_MATCH: синонимы разных лейблов совпадают?
 #    Результат: {"SYN_EN": ["Sony", "Sony Music"]} уже есть в записи TbLabel(pk=3)
-#    Действие: Ошибка, нужно исправить синонимы
+#    Действие: в админке по комментариям кода администратор подтверждает, и конфликтующие синонимы
+#    удаляются из других записей (remove_conflicting_synonyms_from_duplicates); в save() вне админки
+#    это блокируется ValidationError. Поведение формы в браузере не проверялось.
 # 
 # 4. PARTIAL_MATCH: частичное совпадение синонимов
 #    Не критичные совпадения. s_label и синонимы из метаданных разбиваются по словам, ищутся совпадения слов.
 #    Админ видит предупреждение. Для коротких слов (Inc, Ltd т.п.) может много ложных срабатываний. Админу показывается
 #    список слов-совпадений, он с чем они совпали, и решает что делать.
+#    Порог "короткого слова" это MIN_SYNONYM_WORD_LENGTH = 4 (constants.py); такие совпадения получают тип
+#    PARTIAL_MATCH__RISK_SHORT_WORDS. В save() частичные совпадения не блокируют, а только пишутся в лог.
 ```
 
 ### Фаза 3: Автоматическое создание статьи
@@ -113,35 +130,33 @@ def save(self, *args, **kwargs):
 
 **Что делает `create_or_get_related_article()`:**
 
+> Прежний код-пример в этом разделе устарел (поиск статьи по заголовку и типу, `TbArticle.objects.create(...)`, заголовок `"Label: ..."`). Реальный алгоритм описан ниже.
+
 ```python
 def create_or_get_related_article(
     instance,                  # TbLabel, TbArtist и т.д.
     article_type,              # TbArticle.ArticleType.LABEL
     main_field_name,           # 's_label'
     metadata_field_name,       # 'j_label_metadata'
-    fk_field_name              # 'k_label_to_article'
+    related_fk_field_name      # 'k_label_to_article' (параметр называется related_fk_field_name)
 ):
-    # 1. Генерируем название для статьи
-    article_title = f"Label: {instance.s_label}"
-    
-    # 2. Ищем существующую статью
-    article = TbArticle.objects.filter(
-        s_article_title=article_title,
-        l_article_type=article_type
-    ).first()
-    
-    if article:
-        return article  # Используем существующую
-    
-    # 3. Создаём новую статью
-    article = TbArticle.objects.create(
-        s_article_title=article_title,
-        l_article_type=article_type,
-        b_article_published=True,
-        # slug генерируется автоматически в TbArticle.save()
-    )
-    
-    return article
+    # 1. Если FK уже указывает на статью (getattr(instance, related_fk_field_name)) - вернуть её.
+    #    Поиска по заголовку или типу нет, запросов в БД на этом шаге нет.
+    #    Поэтому переименование справочника не создаёт вторую статью.
+
+    # 2. Иначе создать новую статью (TbArticle(...).save()):
+    #    s_article_title      = f"[{verbose_name}] {значение} (auto-make)"   # уникальное поле
+    #    s_article_title_html = значение
+    #    seo_title            = значение
+    #    seo_keywords         = синонимы (SYN_EN), verbose_name, slug по умолчанию
+    #    seo_description      = f"{значение} ({verbose_name}): информация."
+    #    l_article_type       = article_type
+    #    b_article_published  = True
+    #    slug                 = make_slug(значение, slug_default=транслитерация verbose_name)
+    #    (если slug занят, TbArticle.save() добавляет счётчик -1, -2 ...)
+
+    # 3. Вернуть статью; сама модель делает self.k_label_to_article = article.
+    #    TODO в коде: уведомление в Redis для будущего парсера (план, не реализовано).
 ```
 
 ## Синонимы: управление и валидация
@@ -166,35 +181,20 @@ def create_or_get_related_article(
 
 **Функция `update_synonyms_in_metadata()`:**
 
+> Прежний код-пример устарел: атрибута `instance._original_value` в коде нет, константы `MIN_SYNONYM_WORD_LENGTH` при обновлении синонимов не используются, сортировки списка нет. Реальная логика ниже.
+
 ```python
 def update_synonyms_in_metadata(instance, main_field_name, metadata_field_name):
     """
-    При каждом сохранении:
-    1. Если это новая запись: добавляем s_label в синонимы
-    2. Если s_label изменился: добавляем оба (старый и новый) в синонимы
-    3. Админ может редактировать синонимы через форму (приоритет админу)
+    При каждом сохранении (utils.py):
+    1. Новая запись (pk is None): добавляем текущее значение основного поля в SYN_EN.
+    2. Редактирование: старое значение читается отдельным запросом из БД
+       (model_class.objects.get(pk=instance.pk)). Если значение изменилось, в SYN_EN
+       добавляются и старое, и новое (если их там ещё нет).
+    3. Дубликаты в списке убираются с сохранением порядка (list(dict.fromkeys(...))),
+       порядок и ручные правки админа сохраняются; короткие слова не отфильтровываются.
+    4. Если ключа SYN_EN нет или он не список, создаётся пустой список (KEY_SYNONYM_EN = 'SYN_EN').
     """
-    
-    current_value = getattr(instance, main_field_name)  # "Sony Music"
-    original_value = instance._original_value            # "Sony"
-    
-    # Получаем или создаём словарь метаданных
-    metadata = getattr(instance, metadata_field_name) or {}
-    synonyms = metadata.get(KEY_SYNONYM_EN, [])
-    
-    # Добавляем новые синонимы
-    if original_value and original_value != current_value:
-        # Изменилось название - добавляем оба
-        synonyms.extend([original_value, current_value])
-    else:
-        # Новая запись - добавляем текущее
-        synonyms.append(current_value)
-    
-    # Удаляем дубликаты и короткие слова
-    synonyms = [s for s in set(synonyms) if len(s) >= MIN_SYNONYM_WORD_LENGTH]
-    
-    metadata[KEY_SYNONYM_EN] = sorted(synonyms)
-    setattr(instance, metadata_field_name, metadata)
 ```
 
 ### Валидация синонимов при сохранении
@@ -211,9 +211,11 @@ validate_for_duplicates(
     metadata_field_name='j_label_metadata',
 )
 
-# Если найдены дубликаты (FIND_IN_SYNONYM, EXACT_SYNONYM_MATCH):
+# validate_for_duplicates() возвращает словарь (см. выше), а не список.
+# Если найдены дубликаты (IS_DUPLICATE, FIND_IN_SYNONYM, EXACT_SYNONYM_MATCH):
 # - В админке: показываем форму с ошибкой + список дубликатов
-# - В парсере (будущее): создаём запись в ValidatorQueue для админа
+# - В save() вне админки: ValidationError (validate_and_raise_for_duplicates)
+# - В парсере (план, в коде нет): создаём запись в ValidatorQueue для админа
 ```
 
 ## Админка: как это видит пользователь
@@ -233,7 +235,7 @@ validate_for_duplicates(
 └────────────────────────────┘
 
 При сохранении:
-1. Проверяются синонимы (EXACT_MATCH, FIND_IN_SYNONYM)
+1. Проверяются синонимы (IS_DUPLICATE, FIND_IN_SYNONYM и далее)
 2. Если конфликт → показывается ошибка:
    "Найдено совпадение! Существующие записи: [List]"
    
@@ -271,7 +273,11 @@ validate_for_duplicates(
 объединяет с существующей записью вручную.
 ```
 
+> Формулировки сообщений в блоках выше иллюстративные. Реальные тексты формируются в `validate_and_raise_for_duplicates()` и `generate_admin_save_message()` (`utils_validators.py`) и могут отличаться. Поля формы в админке: `s_label`, `j_label_metadata` и др. (редактор метаданных на CodeMirror).
+
 ## Применение ко всем 5 моделям
+
+> Формат названия статьи для каждой модели ниже (`"Label: ..."`, `"Artist: ..."` и т.д.) устарел. Реально: `[<verbose_name>] <значение> (auto-make)`, где `verbose_name`: `Лейбл`, `Исполнитель`, `Музыкальный стиль`, `Товар в каталоге (релиз, носитель, аксессуар)`, `Продавец`. Значения `ArticleType`: `label`, `artist`, `style`, `item`, `seller`.
 
 ### TbLabel (Лейблы)
 
@@ -318,7 +324,9 @@ class TbItem(models.Model):
     k_item_to_article: FK → TbArticle   # автоматическое создание
     
     # ArticleType: ITEM
-    # Формат названия: "Item: Abbey Road (LP)"
+    # Формат названия: "Item: Abbey Road (LP)"  (устарело, см. выше)
+    # Дополнительно: k_item_to_artist (M2M на TbArtist), k_item_to_style (M2M на TbMusicStyle),
+    # s_item_date (текстовая дата)
 ```
 
 ### TbSeller (Продавцы)
@@ -332,9 +340,13 @@ class TbSeller(models.Model):
     # ArticleType: SELLER
     # Формат названия: "Seller: Клюква Records"
     # НЕ имеет синонимов (редко меняется, используется редко)
+    # Дополнительно в модели: l_seller_type (seller/label/diy/crowdfunding/other), l_seller_currency (валюта)
+    # j_seller_metadata допускает null
 ```
 
 ## Парсинг (будущее): интеграция с очередью конфликтов
+
+> План, в коде нет: парсера, `ValidatorQueue`, Celery, Redis и Discogs-клиента в проекте нет (в `pyproject.toml` Celery не заявлен). `save()` при дубликатах только бросает `ValidationError`; в `create_or_get_related_article()` лежит лишь TODO про уведомление в Redis. Всё ниже в этом разделе описывает замысел.
 
 ### Сценарий: парсер вытащил данные из Discogs
 
@@ -361,7 +373,7 @@ artist.save()  # Вызывает валидацию
 # - Админ решает: создать новую / объединить / пропустить
 ```
 
-### Структура ValidatorQueue для справочников
+### Структура ValidatorQueue для справочников (план, в коде нет)
 
 ```python
 ValidatorQueue(
@@ -407,6 +419,8 @@ ValidatorQueue(
 ```
 
 ## Метаданные для парсинга: проверить, можно что-то вытащить из внешних источников
+
+> План, в коде нет, плюс частично устарело. В `constants.py` для артистов, лейблов, стилей и продавцов определены только ключи `SYN_EN` и `SYN_RU` (`KEY_SYNONYM_EN`, `KEY_SYNONYM_RU`); остальные ключи ниже (`DISCOGS_ID`, `FORMED`, `COUNTRY` и т.д.) только предложения. Блоки JSON ниже содержат комментарии `//` и висячие запятые, это не валидный JSON. Для `TbItem` ключи метаданных теперь описываются конфигом TOML (`config/metadata-toml/default.toml`, см. `00_START_HERE.md` и `lpon--metadata-config.md`), а в `constants.py` имена ключей другие (`media_type`, `media_format`, `release_year`, `market`, `catalog_num`, `barcode` и др.).
 
 ### Из Discogs (для всех справочников)
 
@@ -468,7 +482,7 @@ ValidatorQueue(
 }
 ```
 
-### Для TbItem (релизы/альбомы) — из Discogs, MusicBrainz
+### Для TbItem (релизы/альбомы) — из Discogs, MusicBrainz (устарело: ключи ниже не совпадают с принятым решением, метаданные товара описывает конфиг TOML)
 
 ```json
 {
@@ -580,12 +594,15 @@ ValidatorQueue(
 ## Файлы реализации
 
 - **Модели**: `lpon_site/frontend/models.py` (TbLabel, TbArtist, TbItem, TbMusicStyle, TbSeller)
-- **Валидаторы**: `lpon_site/frontend/utils_validators.py` (validate_for_duplicates)
-- **Хелперы**: `lpon_site/frontend/utils.py` (create_or_get_related_article, update_synonyms_in_metadata)
-- **Админка**: `lpon_site/frontend/admin.py` (LabelAdmin, ArtistAdmin и т.д.)
-- **Парсер** (будущее): `lpon_site/parser/models.py` (ValidatorQueue), `tasks.py` (Celery задачи)
+- **Валидаторы**: `lpon_site/frontend/utils_validators.py` (`validate_for_duplicates`, `validate_and_raise_for_duplicates`, `validate_entity_for_admin_form`, `remove_conflicting_synonyms_from_duplicates`, `build_search_report`, `generate_admin_save_message`)
+- **Хелперы**: `lpon_site/frontend/utils.py` (`create_or_get_related_article`, `update_synonyms_in_metadata`, `make_slug`, `normalize_string`, `super_normalize_string`)
+- **Константы**: `lpon_site/lpon_site/constants.py` (`ArticleType`, `ValidateMatchType`, `KEY_SYNONYM_EN`, `KEY_SYNONYM_RU`, `MIN_SYNONYM_WORD_LENGTH`; в `settings.py` подтягиваются через `from .constants import *`)
+- **Админка**: `lpon_site/frontend/admin.py` (`LabelAdmin`, `ArtistAdmin`, `MusicStyleAdmin`, `ItemAdmin`, `SellerAdmin`)
+- **Парсер** (план, файлов нет): `lpon_site/parser/models.py` (ValidatorQueue), `tasks.py` (Celery задачи)
 
 ## TODO: интеграция парсера
+
+По состоянию на 2026-11-21 ни один пункт не выполнен.
 
 - [ ] Создать Celery tasks для парсинга Discogs/Excel
 - [ ] Реализовать ValidatorQueue с админ-интерфейсом

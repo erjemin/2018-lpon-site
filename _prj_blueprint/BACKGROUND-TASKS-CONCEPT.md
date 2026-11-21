@@ -1,11 +1,22 @@
+# Концепция фоновых задач и очереди одобрения (драфт)
+
+**Дата и время проверки:** 2026-11-21 01:30  
+**Статус проверки:** сверено с `models.py`, `constants.py`, `utils_validators.py`, `settings.py`, `pyproject.toml`, Docker-файлами; всё про Redis, Celery/APScheduler, воркеры и виртуальную вкладку админки: **план, в коде нет**; нагрузочные цифры и настройки Redis не проверялись.
+
+> Что есть в проекте на самом деле: SQLite (`database/lpon-db.sqlite3`), модели `TbSource`, `TbMusicStyle`, `TbArtist`, `TbLabel`, `TbItem`, `TbOffer`, `TbOfferHistory`. Нет: Redis, Celery, APScheduler, приложения парсера, очередей. Redis нет ни в `docker-compose.yml`, ни в `docker-compose.prod.yml`, ни в `pyproject.toml`; есть только комментарий-TODO про Redis в `frontend/utils.py` (функция `create_or_get_related_article()`).
+>
+> Расхождения, которые исправлены в тексте ниже: поля `j_style_synonyms` и `title` в моделях нет (синонимы лежат в `j_style_metadata['SYN_EN']`, название стиля в `s_style_name`); БД в проекте SQLite, а не PostgreSQL.
+>
+> Спорно (решает владелец проекта): документ противоположен `parser_architecture.md` (там очередь конфликтов хранится в БД в модели `ValidatorQueue`, Redis только для уведомлений; здесь до одобрения данные только в Redis). Кроме того, `save()` у `TbMusicStyle`, `TbArtist`, `TbItem`, `TbLabel` сам вызывает проверку дубликатов и бросает `ValidationError`, а прямая запись воркера через `.save()` пройдёт именно через неё. Ключи метаданных кассет парсер должен брать из реестра `config/metadata-toml/` (см. `lpon--metadata-config.md`), `aliases` значений можно использовать для сопоставления названий из источников (идея).
+
 ## ПОТОК ДАННЫХ (чистая архитектура) ДРАФТ
 
 ```text
-1️⃣ ИСТОЧНИК ДОБАВЛЕН
+1. ИСТОЧНИК ДОБАВЛЕН
    ├─ Пользователь добавляет новый источник (TbSource)
    └─ Создается задание в Redis: `job:parse_source:123`
 
-2️⃣ ФОНОВЫЙ ВОРКЕР (Celery/APScheduler)
+2. ФОНОВЫЙ ВОРКЕР (Celery/APScheduler; выбор не сделан, ни то, ни другое в проекте не установлено)
    ├─ Видит задание в Redis
    ├─ Начинает парсить (не пишет в prod БД!)
    ├─ Получает: Style["Rock"], Artist["The Beatles"], Label["Sony"]
@@ -14,7 +25,7 @@
    │  └─ `pending:artist:2` → {"title": "The Beatles", "source": "MusicBrainz", ...}
    └─ Смотрит: есть ли в product БД? Если НЕТ → в Redis очередь
 
-3️⃣ АДМИНКА ДЖАНГО (виртуальная вкладка "Ожидающие задачи")
+3. АДМИНКА ДЖАНГО (виртуальная вкладка "Ожидающие задачи"; в коде нет)
    ├─ Админ видит в Redis список
    ├─ Видит: Rock (похож на existing Rock?), The Beatles (новый?), Sony (уже есть)
    ├─ **ПОТЫКАЛ**:
@@ -23,14 +34,14 @@
    │  └─ Sony → "Пропустить" → удалить из Redis
    └─ Каждое действие → новое задание в Redis
 
-4️⃣ ФОНОВЫЙ ВОРКЕР II (финальный штрих)
+4. ФОНОВЫЙ ВОРКЕР II (финальный штрих)
    ├─ Видит задание: "merge Rock с ID:5"
    │  └─ Делает: добавляет синонимы, сохраняет в product БД
    ├─ Видит задание: "create The Beatles"
    │  └─ Пишет вреальную БД → TbArtist создана
    └─ После каждого успеха → **удалить из Redis**
 
-5️⃣ ПРОДАКТ БД (в итоге)
+5. ПРОДАКТ БД (в итоге)
    └─ Только валидные, одобренные, обработанные данные
    └─ No garbage, ID подряд
 ```
@@ -93,10 +104,10 @@ tasks:failed         ← История ошибок (воркер → сюда)
 
 Админ видит Redis очередь и кликает:
 
-1. **"✅ Одобрить"** → `job:create:style:1` → Воркер пишет в БД
-2. **"🔗 Мержить с ID:5"** → `job:merge:style:1:with:5` → Воркер обновляет existing
-3. **"❌ Пропустить"** → Удалить из Redis (ничего не пишется)
-4. **"📝 Отредактировать"** → Изменить JSON в оптимистичной форме → сохранить как новое задание
+1. **"Одобрить"** → `job:create:style:1` → Воркер пишет в БД
+2. **"Мержить с ID:5"** → `job:merge:style:1:with:5` → Воркер обновляет existing
+3. **"Пропустить"** → Удалить из Redis (ничего не пишется)
+4. **"Отредактировать"** → Изменить JSON в оптимистичной форме → сохранить как новое задание
 
 ---
 
@@ -110,16 +121,20 @@ def parse_source(source_id):
         # 1. Ищем существующий стиль или по названию или по алиасам
         existing = TbMusicStyle.objects.filter(
             Q(s_style_name__iexact=style_name) |
-            Q(j_style_synonyms__contains=style_name)
+            # Поля j_style_synonyms в модели нет: синонимы лежат в j_style_metadata['SYN_EN'] (KEY_SYNONYM_EN).
+            # На SQLite lookup contains для JSONField не поддерживается; в коде поиск по синонимам
+            # делает validate_for_duplicates()
+            Q(j_style_metadata__SYN_EN__contains=style_name)
         ).first()
         
         if existing:
-            # ✅ МАТЧИНГ СРАБОТАЛ → пишем сразу в БД
-            if style_name not in existing.j_style_synonyms:
-                existing.j_style_synonyms.append(style_name)  # Запомнили синоним!
+            # МАТЧИНГ СРАБОТАЛ → пишем сразу в БД
+            synonyms = existing.j_style_metadata.setdefault('SYN_EN', [])
+            if style_name not in synonyms:
+                synonyms.append(style_name)  # Запомнили синоним!
                 existing.save()
         else:
-            # ❌ НОВЫЙ СТИЛЬ → в Redis очередь на одобрение
+            # НОВЫЙ СТИЛЬ → в Redis очередь на одобрение
             redis.lpush('tasks:pending', {...})
     
     # В метаданных источника сохраняем прогресс парсинга
@@ -135,11 +150,14 @@ def parse_source(source_id):
 
 ```python
 class PendingTaskAdmin(admin.ModelAdmin):
-    # Не наследуем от ModelAdmin (нет моделей!)
-    # Вместо этого: читаем Redis, рендерим как таблицу
+    # Псевдокод; в коде нет. Класс объявлен как ModelAdmin, хотя комментарий говорит обратное: для
+    # админки без модели в Django нужна либо прокси/неуправляемая модель (managed=False), либо
+    # собственный admin view через get_urls(). Вариант не выбран.
+    # Читаем Redis, рендерим как таблицу
     
     def changelist_view(self, request):
         # Получаем из Redis
+        # redis.keys() блокирует сервер на больших базах (десятки тысяч ключей); для 15k задач лучше scan_iter()
         tasks = [json.loads(redis.get(key)) for key in redis.keys('pending:*')]
         # Выводим нетипичную таблицу с кнопками: Одобрить, Мержить, Пропустить
 ```
@@ -156,11 +174,13 @@ def process_approved_tasks():
         try:
             if task['type'] == 'create':
                 # Пишем в product БД
-                TbMusicStyle.objects.create(title=task['title'], ...)
+                # Поля title в TbMusicStyle нет, название хранится в s_style_name; create() вызывает save(),
+                # а он проверяет дубликаты и может бросить ValidationError
+                TbMusicStyle.objects.create(s_style_name=task['title'], ...)
             elif task['type'] == 'merge':
                 # Обновляем existing + добавляем синонимы
                 style = TbMusicStyle.objects.get(id=task['merge_with_id'])
-                style.j_style_synonyms.append(task['title'])
+                style.j_style_metadata.setdefault('SYN_EN', []).append(task['title'])
                 style.save()
             
             # Успех → удалить из Redis
@@ -174,10 +194,10 @@ def process_approved_tasks():
 
 ## ТЕХНОЛОГИЧЕСКИЙ СТЕК
 
-- **Redis** — очередь + кэш виртуальных объектов
-- **Celery** или **APScheduler** — фоновый воркер для парсера и финального сохранения
-- **Django Admin** — кастомная вкладка для управления очередью
-- **PostgreSQL/SQLite** — product database (только одобренные данные)
+- **Redis** — очередь + кэш виртуальных объектов (план; в проекте нет)
+- **Celery** или **APScheduler** — фоновый воркер для парсера и финального сохранения (план; в проекте нет, в `pyproject.toml` не добавлены)
+- **Django Admin** — кастомная вкладка для управления очередью (план)
+- **SQLite** — product database (только одобренные данные); реальная БД проекта (`database/lpon-db.sqlite3`), PostgreSQL в проекте не используется. Для параллельных воркеров с записью SQLite может стать узким местом (одна запись за раз)
 
 ---
 
@@ -193,16 +213,20 @@ def parse_source(source_id):
         # 1. Ищем существующий стиль или по названию или по алиасам
         existing = TbMusicStyle.objects.filter(
             Q(s_style_name__iexact=style_name) |
-            Q(j_style_synonyms__contains=style_name)
+            # Поля j_style_synonyms в модели нет: синонимы лежат в j_style_metadata['SYN_EN'] (KEY_SYNONYM_EN).
+            # На SQLite lookup contains для JSONField не поддерживается; в коде поиск по синонимам
+            # делает validate_for_duplicates()
+            Q(j_style_metadata__SYN_EN__contains=style_name)
         ).first()
         
         if existing:
-            # ✅ МАТЧИНГ СРАБОТАЛ → пишем сразу в БД
-            if style_name not in existing.j_style_synonyms:
-                existing.j_style_synonyms.append(style_name)  # Запомнили синоним!
+            # МАТЧИНГ СРАБОТАЛ → пишем сразу в БД
+            synonyms = existing.j_style_metadata.setdefault('SYN_EN', [])
+            if style_name not in synonyms:
+                synonyms.append(style_name)  # Запомнили синоним!
                 existing.save()
         else:
-            # ❌ НОВЫЙ СТИЛЬ → в Redis очередь на одобрение
+            # НОВЫЙ СТИЛЬ → в Redis очередь на одобрение
             redis.lpush('tasks:pending', {...})
     
     # В метаданных источника сохраняем прогресс парсинга
@@ -228,18 +252,18 @@ tasks:price_changes  ← Отдельная очередь
 - Фоновый воркер видит изменение цены
 - Проверяет: изменилась ли существенно (> 5%)? 
 - Если да → может требоваться одобрение (+1 задание в Redis)
-- Если нет → пишет сразу в БД (TbOfferHistory записывается автоматически)
+- Если нет → пишет сразу в БД (запись в `TbOfferHistory` делает уже реализованный `TbOffer.save()` при изменении цены или количества; порог в 5% и очередь `tasks:price_changes` в коде нет)
 
 ---
 
 ## МЕТАДАННЫЕ ОТСЛЕЖИВАНИЯ ПРОГРЕССА
 
-В каждой **TbSource** должно быть поле `j_source_metadata`:
+В **TbSource** поле `j_source_metadata` уже есть (`JSONField(default=dict, blank=True)`, см. `models.py`), но его назначение там описано как «вкладки и столбцы Excel, структура HTML-страницы»; ключи прогресса парсинга ниже (`last_parsed_line` и др.) план, в коде не используются:
 
 ```python
-j_source_metadata = JSONField(default=dict, help_text='Отслеживание парсинга и синонимы')
+j_source_metadata = JSONField(default=dict, blank=True)
 
-# Структура:
+# Структура (план):
 {
     "last_parsed_line": 4523,          # Докуда добежал парсер (для resume)
     "total_lines": 10000,              # Всего строк в файле
@@ -265,7 +289,7 @@ j_source_metadata = JSONField(default=dict, help_text='Отслеживание 
 
 ## МАСШТАБИРУЕМОСТЬ: REDIS В ПАМЯТИ vs PERSISTENCE
 
-### Проблема: 10k+ задач при загрузке большого Excel
+### Проблема: 10k+ задач при загрузке большого Excel (цифры гипотетические, не измерены)
 
 ```
 Excel с 10,000 позиций
@@ -280,7 +304,7 @@ Redis хранит в памяти по умолчанию ➜ контейне�
 **Решение: RDB + AOF Persistence**
 
 ```yaml
-# docker-compose.yml для Redis
+# docker-compose.yml для Redis (план: такого сервиса в docker-compose.yml и docker-compose.prod.yml нет)
 redis:
   image: redis:7-alpine
   volumes:
@@ -296,7 +320,7 @@ redis:
 
 - **RDB snapshots** — снимок каждые 15 минут
 - **AOF log** — каждая команда лог записывается на диск
-- **maxmemory-policy** — если память 2GB переполнится, удаляются старые задачи (но только pending, не approved!)
+- **maxmemory-policy** — если память 2GB переполнится, удаляются старые задачи. **Противоречие:** политика `allkeys-lru` вытесняет любые ключи, включая approved, а не только pending, и нарушает принцип «до одобрения данные только в Redis». Для очереди подходит `noeviction` (спорно, решает владелец проекта)
 - **Persistence**: при рестарте контейнера Redis восстановит все задачи из AOF
 
 ---
@@ -347,7 +371,8 @@ def update_offer_price(task_data):
                  │                            │
         ┌────────▼────────────┐     ┌────────▼────────────┐
         │ СРАЗУ В БД          │     │ tasks:pending       │
-        │ + j_style_synonyms  │     │ (очередь нужнофала) │
+        │ + SYN_EN (j_style_  │     │ (очередь нужнофала) │
+        │   metadata)         │     │                     │
         │ + metadata['matched']     │ (ждут одобрения)    │
         └────────┬────────────┘     └────────┬────────────┘
                  │                           │
@@ -355,7 +380,7 @@ def update_offer_price(task_data):
                  │                    (виртуальная таблица)
                  │                           │
                  │                    ┌──────┴──────┐
-                 │                    │  ✅ ❌ 🔗   │
+                 │                    │   Решение   │
                  │                      (Approve/Skip/Merge)
                  │                    │             │
                  │            ┌───────▼─────┐       │
@@ -391,7 +416,7 @@ task = {
     
     # Когда создана
     'created_at': '2026-06-14T12:00:00',
-    'ttl_seconds': 86400,               # жить 24 часа, потом удалить
+    'ttl_seconds': 86400,               # жить 24 часа, потом удалить (спорно: так необработанные задачи молча пропадут)
     
     # Статус обработки
     'attempts': 0,                      # сколько раз пытались обработать

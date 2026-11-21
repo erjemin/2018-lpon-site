@@ -2,7 +2,11 @@
 
 **Дата:** 2026-07-15  
 **Последний обновленно:** 2026-07-15  
-**Статус:** В разработке ✏️
+**Статус:** черновик; парсер, очередь и приложение `parser` в коде отсутствуют (план)  
+**Дата и время проверки:** 2026-11-21 01:30  
+**Статус проверки:** сверено с `models.py`, `constants.py`, `utils_validators.py`, `utils.py`, `admin.py`, `pyproject.toml`; не проверялись внешние библиотеки чтения Excel и сама схема очереди (их нет в проекте).
+
+> Важно: всё, что в этом документе описано как «требуемая архитектура» (приложение `parser`, `ValidatorQueue`, Celery, Redis, signals, `skip_validation`), **план, в коде нет**. Celery, Redis и библиотек чтения Excel/CSV/HTML нет и в `pyproject.toml`. Документ `BACKGROUND-TASKS-CONCEPT.md` предлагает другой вариант (очередь целиком в Redis, без модели в БД); решение не принято, см. раздел «Примечания».
 
 ## Обзор проблемы
 
@@ -21,20 +25,24 @@
 ```
 ┌─ TbSource (Excel, CSV, URL) ──┐
 │  s_source_name                │
-│  l_source_type (excel/csv/url)│
+│  l_source_type (excel/csv/url/│
+│     '??' = другое, SourceType)│
 │  k_source_to_seller ──────────┼──► TbSeller
+│  t_source_data (дата данных)  │
 │  source_file (FilerFileField) │
 │  s_source_url                 │
-│  j_source_metadata (struktura)│    (metadata описывает столбцы, вкладки и т.д.)
+│  j_source_metadata (структура)│    (metadata описывает столбцы, вкладки и т.д.)
 └─────────────────────────────────┘
 
-TbOffer ◄──┐
-           │
-TbSource ──┴─► TbItem ──────► TbArticle (текст, SEO, slug, картинка)
-           │
-           └──► TbLabel, TbArtist, TbMusicStyle
-                (все через TbArticle)
+TbSource ──(1:M, k_offer_to_source)──► TbOffer
+TbOffer ──(FK)──► TbItem, TbLabel, TbArticle (опционально)
+TbItem ──(M2M)──► TbArtist (k_item_to_artist), TbMusicStyle (k_item_to_style)
+TbItem, TbArtist, TbLabel, TbMusicStyle, TbSeller ──(1:1)──► TbArticle
+                                  (текст, SEO, slug, картинка)
+TbOffer ◄── TbOfferHistory (история цены и количества)
 ```
+
+Исправлено при сверке: источник связан не с `TbItem`, а с `TbOffer` (`TbOffer.k_offer_to_source`); артисты и стили связаны с `TbItem` через M2M, а лейбл с `TbOffer` (`k_offer_to_label`).
 
 ### Валидация (текущая реализация)
 
@@ -42,28 +50,32 @@ TbSource ──┴─► TbItem ──────► TbArticle (текст, SEO
 
 **Функция:** `validate_for_duplicates()`
 - Проверяет основное поле (s_label, s_artist и т.д.)
-- Проверяет синонимы в j_*_metadata[SYN_EN]
-- Возвращает список найденных дубликатов с типом совпадения
+- Проверяет синонимы в j_*_metadata[SYN_EN] (константа `KEY_SYNONYM_EN = 'SYN_EN'` из `lpon_site/constants.py`)
+- Возвращает **словарь** (не список!) вида `{MODEL: имя_модели, MATCH_TYPE: ValidateMatchType, MATCH_VALUE: QuerySet}`; при отсутствии конфликтов в словаре только ключ `MODEL`. Ключи заданы константами `VALIDATE_KEY__MODEL`, `VALIDATE_KEY__MATCH_TYPE`, `VALIDATE_KEY__VALUE`. Проверка идёт по порядку и останавливается на первом найденном типе.
 
-**Типы совпадений:**
-1. **EXACT_MATCH** — точное совпадение основного поля (s_label == s_label)
-2. **FIND_IN_SYNONYM** — основное поле текущей записи найдено в синонимах другой
-3. **EXACT_SYNONYM_MATCH** — синонимы текущей записи совпадают с синонимами другой
+**Типы совпадений** (`ValidateMatchType`, `IntEnum` в `lpon_site/constants.py`):
+1. **IS_DUPLICATE** (1) — точное совпадение основного поля (s_label == s_label); в старой редакции документа назван EXACT_MATCH
+2. **FIND_IN_SYNONYM** (2) — основное поле текущей записи найдено в синонимах другой
+3. **EXACT_SYNONYM_MATCH** (3) — синонимы текущей записи совпадают с синонимами другой
+4. **PARTIAL_MATCH** (4) — частичное совпадение по словам (в документе раньше не упоминался); не блокирует, в `save()` только логируется
+5. **PARTIAL_MATCH__RISK_SHORT_WORDS** (5) — то же по коротким словам (короче `MIN_SYNONYM_WORD_LENGTH = 4`), высокий риск ложных срабатываний
 
 **Где вызывается:**
-- ✅ В админке: `admin.py` (переопределение `clean()` формы) → показывает ошибку пользователю
-- ✅ В моделях: `save()` методы → выбрасывают `ValidationError`
-- ❌ В парсере: **НЕТ** (парсер еще не создан)
+- Есть, в админке: формы в `admin.py` вызывают `validate_entity_for_admin_form()` из `clean()`; ошибка показывается пользователю (проверку можно обойти GET-параметром `ignore_validate`)
+- Есть, в моделях: `save()` у `TbMusicStyle`, `TbArtist`, `TbItem`, `TbLabel` вызывает `validate_and_raise_for_duplicates()` и бросает `ValidationError` при типах 1-3. У `TbSeller` вызова нет
+- Нет, в парсере: парсера ещё нет
+
+Примечание: в `TbItem` поле метаданных называется `j_item_metadata` и оно общее для ключей характеристик и синонимов; в `TbLabel` и `TbArtist` это `j_label_metadata` и `j_artist_metadata`, в `TbMusicStyle` `j_style_metadata`.
 
 ### Конфликты синонимов (TODO)
 
 **Сценарий 1: FIND_IN_SYNONYM**
 ```python
 # В БД уже есть
-Artist(pk=1, s_artist="Beatles", j_artist_metadata={"SYN_EN": ["The Beatles", "Beatles"]})
+TbArtist(pk=1, s_artist="Beatles", j_artist_metadata={"SYN_EN": ["The Beatles", "Beatles"]})
 
 # Парсер хочет создать
-Artist(pk=None, s_artist="The Beatles", j_artist_metadata={"SYN_EN": []})
+TbArtist(pk=None, s_artist="The Beatles", j_artist_metadata={"SYN_EN": []})
 
 # Валидатор: основное поле "The Beatles" найдено в синонимах существующей записи!
 # Текущее поведение: ValidationError (блокировка)
@@ -73,10 +85,10 @@ Artist(pk=None, s_artist="The Beatles", j_artist_metadata={"SYN_EN": []})
 **Сценарий 2: EXACT_SYNONYM_MATCH**
 ```python
 # В БД
-Label(pk=1, s_label="Sony", j_label_metadata={"SYN_EN": ["Sony Records", "Sony Music"]})
+TbLabel(pk=1, s_label="Sony", j_label_metadata={"SYN_EN": ["Sony Records", "Sony Music"]})
 
 # Парсер хочет
-Label(pk=None, s_label="Sony Music", j_label_metadata={"SYN_EN": ["Sony Records", "Sony Music"]})
+TbLabel(pk=None, s_label="Sony Music", j_label_metadata={"SYN_EN": ["Sony Records", "Sony Music"]})
 
 # Валидатор: синонимы совпадают!
 # Текущее поведение: ValidationError
@@ -85,13 +97,17 @@ Label(pk=None, s_label="Sony Music", j_label_metadata={"SYN_EN": ["Sony Records"
 
 ## Архитектура парсера (требуемая)
 
+**План, в коде нет.** Нет приложения `parser`, модели `ValidatorQueue`, Celery, Redis, signals. Ниже схема целевой архитектуры.
+
+Соглашение о метаданных (идея, не принято окончательно): ключи метаданных кассет и т.п. берутся из реестра `config/metadata-toml/default.toml` (см. `lpon--metadata-config.md`, `00_START_HERE.md`), а парсер приводит названия из источников к ключам реестра через `aliases` значений. Ключ синонимов названий сущностей (`SYN_EN`) в этот реестр не входит, он остаётся в `j_*_metadata` моделей-справочников.
+
 ### Компоненты
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                      DJANGO ADMIN                            │
 │  ┌─────────────────────────────────────────────────────────┐ │
-│  │ Приложение "Parser" (новое приложение)                 │ │
+│  │ Приложение "Parser" (план, в коде нет)                 │ │
 │  │ ┌─────────────────────────────────────────────────────┐ │ │
 │  │ │ Очередь валидации (ValidatorQueue model)            │ │ │
 │  │ │ Содержит: состояние экземпляра, ошибки, решение... │ │ │
@@ -125,8 +141,10 @@ Label(pk=None, s_label="Sony Music", j_label_metadata={"SYN_EN": ["Sony Records"
 │  │ 1. Читать источник (файл/URL)                          │ │
 │  │ 2. Нормализовать данные                                │ │
 │  │ 3. Валидировать через validate_for_duplicates()       │ │
+│  │    (результат: словарь, а не список)                 │ │
 │  │ 4. Если конфликт → создать запись в ValidatorQueue   │ │
 │  │ 5. Если OK → создать модель (TbLabel, TbArtist и т.д.)│ │
+│  │    (save() сам повторит проверку дубликатов)         │ │
 │  │ 6. Отправить уведомление админу (Redis/сигнал)        │ │
 │  │ 7. Продолжить обработку следующей строки              │ │
 │  └─────────────────────────────────────────────────────────┘ │
@@ -141,7 +159,7 @@ Label(pk=None, s_label="Sony Music", j_label_metadata={"SYN_EN": ["Sony Records"
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### Таблица ValidatorQueue (новая модель)
+### Таблица ValidatorQueue (новая модель; план, в коде нет)
 
 ```python
 class ValidatorQueue(models.Model):
@@ -163,13 +181,17 @@ class ValidatorQueue(models.Model):
     # Основные поля
     id = BigAutoField(primary_key=True)
     k_source = ForeignKey(TbSource, ...)            # Откуда пришли данные
+    # ConflictType здесь неполон: в коде также есть IS_DUPLICATE (точный дубликат), PARTIAL_MATCH и
+    # PARTIAL_MATCH__RISK_SHORT_WORDS (см. ValidateMatchType); состав очереди нужно согласовать с ним
     l_conflict_type = CharField(choices=ConflictType)
 
     # Данные для конфликта
     l_model_type = CharField()                       # Какая модель (TbLabel, TbArtist и т.д.)
     model_pk = IntegerField(null=True)               # PK существующей записи в БД
     j_incoming_data = JSONField()                    # Данные от парсера (весь объект)
-    j_duplicates = JSONField()                       # Результат validate_for_duplicates()
+    # Результат validate_for_duplicates(): значение MATCH_VALUE там QuerySet, в JSON его нужно
+    # предварительно превратить в список pk (иначе не сериализуется)
+    j_duplicates = JSONField()
 
     # Решение админа
     l_status = CharField(choices=Status, default=Status.PENDING)
@@ -195,7 +217,7 @@ class ValidatorQueue(models.Model):
 ### Фаза 1: Импорт данных (парсер)
 
 ```python
-# tasks.py (Celery)
+# tasks.py (Celery) -- план, в коде нет; Celery и Redis не входят в зависимости pyproject.toml
 @celery.task
 def parse_and_validate_excel(source_id: int):
     """
@@ -215,6 +237,7 @@ def parse_and_validate_excel(source_id: int):
             }
             
             # Валидируем
+            # duplicates -- словарь: пустой по смыслу, если в нём нет ключа MATCH_TYPE
             duplicates = validate_for_duplicates(
                 model_class=TbArtist,
                 instance_pk=None,
@@ -224,24 +247,25 @@ def parse_and_validate_excel(source_id: int):
                 metadata_field_name='j_artist_metadata',
             )
             
-            if duplicates:
+            if duplicates.get(VALIDATE_KEY__MATCH_TYPE):
                 # КОНФЛИКТ! Отправляем в очередь
                 queue_item = ValidatorQueue.objects.create(
                     k_source=source,
                     l_model_type='TbArtist',
-                    l_conflict_type=duplicates[0][VALIDATE_KEY__MATCH_TYPE],
+                    l_conflict_type=duplicates[VALIDATE_KEY__MATCH_TYPE],
                     j_incoming_data=artist_data,
-                    j_duplicates=duplicates,
+                    j_duplicates=[d.pk for d in duplicates[VALIDATE_KEY__VALUE]],
                 )
                 # Отправляем сигнал (Redis уведомление админу)
                 send_to_redis_queue('parser:conflicts:new', {
                     'queue_id': queue_item.id,
                     'model': 'TbArtist',
-                    'conflict': duplicates[0]['match_type'],
+                    'conflict': duplicates[VALIDATE_KEY__MATCH_TYPE],
                     'data': artist_data,
                 })
             else:
-                # Нет конфликта - создаём запись
+                # Нет конфликта - создаём запись (create() вызывает save(), а он повторно проверяет дубликаты
+                # и сам добавляет название в SYN_EN)
                 artist = TbArtist.objects.create(**artist_data)
                 logger.info(f"Artist created: {artist.id}")
                 
@@ -253,7 +277,7 @@ def parse_and_validate_excel(source_id: int):
 ### Фаза 2: Админка (приложение Parser)
 
 ```python
-# admin.py (новое приложение parser)
+# admin.py (новое приложение parser; план, в коде нет)
 @admin.register(ValidatorQueue)
 class ValidatorQueueAdmin(admin.ModelAdmin):
     """
@@ -288,7 +312,7 @@ class ValidatorQueueAdmin(admin.ModelAdmin):
         for item in queryset:
             model_class = get_model_class(item.l_model_type)
             instance = model_class(**item.j_incoming_data)
-            instance.save(skip_validation=True)  # Пропускаем валидацию
+            instance.save(skip_validation=True)  # Пропускаем валидацию (параметра skip_validation в коде нет)
             item.l_status = ValidatorQueue.Status.APPROVED
             item.s_admin_decision = 'create_new'
             item.k_resolved_by = request.user
@@ -299,7 +323,8 @@ class ValidatorQueueAdmin(admin.ModelAdmin):
 ### Фаза 3: Обработка решения админа
 
 ```python
-# signals.py (новое приложение parser)
+# signals.py (новое приложение parser; план, в коде нет)
+# Схематично: `j_*_metadata` здесь означает j_artist_metadata / j_label_metadata / j_style_metadata по модели
 
 @receiver(post_save, sender=ValidatorQueue)
 def on_admin_decision(sender, instance, created=False, **kwargs):
@@ -336,7 +361,9 @@ def on_admin_decision(sender, instance, created=False, **kwargs):
 
 ## Файлы для создания
 
-### 1. Новое приложение `parser`
+### 1. Новое приложение `parser` (план, в коде нет)
+
+Каталог приложений: `lpon_site/` (рядом с `frontend/`), настройки в `lpon_site/lpon_site/settings.py`.
 
 ```
 lpon_site/parser/
@@ -358,14 +385,16 @@ INSTALLED_APPS = [
     'parser',  # Новое приложение
 ]
 
-# Конфигурация Celery (если еще нет)
+# Конфигурация Celery (в проекте её нет; в Docker-файлах сервиса Redis тоже нет; пакеты celery и redis
+# в pyproject.toml не добавлены)
 CELERY_BROKER_URL = 'redis://localhost:6379/0'
 CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
 ```
 
 **frontend/models.py:**
 ```python
-# В методе save() моделей добавить параметр
+# В методе save() моделей (TbMusicStyle, TbArtist, TbItem, TbLabel) добавить параметр
+# (сейчас они вызывают validate_and_raise_for_duplicates безусловно)
 def save(self, *args, skip_validation=False, **kwargs):
     if not skip_validation:
         # Стандартная валидация
@@ -375,7 +404,8 @@ def save(self, *args, skip_validation=False, **kwargs):
 
 **frontend/utils.py:**
 ```python
-# Добавить функцию отправки в Redis
+# Добавить функцию отправки в Redis (в utils.py её нет; есть только комментарий-TODO в
+# create_or_get_related_article())
 def send_to_redis_queue(queue_name: str, data: dict):
     """Отправить уведомление в Redis"""
     import redis
@@ -392,6 +422,7 @@ def send_to_redis_queue(queue_name: str, data: dict):
 
 - [ ] Создать приложение `parser` с моделью `ValidatorQueue`
 - [ ] Реализовать админку `ValidatorQueueAdmin` с actions
+- [ ] Выбрать и добавить зависимости (celery, redis, openpyxl/pandas и т.п.; сейчас в pyproject.toml их нет)
 - [ ] Написать Celery tasks для парсинга Excel/CSV
 - [ ] Добавить обработку решений админа через signals
 - [ ] Интегрировать Redis уведомления админу
@@ -401,14 +432,15 @@ def send_to_redis_queue(queue_name: str, data: dict):
 
 ## Примечания
 
-1. **Redis vs БД для очереди?** → Используем БД (ValidatorQueue модель) как основное хранилище, Redis только для уведомлений админу в реальном времени
+1. **Redis vs БД для очереди?** → Используем БД (ValidatorQueue модель) как основное хранилище, Redis только для уведомлений админу в реальном времени. **Спорно:** `BACKGROUND-TASKS-CONCEPT.md` предлагает противоположное (до одобрения данные только в Redis); решение за владельцем проекта
 2. **Async валидация?** → Парсер работает в Celery, валидация синхронна внутри задачи
-3. **Миграция истории?** → Поле `t_history_created` уже `editable=True` в TbOfferHistory, так что админ может вручную добавлять исторические данные
-4. **Конфликты в админке?** → `ValidatorQueue` блокирует парсер от создания дубликатов. Админ сам решает что делать.
+3. **Миграция истории?** → Поле `t_history_created` в `TbOfferHistory` редактируемое (`default=timezone.now`, не `auto_now_add`), так что исторические данные можно вносить вручную. Проверено по коду.
+4. **Конфликты в админке?** → План: `ValidatorQueue` блокирует парсер от создания дубликатов, админ сам решает что делать. Сейчас вместо очереди парсер получил бы `ValidationError` из `save()`.
 
 ## Ссылки на существующий код
 
 - Валидаторы: `lpon_site/frontend/utils_validators.py`
-- Модели: `lpon_site/frontend/models.py` (методы save() для TbArtist, TbItem, TbLabel, TbSeller, TbMusicStyle)
+- Модели: `lpon_site/frontend/models.py` (методы save() с проверкой дубликатов: TbArtist, TbItem, TbLabel, TbMusicStyle; у TbSeller проверки нет)
+- Константы: `lpon_site/lpon_site/constants.py` (`KEY_SYNONYM_EN`, `ValidateMatchType`, `VALIDATE_KEY__*`, `SourceType`, `MIN_SYNONYM_WORD_LENGTH`)
 - TODO про Redis: `lpon_site/frontend/utils.py` (в функции `create_or_get_related_article()`)
-- TODO про историю: `lpon_site/frontend/models.py` (в `TbOffer.save()`)
+- TODO про историю: `lpon_site/frontend/models.py` (в `TbOffer.save()`, про `j_history_metadata`)
