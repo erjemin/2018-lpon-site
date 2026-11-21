@@ -1,0 +1,176 @@
+# =============================================================================
+# LPON: базовый ("заводской") конфиг метаданных.
+#
+# Это единственный файл каталога config/metadata-toml/, который хранится в git
+# и попадает в образ Docker. Рабочие редакции (ACTIVE, revisions/, journal.jsonl)
+# создаются рядом в процессе работы и в git/образ не попадают.
+#
+# Статус: ЧЕРНОВИК. Структура взята из расширенного примера в
+# _prj_blueprint/lpon--metadata-config.md. Переводы tr и am нужно проверить
+# носителем языка. Имя ключа цвета корпуса (body_color или shell_color) не решено.
+# =============================================================================
+
+# Версия схемы конфига (формат файла), а не номер редакции.
+version = 2
+
+# Языки подписей. Если перевода нет, берётся fallback (отсутствие перевода не ошибка).
+languages = ["ru", "en", "tr", "am"]
+fallback = "ru"
+
+
+# ---------------------------------------------------------------------------
+# Общие справочники значений: описываются один раз, подключаются в разных формах.
+# ---------------------------------------------------------------------------
+[dictionaries.shell_color]
+black       = { ru = "Чёрный",     en = "Black",       tr = "Siyah",      am = "Սև" }
+transparent = { ru = "Прозрачный", en = "Transparent", tr = "Transparan", am = "Թափանցիկ" }
+blue        = { ru = "Голубой",    en = "Light blue",  tr = "Mavi",       am = "Երկնագույն" }
+gray        = { ru = "Серый",      en = "Gray",        tr = "Gri",        am = "Մոխրագույն" }
+smoky       = { ru = "Дымчатый",   en = "Smoky",       tr = "Dumanlı",    am = "Ծխագույն" }
+
+
+# ---------------------------------------------------------------------------
+# Форма 0. Переключатель формата для TbItem. Условия остальных форм зависят от него.
+# Значения берутся из перечисления Format в constants.py ("enum:" допускает только
+# заранее разрешённые перечисления проекта).
+# ---------------------------------------------------------------------------
+[[form]]
+id = "item-core"
+target = "frontend.TbItem"
+metadata = "j_item_metadata"
+
+  [form.fields.media_format]
+  type = "choice"
+  label = { ru = "Формат носителя", en = "Media format" }
+  values_from = "enum:Format"
+
+
+# ---------------------------------------------------------------------------
+# Форма 1. Модель компакт-кассеты (TbItem). Показывается только для cs и uc.
+# ---------------------------------------------------------------------------
+[[form]]
+id = "item-cassette"
+target = "frontend.TbItem"
+metadata = "j_item_metadata"
+when = { media_format = ["cs", "uc"] }          # список означает "любое из"
+title = { ru = "Компакт-кассета (модель)", en = "Compact cassette (model)" }
+
+  [form.fields.body_color]
+  type = "choice"
+  label = { ru = "Цвет корпуса", en = "Shell color", tr = "Kaset gövdesinin rengi", am = "Պատյանի գույնը" }
+  values_from = "shell_color"
+  allow_other = true                            # можно ввести свой цвет (бывший __any__)
+  public = true                                 # выводить в карточке на сайте
+  filter = true                                 # использовать как фильтр каталога
+
+  [form.fields.tape_color]
+  type = "choice"
+  label = { ru = "Цвет ленты", en = "Tape color", tr = "Bant rengi", am = "Ժապավենի գույնը" }
+  allow_other = true
+
+    [form.fields.tape_color.values]
+    black     = { ru = "Чёрный",      en = "Black",     tr = "Siyah",       am = "Սև" }
+    brown     = { ru = "Коричневый",  en = "Brown",     tr = "Kahverengi",  am = "Դարչնագույն" }
+    chocolate = { ru = "Шоколадный",  en = "Chocolate", tr = "Çikolata",    am = "Շոկոլադագույն" }
+
+  [form.fields.assembly_type]
+  type = "choice"
+  label = { ru = "Способ сборки", en = "Assembly type", tr = "Montaj tipi" }
+
+    [form.fields.assembly_type.values]
+    glue        = { ru = "На клей",              en = "Glued" }
+    glue_screw  = { ru = "На клей и один винт",  en = "Glued with one screw" }
+    screws_5    = { ru = "5 винтов",             en = "5 screws" }
+    screws_6    = { ru = "6 винтов",             en = "6 screws" }
+
+  [form.fields.body_material]
+  type = "choice"
+  label = { ru = "Материал корпуса", en = "Shell material", tr = "Gövde malzemesi" }
+  allow_other = true
+
+    [form.fields.body_material.values]
+    plastic = { ru = "Пластик",  en = "Plastic",  tr = "Plastik" }
+    ceramic = { ru = "Керамика", en = "Ceramic",  tr = "Seramik" }
+    metal   = { ru = "Металл",   en = "Metal",    tr = "Metal" }
+
+  [form.fields.length]
+  type = "choice"
+  label = { ru = "Хронометраж", en = "Length" }
+  values_from = "enum:MediaLength"
+  unit = "min"
+  public = true
+
+
+# ---------------------------------------------------------------------------
+# Форма 2. Мини-диск (TbItem). Справочник цветов общий с кассетой.
+# ---------------------------------------------------------------------------
+[[form]]
+id = "item-minidisc"
+target = "frontend.TbItem"
+metadata = "j_item_metadata"
+when = { media_format = ["md", "ms"] }
+
+  [form.fields.body_color]
+  type = "choice"
+  label = { ru = "Цвет корпуса", en = "Shell color", tr = "Minidisk rengi" }
+  values_from = "shell_color"
+  allow_other = true
+
+
+# ---------------------------------------------------------------------------
+# Форма 3. Экземпляр кассеты в продаже (TbOffer). Условие по настоящему полю модели.
+# ---------------------------------------------------------------------------
+[[form]]
+id = "offer-cassette"
+target = "frontend.TbOffer"
+metadata = "j_offer_metadata"
+when = { l_offer_to_format = ["cs", "uc"] }
+
+  [form.fields.packaging]
+  type = "choice"
+  label = { ru = "Упаковка", en = "Packaging" }
+
+    [form.fields.packaging.values]
+    sealed = { ru = "Запечатана", en = "Sealed" }
+    opened = { ru = "Вскрыта",    en = "Opened" }
+
+  [form.fields.is_recorded]
+  type = "bool"
+  label = { ru = "На кассете есть запись", en = "Has a recording" }
+
+  [form.fields.recording_info]
+  type = "text"
+  label = { ru = "Что записано", en = "Recorded content" }
+  when = { is_recorded = true }                 # условие по соседнему полю формы
+  multiline = true
+
+  [form.fields.write_protect_tabs]
+  type = "choice"
+  label = { ru = "Язычки защиты записи", en = "Write-protect tabs" }
+
+    [form.fields.write_protect_tabs.values]
+    intact = { ru = "Целы",      en = "Intact" }
+    broken = { ru = "Выломаны",  en = "Broken" }
+
+  [form.fields.extras]
+  type = "multichoice"                          # несколько значений сразу
+  label = { ru = "Комплектация", en = "Extras" }
+  grade = true                                  # для каждого пункта можно указать состояние
+
+    [form.fields.extras.values]
+    insert        = { ru = "Вкладыш",            en = "Insert" }
+    case_original = { ru = "Оригинальный бокс",  en = "Original case" }
+    stickers      = { ru = "Наклейки",           en = "Stickers" }
+
+
+# ---------------------------------------------------------------------------
+# Форма 4. Общая для всех офферов, без условия: показывается всегда.
+# ---------------------------------------------------------------------------
+[[form]]
+id = "offer-common"
+target = "frontend.TbOffer"
+metadata = "j_offer_metadata"
+
+  [form.fields.series_tag]
+  type = "slug"
+  label = { ru = "Серия или коллекция", en = "Series" }
